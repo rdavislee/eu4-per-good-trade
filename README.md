@@ -42,6 +42,12 @@ Expected: `RESULT: 37 checks, 0 failed`. Requires the EU4 1.37.5 install at
 `final.py` — all runnable the same way. `coverage6.py` measures what the harness does *not* guard;
 re-run it rather than quoting it.
 
+## Acceptance tests
+
+**`TESTING.md`** is the live-game acceptance suite — what must be seen working in the running
+game, from the `Φ_w` map mode and any-edge merchant assignment through per-good views and the
+monthly income checks. The ★ tests are the bar for "it works".
+
 ## Implementation entry points
 
 - **Build order**: spec §2.9 — defines parser first, then the save parser and `path`/`control`

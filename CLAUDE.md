@@ -75,5 +75,10 @@ number.
 ## Decisions reserved for the user
 
 - AI merchant **reassignment cadence** (§3.14): mirror vanilla's vs compute it. Ask when you
-  reach AI work; do not decide unilaterally.
+  reach AI work; do not decide unilaterally. **The user's stated prior**: the choice is
+  low-stakes, because merchant choices are stable under the moving map — assignments are to link
+  ends and survive flips with only the active good set changing (§1.7), homeward direction from a
+  node is geography, and the flip-prone links carry near-zero value (§3.6) — so a conservative
+  rule (computed-gain test plus a dwell floor of a few months) is expected to fire rarely and is
+  the working default to propose.
 - Any change to hyperparameters (`α_Φ`, `TIE_EPS`, `TIE_EPS2`) or to R1 (the §1.3 wealth rule).

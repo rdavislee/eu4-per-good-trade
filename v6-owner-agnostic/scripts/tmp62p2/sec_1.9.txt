@@ -1,0 +1,9 @@
+327| Y379 | §1.9 | A country whose provincial trade power in a node meets the threshold receives a share of it in every … | ENGINE | 784 |
+328| Y380 | §1.9 | The engine's own tooltip says power transfers "to trade nodes where it already has power", and that qualifier … | ENGINE | 784 |
+329| Y381 | §1.9 | Measured: France holds zero provinces and zero merchants in Sevilla and still appears there with 3.3 power, … | ENGINE | 784 |
+330| Y382 | §1.9 | This line was §3.16's cautionary case; it is now closed, and it closed in favour of the spec. | DESIGN | 784 |
+331| Y383 | §1.9 | The propagation share is `1 / TRADE_PROPAGATE_DIVIDER`, and the threshold in raw power is … | ENGINE | 784 |
+332| Y384 | §1.9 | Ship trade power propagates only where the country has a ship-propagation modifier, at the compounded rate: … | ENGINE | 785 |
+333| Y385 | §1.9 | Propagation is strictly one hop and never chains. | ENGINE | 786 |
+334| Y386 | §1.9 | A node receives the summed contributions of all its downstream neighbours. | ENGINE | 787 |
+335| Y387 | §1.9 | Direction for propagation is read from `Φ_w`. | MODEL | 789 |

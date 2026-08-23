@@ -1,0 +1,37 @@
+================================================================================================
+VALIDATION
+================================================================================================
+  tie('minmax') is bit-identical to flowop.TIE_COST : True
+  minmax @ LP_OPTS reproduces the shipped map        : True  ('genua', 'hangzhou')
+  /mean and /totalxN are the same vector             : False
+  wn magnitudes: {'minmax': '[0, 1]', 'max': '[0, 1]', 'mean': '[0, 2.388]', 'total': '[0, 0.02985]', 'totalxN': '[0, 2.388]'}
+
+================================================================================================
+against min-max, LP_OPTS 1e-10 (shipped)
+================================================================================================
+  norm      agg edges dif  per-good graphs  per-good sink sets
+  max       0 / 159        0 / 29           0 / 29
+  mean      0 / 159        9 / 29           1 / 29
+            graphs: ['copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'paper', 'wine', 'wool']
+  total     7 / 159        10 / 29          2 / 29
+            graphs: ['cloves', 'cocoa', 'copper', 'cotton', 'gems', 'grain', 'naval_supplies', 'paper', 'salt', 'wool']
+  totalxN   0 / 159        9 / 29           1 / 29
+            graphs: ['copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'paper', 'wine', 'wool']
+  union over max/mean/total/totalxN, vs min-max : 13 of 29 ['cloves', 'cocoa', 'copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'naval_supplies', 'paper', 'salt', 'wine', 'wool']
+  union over max/mean/totalxN only              : 9 of 29 ['copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'paper', 'wine', 'wool']
+  pairwise aggregate differences among the four : [0, 7]
+
+================================================================================================
+against min-max, HiGHS default
+================================================================================================
+  norm      agg edges dif  per-good graphs  per-good sink sets
+  max       0 / 159        0 / 29           0 / 29
+  mean      0 / 159        5 / 29           2 / 29
+            graphs: ['copper', 'fish', 'gems', 'grain', 'paper']
+  total     1 / 159        11 / 29          3 / 29
+            graphs: ['cloves', 'cocoa', 'coffee', 'copper', 'cotton', 'gems', 'grain', 'naval_supplies', 'paper', 'salt', 'wool']
+  totalxN   0 / 159        5 / 29           2 / 29
+            graphs: ['copper', 'fish', 'gems', 'grain', 'paper']
+  union over max/mean/total/totalxN, vs min-max : 12 of 29 ['cloves', 'cocoa', 'coffee', 'copper', 'cotton', 'fish', 'gems', 'grain', 'naval_supplies', 'paper', 'salt', 'wool']
+  union over max/mean/totalxN only              : 5 of 29 ['copper', 'fish', 'gems', 'grain', 'paper']
+  pairwise aggregate differences among the four : [0, 1]

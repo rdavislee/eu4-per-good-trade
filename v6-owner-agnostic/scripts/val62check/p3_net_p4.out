@@ -1,0 +1,9 @@
+edge-goods total                : 4611 (29 x 159)
+exactly 0.0                     : 2321
+in (0, 1e-11]                   : 0
+in (1e-11, 1e-6]                : 0
+above 1e-6                      : 2290
+smallest strictly positive |net|: 6.9393045615250195e-06
+largest zero-side value         : 0.0
+
+max objective relative spread, 21 column orders x 30 solves: 1.127e-15  (at livestock)

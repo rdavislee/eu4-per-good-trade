@@ -1,0 +1,13 @@
+['ID', '§', 'claim', 'status', 'old → new', 'type', 'provenance', 'line', '_table', '_raw']
+{
+  "ID": "Y1142",
+  "§": "§0",
+  "claim": "The folded claim-audit corrections were spot-verified in the round-7 audit, whose record samples 6 of 60, with none missing.",
+  "status": "CHANGED",
+  "old → new": "old: spot-verified \"**on 7 of 60** in the round-7 audit\" → new: \"spot-verified in the round-7 audit — **its record … samples 6 of 60**\"; the sample size moves from 7 to 6 and is attributed to the audit’s own record rather than asserted bare",
+  "type": "MEASURED",
+  "provenance": "the round-7 audit record (`scripts/r7/out/S01.md` row Y214)",
+  "line": "11",
+  "_table": "CHANGED",
+  "_raw": "| Y1142 | §0 | The folded claim-audit corrections were spot-verified in the round-7 audit, whose record samples 6 of 60, with none missing. | CHANGED | old: spot-verified \"**on 7 of 60** in the round-7 audit\" → new: \"spot-verified in the round-7 audit — **its record … samples 6 of 60**\"; the sample size moves from 7 to 6 and is attributed to the audit’s own record rather than asserted bare | MEASURED | the round-7 audit record (`scripts/r7/out/S01.md` row Y214) | 11 |"
+}

@@ -1,0 +1,15 @@
+nodes parsed: VANILLA 80  VANILLA2 80  PERMUTE 80
+  VANILLA vs VANILLA2 (run-to-run control)
+    current      49 of 77 differ, max 6.716% (siberia)
+    local_value  30 of 79 differ, max 8.223% (siberia)
+    outgoing     37 of 66 differ, max 6.711% (siberia)
+    total         1 of 79 differ, max 0.012% (zambezi)
+    retention     0 of 80 differ, max 0.000% (None)
+    nodes differing on ANY of the five: 49 of 80, overall max 8.22%
+  VANILLA vs PERMUTE (test)
+    current      55 of 77 differ, max 8.475% (rio_grande)
+    local_value  31 of 79 differ, max 8.455% (rio_grande)
+    outgoing     48 of 66 differ, max 8.402% (rio_grande)
+    total         1 of 79 differ, max 0.012% (zambezi)
+    retention     0 of 80 differ, max 0.000% (None)
+    nodes differing on ANY of the five: 61 of 80, overall max 8.47%

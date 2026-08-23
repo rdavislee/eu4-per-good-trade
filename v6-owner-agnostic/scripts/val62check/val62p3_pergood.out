@@ -1,0 +1,11 @@
+first-order only, LP_OPTS          per-good:  76 of 290 runs move, on 14 of 29 goods | aggregate 0 of 10
+      goods: ['cloth', 'cocoa', 'copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'naval_supplies', 'paper', 'spices', 'tropical_wood', 'wine', 'wool']
+full cost, HiGHS default tol       per-good:  12 of 290 runs move, on  2 of 29 goods | aggregate 0 of 10
+      goods: ['copper', 'paper']
+VALIDATION (full cost, LP_OPTS 1e-10): identity reproduces drain.py on 30 of 30 b-vectors
+full cost, LP_OPTS 1e-10           per-good:   0 of 290 runs move, on  0 of 29 goods | aggregate 0 of 10
+absdiff second term, default tol   per-good:  59 of 290 runs move, on 12 of 29 goods | aggregate 0 of 10
+      goods: ['cloth', 'copper', 'cotton', 'gems', 'glass', 'grain', 'naval_supplies', 'paper', 'spices', 'tropical_wood', 'wine', 'wool']
+absdiff second term, LP_OPTS       per-good:  36 of 290 runs move, on  9 of 29 goods | aggregate 0 of 10
+      goods: ['cloth', 'copper', 'cotton', 'gems', 'glass', 'paper', 'spices', 'tropical_wood', 'wine']
+EXIT=0

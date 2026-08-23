@@ -1,0 +1,85 @@
+========================================================================================================
+ITEM 1 - sink sets and demand correlation  [HEADLINE]
+========================================================================================================
+  Two sign conventions, both reported to avoid ambiguity:
+    rho_rank = spearman(demand RANK, sink indicator)   NEGATIVE = sinks are high-demand (good)
+    rho_val  = spearman(demand c,    sink indicator)   POSITIVE = sinks are high-demand (good)
+
+  operator  sinks/g  mean rank P(sink|top10) P(sink|bot10)    rho_rank     rho_val
+  LAP           3.6       30.2         9.0%         1.0%      -0.097       0.098
+  RANK         13.3       25.5        46.6%         0.7%      -0.290       0.289
+  (all-node mean rank is 40.5)
+
+  For reference, from flow-orientation.md: FLOW rho_rank = +0.132 (anti-correlated),
+  TREE rho_rank = +0.040 / -0.048 / -0.085.
+
+========================================================================================================
+ITEM 7 - sinks per good; goods keeping more than one
+========================================================================================================
+  operator    min    max    goods with >1     mean
+  LAP           1      8              24/29      3.6
+  RANK         12     17              29/29     13.3
+
+  LAP   most frequent sinks: [('safi', 12), ('gulf_of_siam', 11), ('the_moluccas', 7), ('doab', 6), ('saxony', 5), ('african_great_lakes', 4), ('nippon', 4), ('valencia', 4), ('venice', 3), ('champagne', 3)]
+  RANK  most frequent sinks: [('ohio', 26), ('mexico', 23), ('lima', 23), ('genua', 22), ('novgorod', 21), ('kongo', 20), ('english_channel', 20), ('sevilla', 19), ('timbuktu', 16), ('constantinople', 15)]
+
+========================================================================================================
+ITEM 2 - cloves and spices at the named nodes, with demand rank
+========================================================================================================
+  --- spices (alpha=1.50) ---
+    node                c   rank    s>0        score | LAP      RANK    
+    genua         0.03503      1     no    -0.035031 | -        SINK    
+    venice        0.02075     15     no    -0.020748 | -        -       
+    beijing       0.01501     31     no    -0.015012 | -        -       
+    canton        0.02004     16     no    -0.020045 | -        -       
+    saxony        0.01582     26     no    -0.015819 | SINK     -       
+    safi          0.01102     44    yes     0.006444 | -        -       
+    english_channel    0.03408      2     no    -0.034078 | -        SINK    
+    hangzhou      0.03152      3     no    -0.031519 | -        SINK    
+  --- cloves (alpha=3.00) ---
+    node                c   rank    s>0        score | LAP      RANK    
+    genua         0.05975      2     no    -0.059747 | -        SINK    
+    venice        0.03081      7     no    -0.030813 | -        SINK    
+    beijing       0.02432     12     no    -0.024321 | -        -       
+    canton        0.03130      6     no    -0.031299 | -        -       
+    saxony        0.01197     32     no    -0.011968 | -        -       
+    safi          0.00842     40     no    -0.008419 | SINK     -       
+    english_channel    0.03995      3     no    -0.039950 | -        SINK    
+    hangzhou      0.10416      1     no    -0.104158 | -        SINK    
+
+========================================================================================================
+ITEM 8 - out-degree against demand rank (aggregated over goods)
+========================================================================================================
+  Nodes binned by demand rank (using the value-weighted mean demand across goods).
+  demand-rank bin    nodes |    VANILLA        LAP       RANK
+  1-8                   8 |       1.62       2.15       1.33
+  9-16                  8 |       2.00       2.08       1.67
+  17-24                 8 |       1.75       1.92       1.44
+  25-40                16 |       2.25       2.17       2.23
+  41-56                16 |       1.81       1.69       1.96
+  57-72                16 |       2.12       1.97       2.14
+  73-80                 8 |       2.12       2.06       2.77
+
+  spearman(demand rank, VANILLA out-degree) = 0.069
+  spearman(demand rank, LAP  out-degree) = -0.181  (positive = rich nodes have FEW outgoing)
+  spearman(demand rank, RANK out-degree) = 0.328  (positive = rich nodes have FEW outgoing)
+
+========================================================================================================
+ITEM 5 - acyclicity
+========================================================================================================
+  LAP    non-acyclic goods: 0/29 []
+  RANK   non-acyclic goods: 0/29 []
+  Phi(LAP)  acyclic: True
+  Phi(RANK) acyclic: True
+  (RANK orientation is by a per-node scalar, so acyclicity is guaranteed by the same
+   argument as for phi: score strictly decreases along any directed path.)
+
+  exact score ties over 4611 edge-good pairs: 0 (unoriented edges)
+
+========================================================================================================
+ITEM 6 - Phi = phi0 residual at alpha = 1
+========================================================================================================
+  Phi(RANK,a=1) vs spec phi0 (Laplacian solve of s0-c0)   k=    647.3125 rel.residual=8.413e-01 orient agree 106/159
+  Phi(RANK,a=1) vs ranked analogue score0 = s0 - c0       k=   3669.4000 rel.residual=2.498e-01 orient agree 157/159
+  sum_g V_g = 3669.400000 ; world trade value = 3669.400000
+

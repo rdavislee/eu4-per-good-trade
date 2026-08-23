@@ -1,0 +1,32 @@
+European counted provinces: 824
+nodes with a European member: 25 ; with an Asian member: 30
+
+distinct intervals: 15
+  x1.000-x1.139  2 sinks genua,hangzhou                                             EU 1 AS 1
+  x1.140-x1.158  4 sinks english_channel,genua,hangzhou,rheinland                   EU 3 AS 1
+  x1.159-x1.186  2 sinks genua,hangzhou                                             EU 1 AS 1
+  x1.187-x1.286  3 sinks genua,gulf_of_siam,hangzhou                                EU 1 AS 2
+  x1.287-x1.288  5 sinks english_channel,genua,gulf_of_siam,hangzhou,rheinland      EU 3 AS 2
+  x1.289-x1.350  3 sinks genua,gulf_of_siam,hangzhou                                EU 1 AS 2
+  x1.351-x1.361  5 sinks english_channel,genua,gulf_of_siam,hangzhou,rheinland      EU 3 AS 2
+  x1.362-x1.368  3 sinks genua,gulf_of_siam,hangzhou                                EU 1 AS 2
+  x1.369-x1.381  2 sinks genua,gulf_of_siam                                         EU 1 AS 1
+  x1.382-x1.701  3 sinks english_channel,genua,rheinland                            EU 3 AS 0
+  x1.702-x1.709  4 sinks doab,english_channel,genua,rheinland                       EU 3 AS 1
+  x1.710-x1.947  3 sinks english_channel,genua,rheinland                            EU 3 AS 0
+  x1.948-x1.972  4 sinks english_channel,genua,hangzhou,rheinland                   EU 3 AS 1
+  x1.973-x2.456  3 sinks english_channel,genua,rheinland                            EU 3 AS 0
+  x2.457-x2.600  2 sinks genua,rheinland                                            EU 2 AS 0
+
+widest interval, exactly 3 European ends, none Asian: (('english_channel', 'genua', 'rheinland'), 1.973, 2.456)
+at x1.000: ('genua', 'hangzhou') (EU 1, AS 1)
+at x2.600: ('genua', 'rheinland') (EU 2, AS 0)
+
+count sequence over intervals: [2, 4, 2, 3, 5, 3, 5, 3, 2, 3, 4, 3, 4, 3, 2]
+count moves up somewhere: True ; down somewhere: True ; final count: 2
+hangzhou holds an end on: [(1.0, 1.368), (1.948, 1.972)]
+gulf_of_siam holds an end on: [(1.187, 1.381)]
+
+intervals narrower than x0.01 whose set appears exactly once: 1
+  x1.702-x1.709 doab,english_channel,genua,rheinland
+EXIT=0

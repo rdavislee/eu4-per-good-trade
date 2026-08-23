@@ -1,0 +1,20 @@
+goods in 00_tradegoods.txt: 32
+prices parsed: 33
+node blocks: 80
+trade_goods_size slot-count distribution: {33: 80}
+slots never nonzero on any node: [0, 30, 32]
+nodes reproducing local_value exactly (|d|<0.005) : 61 of 80
+aggregate recon/12 = 326.43  engine local_value = 337.80  shortfall = -3.37%
+ratio (Sum size*price)/local_value histogram: [(12.0, 57), (12.01, 2), (11.98, 2), (12.05, 1), (7.59, 1), (5.98, 1), (7.4, 1), (6.97, 1)]
+nodes at exactly 12.00x: 57
+largest shortfalls (engine - recon/12):
+   chesapeake_bay         recon/12     1.86  engine     4.82  short     2.96
+   st_lawrence            recon/12     0.87  engine     3.10  short     2.24
+   ohio                   recon/12     2.98  engine     5.20  short     2.23
+   mississippi_river      recon/12     1.75  engine     3.02  short     1.27
+   rio_grande             recon/12     1.17  engine     1.84  short     0.68
+   james_bay              recon/12     0.58  engine     1.17  short     0.59
+   california             recon/12     0.77  engine     1.24  short     0.48
+   hangzhou               recon/12     8.35  engine     8.66  short     0.31
+   australia              recon/12     1.92  engine     2.10  short     0.18
+   mexico                 recon/12     8.62  engine     8.74  short     0.13

@@ -1,0 +1,16 @@
+nodes                       : 80
+undirected edges            : 159
+directed arcs (2 per edge)  : 318
+components                  : 1 [80]
+degree min/max/mean         : 2 8 3.975
+degree-1 nodes              : []
+bridges                     : 0 []
+duplicate declared links    : {}
+declared outgoing links     : 159
+
+file nodes                  : 80
+inland=yes count            : 26
+end=yes count               : 3 ['english_channel', 'genua', 'venice']
+total outgoing declarations : 159
+links violating 'outgoing declared after': 0 []
+coastal.json type: list [1, 2, 3]

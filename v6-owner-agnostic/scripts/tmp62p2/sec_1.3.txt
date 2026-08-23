@@ -1,0 +1,81 @@
+152| Y277 | §1.3 | Demand is assembled per province, then summed to the node. | MODEL | 255 |
+153| Y028 | §1.3 | Wealth is owner-agnostic and reads three things about the province: its development, its trade good, and its … | MODEL | 257 |
+154| Y278 | §1.3 | Wealth is a property of the place — what the land is worth per year, before anyone's government touches it. | DESIGN | 258 |
+155| Y029 | §1.3 | Two provinces with the same development, trade good and condition have the same wealth whoever owns them. | MODEL | 260 |
+156| Y280 | §1.3 | A province's wealth does not change when it is conquered. | MODEL | 262 |
+157| Y030 | §1.3 | Owner-agnosticism is true by construction rather than by a policed rule; v3.0 through v5.0 stated the … | DESIGN | 264 |
+158| Y031 | §1.3 | `base_tax`, `base_production` and the trade good are bare attributes of the place, so nothing about them … | MODEL | 268 |
+159| Y032 | §1.3 | What the change gives up: `gems`' `local_tax_modifier` and `incense`' `trade_value_modifier` are genuinely … | DESIGN | 269 |
+160| Y033 | §1.3 | The dropped apparatus was live on 89 of the 2,472 counted provinces — 43 `gems` plus 31 `incense` plus 16 … | ENGINE | 274 |
+161| Y034 | §1.3 | That count depends on the field: it is 87 under the withdrawn `is_city` filter, and 89 rather than 88 because … | ENGINE | 275 |
+162| Y281 | §1.3 | The model trades that fidelity for an input surface with no classification question in it. | DESIGN | 283 |
+163| Y035 | §1.3 | `goods_produced(p) = GP_COEFF · base_production(p) · (1 + sum of province-state goods modifiers)`, with no … | MODEL | 286 |
+164| Y036 | §1.3 | `trade_value(p) = goods_produced(p) · price(good(p))` in ducats per year, with no trade-value modifier term. | MODEL | 287 |
+165| Y282 | §1.3 | `wealth(p) = tax_value(p) + trade_value(p)`, in ducats per year. | MODEL | 289 |
+166| Y283 | §1.3 | `c(n,g)` is the node's share of world wealth raised to `α(g)`: the sum over provinces in the node of … | MODEL | 291 |
+167| Y284 | §1.3 | `GP_COEFF` and `TAX_COEFF` have different provenance from one another. | DESIGN | 294 |
+168| Y038 | §1.3 | `GP_COEFF` is a shipped file value: `common/static_modifiers/00_static_modifiers.txt` carries … | ENGINE | 294 |
+169| Y039 | §1.3 | `GP_COEFF` is therefore moddable and is read at runtime rather than hardcoded. | DESIGN | 298 |
+170| Y040 | §1.3 | `TAX_COEFF` is in no file that has been found — not `defines.lua`, not `common/defines/`, not that … | ENGINE | 298 |
+171| Y285 | §1.3 | The tax and trade terms share a time basis and are safe to add, because the engine's own province tooltips … | ENGINE | 302 |
+172| Y041 | §1.3 | The tax tooltip's schema is `Base: trunc(base_tax × 0.0833333) (Yearly base_tax)`, observed as `Base: 0.49 … | ENGINE | 303 |
+173| Y042 | §1.3 | The parenthetical is `base_tax` itself and the `Base` line is its truncated twelfth; it is not twelve times … | ENGINE | 306 |
+174| Y043 | §1.3 | v4.0 and v5.0 wrote the schema as `Base: X (Yearly 12·X)`, false on both of its own data points, and v3.0 … | PROCESS | 307 |
+175| Y044 | §1.3 | The monthly production tooltip's `Trade Value` line is consistent with the same relation on one observation, … | ENGINE | 308 |
+176| Y045 | §1.3 | Both monthly figures being the annual value over twelve is what lets the annual forms add directly, and the … | MODEL | 310 |
+177| Y286 | §1.3 | The coefficients were measured on two provinces: Garnatah (223) with `base_tax` 6, `base_production` 4, silk … | ENGINE | 313 |
+178| Y287 | §1.3 | Only the tooltips' `Base` lines are used. | DESIGN | 314 |
+179| Y288 | §1.3 | A province window's `Trade Value` also carries the owner's `global_trade_goods_size_modifier`. | ENGINE | 315 |
+180| Y289 | §1.3 | Garnatah's window read 3.52 rather than 0.80 × 4.00 = 3.20 because Granada's 1444 monarch held the … | ENGINE | 316 |
+181| Y290 | §1.3 | Ruler personalities are rolled at game start wherever country history scripts none, so any window figure is … | ENGINE | 317 |
+182| Y291 | §1.3 | Modifiers apply after the coefficient, not before: the engine computes the base from development first and … | ENGINE | 321 |
+183| Y046 | §1.3 | Observed on Garnatah, `base_tax` 6 with `Tax Income Efficiency 125.0%` displays `Base 0.49` and then `0.62`; … | ENGINE | 322 |
+184| Y047 | §1.3 | The example establishes only the ordering — base from development first, percentage second — and nothing … | ENGINE | 325 |
+185| Y048 | §1.3 | v4.0 and v5.0 read this as "0.49 × 1.25 = 0.6125 shown as 0.62", which requires rounding while §2.3 requires … | PROCESS | 327 |
+186| Y049 | §1.3 | Flat goods bonuses would add into `goods_produced` before the price multiply — the goods-produced tooltip … | ENGINE | 328 |
+187| Y054 | §1.3 | `devastation`'s scaling law is the one row in the table not settled by a shipped file: … | ENGINE | 343 |
+188| Y059 | §1.3 | Eleven counted provinces begin devastated — Bohemia at 50, Erzgebirge and Moravia at 20 — and no … | ENGINE | 384 |
+189| Y060 | §1.3 | That devastation is applied by `on_startup`, which fires `flavor_boh.15` ("The Aftermath of the Hussite … | ENGINE | 385 |
+190| Y061 | §1.3 | The start devastation costs 13.40 ducats across the eleven affected counted provinces. | MEASURED | 386 |
+191| Y062 | §1.3 | The start state is what the engine produces rather than what the history files say, and that costs three … | DESIGN | 391 |
+192| Y063 | §1.3 | `on_startup` also fires `flavor_mng.42`, `flavor_mos.1`, `flavor_geo.1` and others directly from its own … | ENGINE | 394 |
+193| Y064 | §1.3 | Development does not move before the first tick: on this start the history parse matches the save on 2,472 of … | ENGINE | 397 |
+194| Y065 | §1.3 | v6.0's first draft said `flavor_geo.1` carries `add_base_tax` and could move development pre-tick; it does … | ENGINE | 399 |
+195| Y066 | §1.3 | `add_base_*` in a dated block before the start date accumulates, and v5.0 and earlier overwrote instead of … | ENGINE | 403 |
+196| Y067 | §1.3 | `is_city = yes` is not a filter the engine applies: 20 owned provinces omit or comment out that line — … | ENGINE | 406 |
+197| Y068 | §1.3 | The model counts a province when it has an owner and lies in a trade node: 2,472 provinces, not 2,452. | DESIGN | 408 |
+198| Y069 | §1.3 | Twenty counted provinces have no trade good in their history file (`trade_goods = unknown`), and the engine … | ENGINE | 411 |
+199| Y070 | §1.3 | The model reads the good the engine actually rolled rather than predicting the draw, and pricing those … | DESIGN | 413 |
+200| Y071 | §1.3 | On this save the twenty came up seven `fur`, five `grain`, three `wool`, two `livestock`, and one each of … | ENGINE | 415 |
+201| Y293 | §1.3 | Everything the engine itemised on a real province that is not local is excluded: `Reform Iqta` (+5%, … | ENGINE | 420 |
+202| Y294 | §1.3 | `Core` (+75%) and `City` (+25%) are not excluded, because they are already inside `TAX_COEFF`. | MODEL | 424 |
+203| Y295 | §1.3 | The engine's tax multiplier is the sum of the itemised percentages: Garnatah's `Tax Income Efficiency: … | ENGINE | 425 |
+204| Y296 | §1.3 | A cored city province carrying nothing else sums to exactly 0.75 + 0.25 = 1.00 and yields `base_tax` ducats a … | ENGINE | 427 |
+205| Y072 | §1.3 | The model applies `TAX_COEFF = 1.0` to every province it counts: ownership is not modelled, so every province … | DESIGN | 429 |
+206| Y297 | §1.3 | Carrying either the `Core` or the `City` term again would double-count it. | MODEL | 430 |
+207| Y073 | §1.3 | That is a modelling choice with a known cost: two readings, both on cored city provinces at `base_tax` 2 and … | DESIGN | 431 |
+208| Y074 | §1.3 | `base_tax` at 1444 runs up to 15 (province 1821), with total development reaching 33 there. | ENGINE | 432 |
+209| Y298 | §1.3 | Unowned provinces are outside the model: `s` and `c` are computed over provinces that have an owner and lie … | DESIGN | 435 |
+210| Y299 | §1.3 | What owner-agnostic demand buys: demand stops responding to who rules and responds only to what is there, so … | DESIGN | 438 |
+211| Y075 | §1.3 | Owner-agnostic wealth also removes a large source of hidden owner-dependence from the aggregate graph of … | MODEL | 440 |
+863| Y279 | §1.3 | Wealth reads no autonomy, no production efficiency, no national ideas, no estate or government modifiers, and no technology. | the exclusion list gains "no unrest" — an exclusion the document already asserted elsewhere (§1.3), restated into this list | MODEL | unsourced | 258 |
+864| Y050 | §1.3 | Province condition is the one thing besides development and the good that wealth reads: five static modifiers describe a province's own state, all … | counting frame recast: "five describe …, four of the five are applied" → "four static modifiers are applied … a fifth, `unrest`, is defined in the same file and is deliberately not read"; same substance (four applied, unrest excluded, all defined in the file) | ENGINE | `common/static_modifiers/00_static_modifiers.txt` | 334 |
+865| Y980 | §1.3 | Revolt risk is not a property of the place: in play it carries separatism from recent conquest, unaccepted culture, wrong religion and nationalism, … | expanded: adds "and the point of a revolt is that the rebels want the owner changed"; same argument (restated §0 L53-54) | MODEL | derivation | 361 |
+866| Y984 | §1.3 | The effect `unrest` would buy is already bought: conquest costing a province its wealth is delivered by `devastation`, `occupied` and `under_siege`, … | tightened: "all three of which are properties of the place and all three of which the model applies" → "all three properties of the place, and all three applied" (restated §0 L56-57) | MODEL | derivation | 369 |
+867| Y058 | §1.3 | The condition modifiers are what make the map answer to war: §1.2's volatility and §3.3's "a besieged province genuinely produces less" both rest on … | referent made explicit: "These are what make the map answer to war" → "`devastation`, `occupied` and `under_siege` are what make the map answer to war" | DESIGN | derivation | 379 |
+888| Y037 | §1.3 | `tax_value(p) = TAX_COEFF · base_tax(p) · (1 + sum of province-state tax modifiers)`. | old: `tax_value(p) = TAX_COEFF · base_tax(p) · (1 + Σ province-state tax modifiers)` → new: `tax_value(p) = TAX_COEFF · base_tax(p)` — no modifier at all (restated L49-50, L349, L955) | MODEL | unsourced | 288 |
+889| Y979 | §1.3 | `unrest` is live at the 1444 start and is deliberately not read. | old: `unrest` is live at the 1444 start and is deliberately not read → new: `unrest` is deliberately not read; its 1444 liveness (the 21-province reading) is no longer asserted — the revolt-risk accounting is withdrawn | MODEL | unsourced | 337 |
+890| Y051 | §1.3 | The condition modifiers and their targets: `devastation` `trade_goods_size_modifier = -2` scaled by the devastation level into `goods_produced`; … | old: five-row table; `occupied` enters both terms; `unrest` row grants `local_tax_modifier = -0.02` per point into `tax_value` → new: four-row table; `occupied` enters `goods_produced` only, its tax half "granted by the file and not read"; no `unrest` row | ENGINE | `common/static_modifiers/00_static_modifiers.txt` | 341 |
+891| Y053 | §1.3 | `occupied` and `unrest` touch the tax term; the other three reach `goods_produced` alone. | old: `occupied` and `unrest` touch the tax term; the other three reach `goods_produced` alone → new: no modifier reaches the tax term at all; all four rows enter `goods_produced` | MODEL | derivation | 348 |
+892| Y981 | §1.3 | `solver.py`'s `STATE_TAX_MOD` carries `occupied` alone, so four of the five rows in the table are applied. | old: `solver.py`'s `STATE_TAX_MOD` carries `occupied` alone (four of five applied) → new: `STATE_TAX_MOD` is empty, kept as an empty declaration | MODEL | `solver.py` | 352 |
+1143| Y1083 | §1.3 | The deleted-apparatus figures are reproduced by `apparatus6.py`, which holds the deleted classifier's constants frozen. | PROCESS | `apparatus6.py` | 278 |
+1144| Y1084 | §1.3 | The frozen constants record what v5.0's input surface was worth, not a live table, and sit in their own file precisely so that nothing can wire them back into the wealth path. | DESIGN | unsourced | 279 |
+1145| Y1085 | §1.3 | `measure6.py` imports the apparatus figures rather than restating them. | PROCESS | `measure6.py` | 281 |
+1146| Y1086 | §1.3 | `occupied`'s `local_tax_modifier` is granted by the file and not read: an occupier's presence is a fact about who is standing on the province — the class of input §1.3 exists to exclude — and the production half already carries the effect that matters, since occupied land ships less. | DESIGN | derivation | 349 |
+1147| Y1087 | §1.3 | `STATE_TAX_MOD` is kept as an empty declaration rather than deleted, so the shape of the exclusion stays legible in the code instead of becoming an absence a later editor has to infer. | DESIGN | `solver.py` | 352 |
+1148| Y1088 | §1.3 | On the 1444 start `prosperity`, `under_siege` and `occupied` are live on no counted province — all three describe conditions a campaign produces and a start date without wars does not. | MEASURED | `round6.py` | 356 |
+1149| Y1089 | §1.3 | The wealth rule carries four modifiers, of which one is exercised by the reference field. | MODEL | unsourced | 358 |
+1150| Y1090 | §1.3 | A province in revolt still has the buying power its development gives it; whether its owner manages to collect against that buying power is a fact about the owner, and a trade node is not a fact about the owner. | DESIGN | unsourced | 366 |
+1151| Y1091 | §1.3 | No figure is quoted for what the `unrest` exclusion costs, and none should be reconstructed. | DESIGN | unsourced | 373 |
+1152| Y1092 | §1.3 | Earlier drafts carried such a figure, and keeping it accurate meant parsing `revolt_risk` out of the save — an input surface maintained for a quantity the model does not read, which is the maintenance §1.3 deleted the modifier classifier to be rid of. | PROCESS | unsourced | 374 |
+1153| Y1093 | §1.3 | The exclusion is a decision about what wealth means, and a measured cost would not bear on it. | DESIGN | unsourced | 377 |

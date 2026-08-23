@@ -1,0 +1,46 @@
+sinks: ['hangzhou', 'genua']
+
+=== Europe node-set definitions ===
+  any member province in continent europe (all members) 25  aleppo,astrakhan,baltic_sea,bordeaux,champagne,constantinople,crimea,english_channel,genua,kazan,kiev,krakow,lubeck,north_sea,novgorod,pest,ragusa,rheinland,saxony,sevilla,siberia,valencia,venice,white_sea,wien
+  any COUNTED province in continent europe       25  aleppo,astrakhan,baltic_sea,bordeaux,champagne,constantinople,crimea,english_channel,genua,kazan,kiev,krakow,lubeck,north_sea,novgorod,pest,ragusa,rheinland,saxony,sevilla,siberia,valencia,venice,white_sea,wien
+  majority of members in continent europe        23  astrakhan,baltic_sea,bordeaux,champagne,constantinople,crimea,english_channel,genua,kazan,kiev,krakow,lubeck,north_sea,novgorod,pest,ragusa,rheinland,saxony,sevilla,valencia,venice,white_sea,wien
+  the document's 22                              22  baltic_sea,bordeaux,champagne,constantinople,crimea,english_channel,genua,kazan,kiev,krakow,lubeck,north_sea,novgorod,pest,ragusa,rheinland,saxony,sevilla,valencia,venice,white_sea,wien
+
+=== Europe -> sink pairs and Cape transit, per definition ===
+  any member province in continent europe (all members) nodes=25  connected Europe->sink pairs=30  cape-transiting=0
+  any COUNTED province in continent europe       nodes=25  connected Europe->sink pairs=30  cape-transiting=0
+  majority of members in continent europe        nodes=23  connected Europe->sink pairs=27  cape-transiting=0
+  the document's 22                              nodes=22  connected Europe->sink pairs=25  cape-transiting=0
+
+=== the Cape ===
+  in-degree 2 out-degree 2
+  in from : ['ivory_coast', 'zanzibar']
+  out to  : ['comorin_cape', 'malacca']
+  loose ordered pairs (a->cape, cape->b, a->b): 81
+  strict reading (BFS shortest path uses the cape): 62
+
+=== routes ===
+  white_sea -> hangzhou : white_sea -> novgorod -> kazan -> astrakhan -> persia -> lahore -> doab -> ganges_delta -> burma -> gulf_of_siam -> canton -> hangzhou
+  sevilla   -> hangzhou : sevilla -> safi -> timbuktu -> katsina -> ethiopia -> gulf_of_aden -> comorin_cape -> ganges_delta -> burma -> gulf_of_siam -> canton -> hangzhou
+  sevilla   -> ganges_delta : sevilla -> safi -> timbuktu -> katsina -> ethiopia -> gulf_of_aden -> comorin_cape -> ganges_delta
+  english_channel -> genua : english_channel -> champagne -> genua
+  english_channel -> hangzhou : NO ROUTE
+  genua out-degree 0 in-degree 5 ; in from ['alexandria', 'champagne', 'ragusa', 'tunis', 'valencia']
+
+=== marking order as a potential ===
+  order defined on 80 of 80 nodes
+  edges (u,v) with NOT order[u] > order[v]: 0 of 159
+  nodes with no marking order (Phase-0 peeled): 0 []
+
+=== sources ===
+  count 5 ; names ['james_bay', 'kongo', 'ohio', 'patagonia', 'white_sea']
+  c_w rank range (55, 79) ; mean degree 2.40 ; map mean degree 3.98
+  all in bottom half of wealth field (rank > 40): True
+
+=== every node drains to a sink ===
+  nodes reaching a sink: 80 of 80
+  acyclic: True  edges oriented: 159
+
+=== per-good: does the Cape carry spices toward Europe? ===
+  spices: cape out -> ['comorin_cape', 'ivory_coast', 'zanzibar']
+  spices: cape reaches European nodes: ['baltic_sea', 'bordeaux', 'champagne', 'constantinople', 'crimea', 'english_channel', 'genua', 'kazan', 'kiev', 'krakow', 'lubeck', 'north_sea', 'novgorod', 'pest', 'ragusa', 'rheinland', 'saxony', 'sevilla', 'valencia', 'venice', 'white_sea', 'wien']

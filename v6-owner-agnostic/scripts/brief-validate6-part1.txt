@@ -1,0 +1,81 @@
+# Task: validate a claims inventory against its primary sources
+
+## What you are looking at
+
+`C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\per-good-trade-spec.md` is the design spec for an Europa
+Universalis IV mod. `C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\claims-v6.md` is a census of every claim that document
+makes, produced by a separate agent that was told to enumerate and not to evaluate. Your job is the
+evaluation.
+
+Primary sources available to you:
+
+- the game install, `C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV`
+- the mod's own scripts, `C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\scripts\` — `solver.py` builds the wealth table and the
+  trade graph, `drain.py` is the orientation algorithm, `measure6.py` prints most of the figures the
+  spec quotes, `verify6.py` compares the document against computed values, `relabel6.py` runs the
+  node-order experiment, `coverage6.py` measures how much of the document is guarded
+- EU4 saves, with a caveat that costs time if missed. The save directory holds 581 `.eu4` files and
+  **577 of them are unreadable OneDrive placeholders**. Four open: `VANILLA_start.eu4`,
+  `VANILLA2_start.eu4`, `PERMUTE_start.eu4` and `Castile1444_12_22.eu4`, all in
+  `C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\save games`. There are no
+  `.eu4` files anywhere outside OneDrive. The first three are start-date saves; the fourth is later.
+  A save is a ZIP
+  whose `gamestate` entry is text; province records start at column 0 and their fields are indented
+  two tabs.
+- the running game, if a claim can only be settled by observing it
+
+## What to produce
+
+A verdict on every claim in the inventory, as a markdown file at
+`C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\validation-v6-round5-part1.md`. One row or block per claim ID, carrying:
+
+- **ID** — the same ID the inventory uses. Every ID in the inventory gets a verdict; none are skipped.
+- **Verdict** — `CONFIRMED`, `PARTIAL`, `REFUTED`, or `UNTESTABLE`.
+  - `CONFIRMED`: you re-derived the claim from a primary source and got the same answer.
+  - `PARTIAL`: some of it holds and some does not — say precisely which part fails.
+  - `REFUTED`: you re-derived it and got a different answer, or the source says otherwise.
+  - `UNTESTABLE`: no available source can settle it. Say what source would.
+- **Method** — what you actually did. The command you ran, the file and line you read, the
+  computation you performed. "Read the spec" is not a method; the spec is the thing under test.
+- **Evidence** — the output. Numbers you got, the text you read, the exit status.
+
+Then a summary: counts by verdict, and the list of REFUTED and PARTIAL IDs.
+
+## How to reach a verdict
+
+Re-derive. Every confirmation must come from a source outside the document. If the spec says a figure
+is 12.23 and a script prints 12.23, that is a confirmation of the document against the script — say
+so, and say whether you also checked the script does what its name claims. If a figure has no source
+you can reach, that is `UNTESTABLE`, not `CONFIRMED`.
+
+Do not confirm on plausibility. A figure that looks about right is not confirmed. A mechanism
+description that reads like how EU4 works is not confirmed until you have found it in a file or seen
+it in the game. Several figures in earlier versions of this document survived three audits because
+each auditor found them plausible.
+
+Do not inherit the inventory's judgments. It records what the document says its provenance is; that
+provenance may be wrong, and a claim the inventory calls "computed by a named script" may name a
+script that does not compute it. Check.
+
+Where a claim is quantitative and a script exists to compute it, run the script. Where a claim is
+quantitative and no script exists, write one. Where you write an instrument that reimplements
+something the mod already implements, validate your instrument against the shipped one on a case
+whose answer is known before you trust any of its output — a reimplementation missing a step reports
+a stable-looking wrong answer as readily as an unstable one.
+
+Report what you found, including where you could not settle something.
+
+## Your slice
+
+Four agents are working this census concurrently under this same brief, split by section
+so each can re-derive rather than sample. **Yours is: §0, §1.1, §1.2, §1.3, §1.4, §1.5** — about 222 claims.
+
+Verdict every claim in those sections. Ignore claims in other sections; another agent has
+them. The file named above is your deliverable.
+
+The census also carries 155 rows in tables or rows marked `(v5)` / `REMOVED`. Those are v5.0
+propositions with no counterpart in the current document. They are **out of scope**: the
+current spec is what is under test, and nothing in it rests on them. Do not verdict them.
+
+The spec is at MD5 `59c84a97799db9db97fe889b6e3c6776`. Compute it before you start and again
+when you finish; if either differs, say so — the document changed under you.

@@ -1,0 +1,438 @@
+--- per-good-trade-spec-v6.4-round10-frozen.md	2026-08-22 11:58:06.261787800 -0400
++++ per-good-trade-spec.md	2026-08-22 12:04:38.852109300 -0400
+@@ -1,6 +1,6 @@
+ # Per-Good Trade Network — Design Spec
+ 
+-**Version:** 6.4
++**Version:** 6.5
+ **Status:** Living document
+ **Target:** EU4 1.37.5 Inca. Extended-timeline compatible. **Connected maps only** — see §2.2a.
+ **Lineage:** supersedes v1.3 (`../v1-laplacian/`). v1 oriented each good by a Laplacian
+@@ -18,8 +18,8 @@
+ province modifiers, buildings, centres of trade and the DLC conditionality — are deleted, along with
+ the whole-install sweep that maintained them. *(The two-test classifier is v4.0's; v3.0 used a
+ structural rule about which block of a trade-good definition a modifier sits in. The whole-install
+-sweep as documented apparatus is v5.0's alone; the one shipped sweep script is v4.0's
+-`audit_modifiers.py` — §2.3.)* On the 1444 start that apparatus was worth 105.30
++sweep as documented apparatus is v5.0's alone; the shipped sweep scripts are v4.0's — three
++sweep both modifier directories, `audit_modifiers.py` among them — §2.3.)* On the 1444 start that apparatus was worth 105.30
+ ducats — 0.98% of the 10,712.70 that field totalled with it, 0.99% of the 10,607.40 without; what it cost was an input surface whose classification was **wrong in both independent
+ audits that examined it** — `../v3-owner-agnostic/validation-v3.md` W041 and
+ `../v5-owner-agnostic/validation-v5.md` X035 — and passed by v4.0's own repair harness, which v5.0
+@@ -82,6 +82,16 @@
+ dangling residual citation (§3.14), a non-existent trade good (`tools`), and §2.7's result-tense
+ preamble.
+ 
++**v6.5** changes the money and the display, not the map. The value the network routes is the
++engine's own — `inject_g(n)`, the engine's node × good produced quantity times the current price,
++read live from engine memory each tick and routed through the per-good graphs (§1.8) — while every
++orientation input (§1.3's wealth, §1.2's shares, `α`, `Φ_w`) is unchanged. `V_g` follows the
++routed economy (§1.6), §3.4 is re-scoped to the two-quantity design, and §1.12 specifies the trade
++UI around it: the aggregate view shows each link's value in both directions, a selected good's
++view repopulates the same widgets with that good's numbers, and merchants are assignable on any
++link end from the node window's tabs — which also closes the negative-link display question by
++design, both directions shown as positive flows.
++
+ Two conventions govern the prose. **No empirical absolutes** — no superlative, no universal
+ quantifier and no threshold asserted as a fact about the world; a claim is either a directional
+ design statement or an observation scoped to the field and script that produced it. **No maintained
+@@ -236,7 +246,7 @@
+   field, so no index tiebreak in the algorithm fires at all. *(`props6.py` for every figure here — the core-node
+   count included — along with the permutations, the argmin and cut ties, and the reachability and
+   orphan-sink figures in the bullet above. `props6.py` was copied and extended from `val5_pergood.py`, which is still on disk: `diff`
+-  shows it is that file verbatim, zero deletions, plus 27 added lines carrying the permutation
++  shows it is that file verbatim, zero deletions, plus an added block carrying the permutation
+   loop. The loop was written for this citation — the figure had been quoted since v2, computed
+   in-tree only at width 2 (`final.py`'s V035, sweep-only re-keying, two permutations per good)
+   until this loop widened it to the cited 145.)*
+@@ -316,6 +326,11 @@
+ c(n,g)  = Σ_{p ∈ n} wealth(p)^α(g)  /  Σ_{q ∈ world} wealth(q)^α(g)
+ ```
+ 
++**The `trade_value(p)` defined here is a component of `wealth(p)` and feeds orientation only.**
++The money the network routes is §1.8's `inject`, the engine's own quantity. The two are different
++numbers with different jobs — one decides where the arrows point, the other is what moves along
++them — and conflating them is the error this split exists to prevent.
++
+ `GP_COEFF` and `TAX_COEFF` are in §2.3, and they have different provenance. **`GP_COEFF` is a
+ shipped file value** — `common/static_modifiers/00_static_modifiers.txt` carries
+ `provincial_production_size = { trade_goods_size = 0.2 … }`, localised "Base Production", which is
+@@ -539,7 +554,7 @@
+ ## 1.6 The aggregate graph
+ 
+ ```
+-V_g     = price(g) · Σ_m goods_produced(m,g)     # per-good value weights (display, link values, AI)
++V_g     = Σ_n inject_g(n)                        # per-good value weights (display, link values, AI) — §1.8's engine-injected value
+ 
+ wealth good:   s_w(n) = 1/N                       # uniform supply
+                c_w(n) = Σ_{p ∈ n} wealth(p)^α_Φ / Σ_{q ∈ world} wealth(q)^α_Φ
+@@ -620,7 +635,9 @@
+ Per good, on the same field: **2–8 sinks, mean 3.69**, 29/29 acyclic, **0 fallbacks fired**, and
+ **90.6%** of ordered node pairs (5,723 of 6,320) connected by at least one good's directed path.
+ 
+-Agreement with the per-good graphs is **55.1%** of edge-goods (**54.8%** value-weighted). It is a
++Agreement with the per-good graphs is **55.1%** of edge-goods (**54.9%** weighted by §1.8's
++`inject` — computed from the save's `trade_goods_size` arrays, so scoped to this save's roll,
++§1.3's Garnatah note). It is a
+ description of how often one power map coincides with twenty-nine commodity maps, not a quality
+ score: `Φ_w` models power and the per-good graphs model cargo (§3.9), so full agreement is neither
+ expected nor wanted.
+@@ -670,8 +687,9 @@
+ *A table of interval boundaries was published here and is withdrawn.* Its rows came from bisection
+ and disagree with a uniform grid about where several boundaries lie — the effect of a boundary that
+ sits between samples is a row that looks like a fact and is an artifact of the sampling. The
+-direction and the widest interval survive that difference; the row boundaries did not, and quoting
+-them invited exactly the trajectory reading the paragraph above warns against.
++direction survives that difference; the widest interval did **not** — the bisection's ×1.38–×1.95
++and the grid's ×1.973–×2.456 do not even overlap — which sharpens the point: bisection rows were
++sampling artifacts, and only the grid's figures are maintained.
+ 
+ *What this experiment is not evidence for. It scales all 824 counted European provinces by one
+ factor at once, which is not how development happens — real growth is province by province, with
+@@ -789,6 +807,22 @@
+ 
+ Trade power and collect/transfer intent are node-wide. What varies per good is what they produce.
+ 
++**What the network routes.** `inject_g(n)` is the engine's own produced trade value at node × good:
++the engine's `trade_goods_size` quantity for `g` at `n` — carrying every modifier vanilla applies
++(buildings, trade-company investments, owner goods-produced modifiers; production efficiency and
++autonomy are outside vanilla's trade value by vanilla's own construction) — times the current
++price. It is an **annual** quantity, like every value in this document (§1.3's time-basis note);
++the engine's own node fields are monthly twelfths of it, measured at exactly 12.00× on reconciling
++nodes. The DLL reads it live from engine memory each tick. The reference implementation's
++counterpart is the save's per-node `trade_goods_size` array — 33 slots in each of the 80 node
++blocks, slot *k* ↔ `00_tradegoods.txt` index *k−1* (slot map verified at Jaccard 1.000 against
++node good-membership; slots 0, 30 and 32 all-zero) — times the save's current price. The
++granularity is already exactly what routing needs: node × good, with no per-province step — a
++province produces one good, and the engine has summed them. **This is a different quantity from
++§1.3's `trade_value(p)`**, which is an orientation input and reads only development, the trade
++good and province condition. A manufactory moves `inject` and with it the money; it does not move
++the arrows.
++
+ For each good `g` at node `n`:
+ 
+ ```
+@@ -808,8 +842,8 @@
+ 
+ Vanilla gates still apply: trade range and the rule that there is no transfer into a node where
+ nobody holds power at both ends *(the both-ends rule is stated from the trade interface's behaviour;
+-no define, string or searched file names it — a probe-class fact under §3.16's own rule, recorded as
+-such)*. What trade range gates is **reach, not flow**: every string,
++no define, string or searched file names it — a probe-class fact under §3.16's own rule, recorded
++as such and carried as §2.7 item 19)*. What trade range gates is **reach, not flow**: every string,
+ define and modifier that mentions it is about where a country may *send* something —
+ `HINT_TRADERANGE_TEXT` ("how far away you may send a Merchant"), `TRADE_RANGE_IRO` ("our merchants
+ can reach trade nodes within this range"), `TRADE_NODES_OUT_OF_RANGE`, `MAPMODE_TRADE_DESC`, and
+@@ -824,7 +858,7 @@
+ Preserved from vanilla, unchanged:
+ 
+ - A country whose provincial trade power in a node meets the threshold receives a share of it in immediately upstream nodes — with **no power-or-merchant condition on the receiving country there**, and with distance the one gate the save shows remaining (below). The engine's own tooltip says power transfers "to trade nodes where it already has power", and that qualifier is descriptively false: measured, France holds zero provinces and zero merchants in Sevilla and still appears there with 3.3 power, which the engine itemises as `Transfers from traders downstream: +3.1` and nothing else. This line was §3.16's cautionary case; it is now closed, and it closed in favour of the spec. **What the save shows gating receipt instead is distance**: 72 of 272 threshold-qualifying (country, upstream-node) pairs receive nothing, concentrated in distant colonial pairs — England qualifies in `english_channel` yet propagates nothing into `chesapeake_bay` — consistent with **trade range gating propagated receipt**, an unstated gate added to §2.7's probes as item 17. The share is `1 / TRADE_PROPAGATE_DIVIDER`. The threshold in raw power is `TRADE_PROPAGATE_THRESHOLD × TRADE_PROPAGATE_DIVIDER`, pending §2.7 probe 8 — see §3.13.
+-- Ship trade power propagates only where the country has a ship-propagation modifier, at a compounded rate the model reads as the propagation share multiplied by that modifier — the modifier and the share are each file-stated; their composition is stated by no file, string or observation, so the product is the model's derived reading rather than an engine fact.
++- Ship trade power propagates only under a ship-propagation modifier — the modifier and its grants are file-stated (`ship_power_propagation` in the static modifiers, ideas, reforms and an age ability), while the *only-under* conditional is the model's reading of the modifier's own semantics, unprobed — at a compounded rate the model reads as the propagation share multiplied by that modifier; the composition too is stated by no file, string or observation, so both halves are the model's derived reading rather than engine fact.
+ - Propagation is strictly one hop and never chains.
+ - A node receives the summed contributions of all its downstream neighbours.
+ 
+@@ -911,20 +945,44 @@
+ 
+ The in-game economy **is** the per-good economy. Node values, the node window, pie charts, the ledger, the economy tab, and tooltips all show the model's numbers.
+ 
+-**Trade map mode.** Provinces coloured by node, arrows between nodes, drawing `Φ_w`. Arrow weight from realized value crossing the link.
+-
+-**Selecting a commodity.** Clicking a province switches province colouring to the vanilla trade-goods rendering for that good and redirects the arrow layer to that good's graph. A sink is visible as a node with no outgoing arrows. Clicking the node icon clears back to `Φ_w`.
+-
+-**Not representable in the vanilla UI**, and shown in the companion overlay instead:
+-
+-- Value broken down by commodity. The node window carries several node-level value fields
+-  (incoming / local / total / outgoing), but none takes a commodity argument — zero per-good
+-  fields, where thirty would be needed.
+-- A link's two-way traffic. One scalar per link, shown as net.
+-- Per-country effective trade power where eligibility differs by good. Shown as a value-weighted aggregate.
+-
+-No new art, sprites, shaders, or map-mode chrome. Making the node window's existing incoming-link
+-entries assignable (§1.7) is the only UI change.
++**Aggregate trade view.** Provinces coloured by node, arrows between nodes, drawing `Φ_w`; the
++map-mode box shows the node's total trade value (`total_value` in `interface/mapicons.gui`'s
++`trade_small_mapicon`/`trade_big_mapicon`), and the node window its six fields — `incoming_value`,
++`local_value`, `total_value`, `outgoing_value`, `our_from_this` (the country's own take) and
++`piracy_value`, all in `tradeinterface.gui` — every one now Σ_g of the per-good economy. **Every
++incident link is shown, with the value flowing in each direction along it**: two directed figures
++per physical link, never one net scalar, because under the per-good model the same link can carry
++cloth one way and fur the other. `Φ_w` remains the drawn installed direction; the directional
++panels are realized sums.
++
++**Selecting a commodity.** Clicking a province switches province colouring to the vanilla
++trade-goods rendering for that good and redirects the arrow layer to that good's graph — and the
++**same widgets repopulate with that good's numbers**: the node box the good's value at the node,
++the window all six fields for the good alone (`piracy_value` as the good's share of the node's
++skim), each edge — one direction each, since a single good's graph orients every edge one way —
++the good's realized flow. A sink is visible as a node with no outgoing arrows for the good.
++Clicking the node icon clears back to the aggregate view.
++
++**The node window's tabs.** Vanilla's layout is kept — connected-node tabs across the top,
++incoming on the left (`incoming_nodes_listbox`), outgoing on the right (`outgoing_nodes_listbox`)
++— grouped by the active view's graph: `Φ_w` in the aggregate view, the selected good's orientation
++in a per-good view. **Merchant assignment happens in these tabs**: panels in both groups carry the
++assign button, because assignment is to a link *end* at this node and steers exactly the goods
++oriented away from this node on that link — §1.7's rule, and where §1.7's incoming-entry
++assignability is delivered. Today's `TradeNodeLink` widget carries one button and one label per
++link, so the directional value panels and per-good repopulation are new data on existing widget
++classes; the feasibility dependencies are §2.7 probe 7 (arrow render state versus the economic
++link) and a node-window data-source hook, added hooking surface under §2.5.
++
++**Still overlay-only**: per-country effective trade power where eligibility differs by good, shown
++as a value-weighted aggregate. Per-good value display and two-way traffic move into the main UI by
++**swap-on-view** — only the selected good's numbers are displayed at a time, so no thirty-field
++storage in engine structures is needed. Showing both directions as positive flows also settles the
++negative-link display question by design: no negative net is ever displayed (§2.9, §3.9).
++
++No new art, sprites, shaders, or map-mode chrome. The UI changes are three, all on existing
++widgets: incoming-entry assignability (§1.7), the directional value panels, and per-good
++repopulation of the node and link fields.
+ 
+ ---
+ 
+@@ -1000,7 +1058,7 @@
+ ## 2.2 Solver
+ 
+ 1. Parser for `common/tradenodes/00_tradenodes.txt` — adjacency, `members`, `path`/`control` render data, `end`/`inland`/AI flags.
+-2. Parser for non-ironman saves — province owner, `base_tax`, `base_production`, trade good, goods produced, development.
++2. Parser for non-ironman saves — province owner, `base_tax`, `base_production`, trade good, development, and the per-node `trade_goods_size` arrays (the engine's produced quantity lives at node level; no province record carries one).
+ 3. Parser for `common/defines.lua`, merged with `common/defines/` overrides in load order (§2.3).
+ 4. Per-province `wealth` — **owner-agnostic** per §1.3:
+    `TAX_COEFF · base_tax + GP_COEFF · base_production · (1 + province-state goods modifiers) ·
+@@ -1021,7 +1079,7 @@
+ 7. Mutual reachability census: 30 goods × 80 BFS, producing an 80×80 matrix whose entry counts goods with a directed path `n → … → m` — the DLL deliverable. The reference implementation ships the boolean projection over the 29 live goods (`measure6.py`), which is what feeds §3.8's 5,723.
+ 8. Synthetic-shock harness: edit parsed province data and re-solve.
+ 
+-Cost per good is one uncapacitated min-cost flow on 80 nodes / 318 arcs plus an O(V+E) sweep.
++Cost per good is one uncapacitated min-cost flow on 80 nodes / 318 arcs plus an O((V+E) log V) priority sweep.
+ Measured on the reference implementation (scipy/HiGHS plus the deterministic sweep, one machine):
+ **of order 0.1 s for all 29 goods.** That is the paragraph's one figure-shaped assertion — no
+ bracket, no span, no counting triple — because it is the only statement every replicate supports:
+@@ -1040,7 +1098,7 @@
+ native network simplex would have to improve on, and no measurement in this project supports a
+ specific projection, and none is offered.
+ 
+-**Two implementations, one specification.** The list above specifies the solver deliverable. The reference implementation — standalone, run against parsed saves, the thing every validation in §2.8 is measured on — ships items 1 (less `path`/`control`, which the shipped file carries and `nodes.py` discards; §2.4 item 3 nevertheless obliges the emitter to reverse both), 4, 5, 7 (as the boolean projection) and 8; builds its province table from `history/provinces`, reading the save only for the twenty rolled trade goods; reads three defines by regex rather than the merged parse of item 3; and does not build the survival table — §2.9's build order is where those gaps are owned. The shipped DLL carries a second implementation of items 4–7 in the host language, reading live memory instead of save files. They must agree — on **orientation exactly**, a combinatorial comparison with no tolerance band,
++**Two implementations, one specification.** The list above specifies the solver deliverable. The reference implementation — standalone, run against parsed saves, the thing every validation in §2.8 is measured on — ships items 1 (less `path`/`control`, which the shipped file carries and `nodes.py` discards; §2.4 item 3 nevertheless obliges the emitter to reverse both), 4, 5, 7 (as the boolean projection) and 8; builds its province table from `history/provinces`, reading the save for the twenty rolled trade goods and the node `trade_goods_size` arrays; reads three defines by regex rather than the merged parse of item 3; and does not build the survival table — §2.9's build order is where those gaps are owned. The shipped DLL carries a second implementation of items 4–7 in the host language, reading live memory instead of save files — including the live `inject_g(n)` read (§1.8). They must agree — on **orientation exactly**, a combinatorial comparison with no tolerance band,
+ which replaces v1's identity check (§2.8) — and where they disagree the reference is correct by
+ definition. The parsers and the harness stay reference-only; the DLL never reads a save.
+ 
+@@ -1113,9 +1171,10 @@
+ patch can change it. **`TAX_COEFF` is not in any file that has been found** — `defines.lua`,
+ `common/defines/` and the static-modifier tables were searched — so it remains a measured constant
+ and must be re-measured against any patch that is not 1.37.5. *(v3.0 through v5.0 said neither
+-coefficient was in a file; v4.0's tree ships the one sweep script, `audit_modifiers.py`, which
+-walked past the block holding one of them, and v3.0 and v5.0 repeated the claim without shipping a
+-sweep.)*
++coefficient was in a file; v4.0's tree ships three scripts that sweep both modifier directories —
++`audit_modifiers.py`, `audit_alpha.py`, `audit_bands.py`; others read the same files without
++sweeping them — and `audit_modifiers.py` walked past the block holding one of them, while v3.0 and
++v5.0 repeated the claim without shipping a sweep.)*
+ 
+ | Constant | Value | How it was measured |
+ |---|---|---|
+@@ -1176,9 +1235,9 @@
+ 
+ *A structured second term does not do this, and the reason is not distinctness.* `+ TIE_EPS²·|w[u]
+ − w[v]|` was tried and rejected. Both costs make **all 159 edge costs distinct**, so distinctness
+-cannot be what separates them; what differs is the mechanism. `|w[u] − w[v]|` **telescopes**: summed
+-along a path it collapses to a function of the endpoints, so two routings between the same endpoints
+-can still total the same and the term cancels exactly where a tie needs breaking. `frac(lo·hi·7919)`
++cannot be what separates them; what differs is the mechanism. `|w[u] − w[v]|` **telescopes on monotone stretches** — there it collapses to the endpoint
++difference — so routings traversing similar wealth profiles can still total the same and the term
++cancels where ties need breaking. `frac(lo·hi·7919)`
+ has no such structure, and that is the whole of its job. Measured on the same field (`round6.py`): the
+ structured term leaves **11 of 29** goods admitting an alternative optimum against the shipped
+ term's **1** (`paper`). Genericity is what is needed, not distinctness.
+@@ -1210,7 +1269,8 @@
+ what changed is that every other order now does too.
+ 
+ *What the second-order term costs:* self-coherence with the per-good graphs falls by at most a tenth of a point (0.04 edge-goods,
+-0.10 value-weighted), and nothing else measured moves. Sinks per good stay 2–8 mean 3.69, all 29 stay acyclic, `Φ_w`'s sinks are unchanged,
++0.10 weighted by the orientation model's per-good trade value — the base pinned so §1.6's `inject`
++redefinition cannot silently re-base it), and nothing else measured moves. Sinks per good stay 2–8 mean 3.69, all 29 stay acyclic, `Φ_w`'s sinks are unchanged,
+ and the ±1% wealth-noise result stays 0 edges moved on six seeds. What it buys is replacing a tiebreak
+ that was arbitrary **and** order-dependent — the node index — with one that is arbitrary but
+ order-invariant.
+@@ -1247,7 +1307,7 @@
+ comparison operators: the FLOW and TREE operators in `flowop.py` (§3.15's bake-off) and the per-good
+ checks in `verify.py`. `mincost_flow`'s cost argument defaults to unit so those are unaffected.
+ 
+-**DLC state is a third input axis.** Treasure-fleet diversion and caravan power are both DLC-conditional, and caravan modifier values are readable even when inert — so key on the DLC flag, never on the presence of a value.
++**DLC state is a third input axis.** Treasure-fleet diversion and caravan power are both DLC-conditional, and caravan modifier values are readable even when inert — so key on the DLC flag, never on the presence of a value. The file evidence, precisely: shipped content does carry a DLC-gated *modifier* of caravan power (`common/disasters/decline_of_mali.txt` gates a `caravan_power = -0.33` disaster on `has_dlc = "Origins"`), but no shipped file gates the caravan *grant mechanic* or treasure-fleet *diversion* themselves on a DLC flag — that conditionality is engine-side, the flag must be read via the engine, and a `dlc_load.json` toggle run is the probe-class confirmation.
+ 
+ ## 2.4 The tradenodes file
+ 
+@@ -1257,8 +1317,9 @@
+ `[tradenodedefinition.cpp:61]: X=>y ( ERROR: Trade nodes must always be defined so that an
+ outgoing is defined after in the file, or we get processing errors)` once per violating link — but
+ it **tolerates** violations. Measured: a file with all 159 links declared backwards logged exactly
+-159 such errors and then loaded and played normally, with node `total` and `retention` unchanged
+-and the power-dependent fields differing only within the engine's own run-to-run variance.
++159 such errors and then loaded and played normally — `retention` unchanged on 80 of 80 nodes and
++`total` on 78 of 79, the exception (`zambezi`) drifting 0.012%, within the engine's own run-to-run
++variance (§2.8) — with the power-dependent fields differing only within that variance.
+ 
+ What the engine does **not** tolerate is a **cycle**. A hand-authored two-node cycle produced
+ `EXCEPTION_STACK_OVERFLOW` at a single exception address (`0x00007FF6DDE6A8B4`) under 1002 recorded
+@@ -1343,7 +1404,10 @@
+ 
+ The monthly trade tick runs in three passes: static power and modifiers; a pass from the end nodes determining modified power and adding propagation; and a value pass from the origin nodes computing node value → collect/steer split → collect division → outgoing division with steering bonuses.
+ 
+-**Written each tick:**
++**Written each tick.** The origination is §1.8's `inject_g(n)`, read live at the tick and routed
++per §1.8 over the per-good graphs — all in the document's annual basis, **with the ÷12 conversion
++at the engine-write boundary**, since the engine's node fields hold monthly twelfths (the same
++annual-over-twelve relation §1.3 established from the engine's own tooltips):
+ 
+ | Field | Value |
+ |---|---|
+@@ -1359,7 +1423,7 @@
+ - **Display** — immediately after the value pass. AI consumers read these figures during the month.
+ - **Payment** — bounded by the month boundary, since the treasury reconciles at the start of each month against the previous month's income.
+ 
+-Per-link values are written net, which can be negative where realized flow opposes the drawn arrow.
++Per-link values are written net to the engine's one per-link field, which can be negative where realized flow opposes the drawn arrow — the display never shows that net (§1.12 shows both directions as positive flows); §2.7 item 4 covers the engine's own consumers of a negative stored value.
+ 
+ ## 2.7 Probes
+ 
+@@ -1426,6 +1490,11 @@
+     carries two devastation levels (Bohemia 50, Erzgebirge and Moravia 20): read `goods_produced`
+     in both windows and check the penalty scales linearly through them.
+ 
++19. **The both-ends rule.** §1.8 carries "no transfer into a node where nobody holds power at both
++    ends" from the trade interface's behaviour, named by no define, string or searched file.
++    Observe whether transfer enters a node where the receiving side holds power at only one end —
++    one session, node window.
++
+ All writes land atomically at the tick hook with the sim paused.
+ 
+ ## 2.8 Validation
+@@ -1465,26 +1534,26 @@
+ **Measured, not asserted:**
+ 
+ - **Φ_w-vs-realized sign disagreement**, weighted by trade value, not link count. The static
+-  baseline is known — `Φ_w` agrees with the per-good graphs on **54.8%** of edge-goods *weighted by
+-  trade value*, and on 55.1% unweighted (§1.6) —
++  baseline is known — `Φ_w` agrees with the per-good graphs on **54.9%** of edge-goods weighted by
++  §1.8's `inject`, and on 55.1% unweighted (§1.6) —
+   so the realized number has a floor to be compared against. Predicted to cluster at nodes with 3+ outgoing links and partial merchant coverage, thinning as coverage densifies.
+ - **Flip behaviour** per decade in peace versus war, and whether flips revert as occupation lifts.
+ - **Propagated-share change per node** on each flip, alongside the trade-power/in-degree covariance. This is what catches the §1.10 threshold mechanics flickering — a share crossing a single-valued limit is the failure mode, and casus belli availability the visible one. Total propagated power is not the quantity to watch: reorientation cannot change edge count, so `Σ indeg = |E|` is invariant and only the covariance moves.
+-- **Income balance, two metrics.** Total world collected income, and its distribution across historical great powers. Distribution is the gating one.
++- **Income balance, two metrics.** Total world collected income, and its distribution across historical great powers. Distribution is the gating one. Under §1.8 the origination is identical to vanilla's by construction, so the world total is expected to track vanilla's up to steering boosts, routing differences and merchant placement — compared against the DLL's live read, with a tolerance and a null run (the economy-tab row above). The save-based reference reconstruction (Σ `trade_goods_size` × price ÷ 12) reproduces the engine's `local_value` exactly on 58 of 80 nodes and runs **3.4% low** in aggregate, short almost entirely in New World nodes — a known reference-side gap, recorded so nobody chases it as a model defect.
+ 
+ ## 2.9 Build order
+ 
+ Not phases. Two tracks, run in parallel.
+ 
+-**Solver track** — the **defines parser first**: §2.3 makes every *define* the model reads a runtime read — `TAX_COEFF` is the one constant that is not, because it is in no shipped file that has been found (§2.3) — so the eligibility threshold, the propagation share, the off-home penalty, the merchant bonuses and the caravan terms are all downstream of it and cannot be written correctly before it exists. Then the full save parser (§2.2 item 2 — the reference reads the save only for the twenty rolled trade goods) and the `path`/`control` read that closes item 1's remaining gap; then the b-flow and sweep with their per-tick assertions (reachability, conservation, acyclicity, determinism, 2-core sink containment in `{selected} ∪ {promoted} ∪ {fallbacks}`) and
++**Solver track** — the **defines parser first**: §2.3 makes every *define* the model reads a runtime read — `TAX_COEFF` is the one constant that is not, because it is in no shipped file that has been found (§2.3) — so the eligibility threshold, the propagation share, the off-home penalty, the merchant bonuses and the caravan terms are all downstream of it and cannot be written correctly before it exists. Then the full save parser (§2.2 item 2 — the reference reads the save for the twenty rolled trade goods and the node `trade_goods_size` arrays) and the `path`/`control` read that closes item 1's remaining gap; then the b-flow and sweep with their per-tick assertions (reachability, conservation, acyclicity, determinism, 2-core sink containment in `{selected} ∪ {promoted} ∪ {fallbacks}`) and
+ the per-tick sink-set equality monitor — **each of them paired with a negative fixture that makes it
+ fail**, because an assertion nobody has watched go red is an assertion nobody has tested, and four of
+ the defects the round-5 audit found were checks that could not fail (`scripts/redtest6.py` is the
+ reference-side version of this); per-good eligibility; realized flows; the Φ_w-vs-realized disagreement measurement; the reachability census; the flip-rate measurement; the survival table (§2.2 item 6, which no implementation yet builds).
+ 
+-**Memory track** — the §2.7 probe session: the fourteen items still open there (1–11 and 16–18) on one trace.
++**Memory track** — the §2.7 probe session: the fifteen items still open there (1–11 and 16–19) on one trace — plus locating the engine's live produced-quantity fields, the node trade-goods arrays and/or the per-province quantities behind them (§2.5's pattern-scanning scope), which §1.8's live read needs.
+ 
+-**Then** — write §1.10's classified call-site list into the spec; gate income balance on both metrics; decide the negative-link display policy against a measured number.
++**Then** — write §1.10's classified call-site list into the spec; gate income balance on both metrics. The negative-link display policy is decided by design (§1.12: both directions shown as positive flows, no net scalar displayed); §2.8's disagreement measurement is still collected.
+ 
+ ---
+ 
+@@ -1510,7 +1579,9 @@
+ `s − c`, or any node ranking — means no path can dip through a low-value intermediary and rise
+ again. Malacca → … → Cape → … → Europe requires exactly that dip. This killed v1's rank-orientation
+ strawman and it killed the tested `s − c` operator the same way: demand had to increase at every
+-hop, so **17.1%** of world demand (unweighted per-good mean; 7.7% value-weighted) became unreachable and Genoa was crowned a cloves sink that
++hop, so **16.7%** of world demand (unweighted per-good mean; 7.6% weighted by the orientation
++model's per-good trade value, `price(g)·Σ_m goods_produced(m,g)` — `solver.build_sc`'s base, pinned
++so §1.6's `inject` redefinition cannot silently re-base it; `scripts/r9/lead/L_rank2.py`) became unreachable and Genoa was crowned a cloves sink that
+ cloves could not reach. Merchants cannot repair a wrong orientation — a merchant selects among
+ existing outgoing arrows, it cannot reverse one — so route-awareness has to live in the
+ orientation.
+@@ -1646,14 +1717,16 @@
+ 
+ ## 3.4 Why supply is pre-modifier
+ 
+-Production efficiency does not conjure more cloves; it means the owner extracts more ducats from the same cloves. Letting it into supply would say a province ships more to the world market because its owner picked Trade ideas — incoherent in a model whose thesis is that where a good comes from is what makes its trade its own.
++Production efficiency does not conjure more cloves; it means the owner extracts more ducats from the same cloves. Letting it into supply would say a province ships more to the world market because its owner picked Trade ideas — incoherent in a model whose thesis is that where a good comes from is what makes its trade its own. **The scope of this argument is the orientation shares**: where a good comes from is a property of the place, so owner choices must not move the arrows. The routed economy is the other half of the two-quantity design and deliberately carries the engine's own goods-produced modifiers (§1.8), because Goal 7 makes the game's money the model's money — a manufactory moves the ducats without moving the map.
+ 
+ **It does not belong in demand either.** v1 and v2 excluded owner effects from supply and then let them straight back in through `wealth`, so the same incoherence they rejected on the supply side ran the demand side. §1.3 now excludes them from both. Supply and demand are both properties of the place, and the argument below — which was written to defend the supply side — applies unchanged and with more force to demand.
+ 
+-This is also why the aggregate uses **trade value** rather than production income. The two are different quantities: a province's trade value is unaffected by production efficiency or local autonomy, and production income is defined by them. Substituting production income would make `V_g` — and with it the aggregate's weighting — depend
++This is also why `V_g` and the routed value are **trade value** rather than production income. The two are different quantities: a province's trade value is unaffected by production efficiency or local autonomy, and production income is defined by them — so `inject` inherits exactly the exclusion this section demands, by vanilla's own construction (verified two ways on the save). Substituting production income would make `V_g` and the routed economy depend
+ on owners' idea groups and autonomy, importing exactly the incoherence the previous paragraph
+-rejects. (In v1 the same substitution also broke the α = 1 identity, measured as orientation
+-agreement collapsing to well under half the map; the identity is gone in v2 but the reason to refuse
++rejects. (The aggregate graph reads neither quantity: `Φ_w` is built from §1.3's wealth field, and
++the `V_g`-weighted aggregate this paragraph once described was v2.0's, gone at v2.1's `Φ_w`
++adoption. In v1 the same substitution also broke the α = 1 identity, measured as orientation
++agreement collapsing to well under half the map; the identity is gone but the reason to refuse
+ the substitution is unchanged.)
+ 
+ ## 3.5 Why α is anchored absolutely
+@@ -1718,8 +1791,8 @@
+ the **engine's** behaviour on a cyclic file, and that is now measured rather than assumed: **the
+ engine dies**. A hand-authored two-node cycle produced `EXCEPTION_STACK_OVERFLOW` at a single
+ exception address under 1002 recorded `eu4.exe` frames, reproduced on three launches, while vanilla
+-and a file with all 159 links declared backwards both loaded and played. The dumps show an unbounded same-module recursion on
+-the tested cycle. Acyclicity is enforced because the engine **demonstrably** did not survive the
++and a file with all 159 links declared backwards both loaded and played. The dumps show a stack overflow under 1002 recorded identical `eu4.exe` frames — consistent with
++same-module recursion, though they carry no per-frame addresses to prove it. Acyclicity is enforced because the engine **demonstrably** did not survive the
+ cycle class tested — established by observation over one construction (§2.4), not proof over all
+ cyclic inputs — and not, as v2 had it, because we could not prove that it could.
+ 
+@@ -1789,9 +1862,10 @@
+ 
+ The installed graph exists for the engine's direction-dependent systems — propagation, fleet
+ routes, upstream/downstream scopes — and those systems model *power*, not commodity logistics.
+-What vanilla's authored arrows encode is empires pointing at the biggest cities and richest
+-areas, with three authored ends (`genua`, `venice`, `english_channel`). `Φ_w` computes that
+-intent from the world state instead of authoring it. **Wealth pulls, but the wealthiest node is not
++What vanilla's authored arrows encode is authored intent about where trade centres: three
++authored ends (`genua`, `venice`, `english_channel`), two of them in the top node-wealth ranks and
++`venice` at rank 21 of 80 (180.6) — the historical pick rather than the wealth pick. `Φ_w` computes
++that intent from the world state instead of authoring it. **Wealth pulls, but the wealthiest node is not
+ automatically an end.** On this field `english_channel` is the richest node at 316.6 and is *not* a
+ sink: it drains to `genua`, which is 4th at 296.0. `mexico` (300.4, 2nd), `gulf_of_siam` (297.9, 3rd)
+ and `sevilla` (266.5, 7th) are likewise net demanders and not ends — for two different reasons,
+@@ -1835,8 +1909,10 @@
+ it. Realized movement follows vanilla propagation — a good can be diluted by an even split across
+ three links while another gets winner-take-all steered the other way — so a link can be oriented
+ `n → m` under `Φ_w` while realized net flow runs `m → n`. That is why the disagreement rate is
+-measured rather than assumed, and why display policy for negative link values is a decision
+-deferred to data. Link values are realized flows, which makes conservation hold by construction.
++measured rather than assumed. Display policy for negative link values is settled by design —
++§1.12 shows each link's two directions as positive flows, so no negative net is displayed — and
++the disagreement rate stays a measured quantity. Link values are realized flows, which makes
++conservation hold by construction.
+ 
+ ## 3.10 Why the engine's economy is overwritten
+ 
+@@ -1993,7 +2069,7 @@
+ 
+ **One precompute serves every country.** For each good, a backward pass over its DAG gives `S_g[n][H]`, the expected fraction of a unit of `g` at `n` arriving at `H`, multiplying through collection, steering shares, and the per-link multi-merchant boost. `collected_share(n,g)` reaches 1 at `g`'s sink, which terminates the recursion. All three inputs are country-independent aggregates, so this is one table, not one per nation — **about 1.5 MB at double precision**, well under a million operations per solve. *v1 and v2 both said 0.75 MB, which is the single-precision figure; the rest of the solver is double precision — 29 goods × 80 × 80 entries at 8 bytes is 1,484,800 bytes — so the natural implementation is twice what v1 and v2 recorded.*
+ 
+-Scoring reads that table for both steering and collecting, so the opportunity cost of collecting falls out as the same comparison a human player makes by hand. Denial scoring falls out of the same table against a rival's home node.
++Scoring reads that table for both steering and collecting, so the opportunity cost of collecting falls out as the same comparison a human player makes by hand. Denial scoring falls out of the same table against a rival's home node. **Candidates are (node, incident-link-end) pairs — both of the node window's tab groups, not `Φ_w`-outgoing links** — and a candidate's active good set is the goods oriented away from that node on that link, which is the solver's own output: the AI reads the per-good orientations directly and never infers from the drawn map, and a candidate steering nothing scores zero and is never chosen.
+ 
+ **The off-home penalty is a power modifier, not a haircut on value.** It reduces the country's trade power in that node, and that reduced power then feeds *both* the collect/transfer ratio and the share among collectors — so it lowers the fraction retained in the node *and* the collector's slice of it. Scoring a collect candidate as `value × share × 0.5` is wrong; the halving must be applied to power and the two-stage formula run from there. This is also why the penalty "falls out" of the survival table at all: the table is built from power-derived shares.
+ 
+@@ -2124,8 +2200,12 @@
+ the claim audit **refuted the standard itself**. At least fifteen non-prose claims failed, by
+ three distinct mechanisms:
+ 
+-1. **File values remembered from an older patch.** The 75% overseas autonomy floor is
+-   pre-Common-Sense. 1.37's regime floors are file-exposed: `COLONY_MIN_AUTONOMY = 50` in
++1. **File values remembered from an older patch.** The 75% overseas autonomy floor is real but
++   historical — introduced at 1.8 and superseded by States & Territories at 1.16, the tree's own
++   version archive settling both ends (`patchnotes/1.8 Patchnotes.txt` L40: "Overseas provinces
++   now have a minimum autonomy of 75% instead of the 'distant overseas' penalty";
++   `1.16 Patchnotes.txt` L42 introduces States & Territories; 1.12's notes carry no overseas-floor
++   change) — and v1 carried it as current. 1.37's regime floors are file-exposed: `COLONY_MIN_AUTONOMY = 50` in
+    `defines.lua`, and `min_local_autonomy = 20` (pasha_state), `50` (colonial_core) and `90`
+    (territory_core, territory_non_core) in `common/static_modifiers/00_static_modifiers.txt` —
+    the same file the model reads for `GP_COEFF` and the four province-state modifiers; 0 is the

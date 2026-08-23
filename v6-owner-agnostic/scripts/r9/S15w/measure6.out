@@ -1,0 +1,66 @@
+GP_COEFF read from static_modifiers	0.2
+TAX_COEFF	1.0
+counted provinces	2472
+world wealth	10607.4
+devastated provinces counted	11
+devastation cost in ducats	13.4
+richest single province	pid 1821 27.00
+provinces with trade_goods unknown	0
+Phi_w sinks	['genua', 'hangzhou']
+  genua c_w / node-wealth rank	(2, 4)
+  hangzhou c_w / node-wealth rank	(1, 12)
+Phase-1 selection	['hangzhou']
+promotions / fallbacks	(1, 0)
+sources	5
+source c_w rank range	(55, 79)
+source mean degree vs map	(2.4, 4.0)
+largest |b_w|	0.0347
+edges oriented	159/159
+acyclic	True
+live goods	29
+sinks per good min/max/mean	(2, 8, 3.69)
+acyclic goods	29
+fallbacks fired across goods	0
+Phi_w self-coherence edge-goods	55.1
+Phi_w self-coherence value-weighted	54.8
+ordered pairs connected	5723 of 6320
+ordered pairs connected pct	90.6
+supply contrast range	(4, 97)
+goods with more than one producer	28
+single-producer goods	['cloves']
+demand contrast range	(211, np.float64(15010.0))
+band containing alpha=2	('genua+hangzhou', 1.63, 3.28, 1.65)
+widest band on [1,8]	('genua+hangzhou', 1.63, 3.28, 1.65)
+sink count at alpha 1,1.5,2,3,4,8	[3, 1, 2, 2, 1, 1]
+European counted provinces	824
+Europe development x1.02 sinks	['genua', 'hangzhou']
+Europe development x1.56 sinks	['english_channel', 'genua', 'rheinland']
+Europe development x2.00 sinks	['english_channel', 'genua', 'rheinland']
+dev-scaled vs wealth-scaled (max diff)	0.0
+sinks under +/-1% wealth noise seed 0	['genua', 'hangzhou']
+sinks under +/-1% wealth noise seed 1	['genua', 'hangzhou']
+sinks under +/-1% wealth noise seed 2	['genua', 'hangzhou']
+cape in-degree	2
+cape out-degree	2
+ordered pairs routed through the cape	81
+route genua -> hangzhou	None
+route north_sea -> hangzhou	NO ROUTE
+route english_channel -> hangzhou	NO ROUTE
+latent-coal provinces	58
+latent-coal owned and counted	45
+coal activation wealth delta	214.6
+coal activation edge flips	16
+provincial_production_size block	trade_goods_size = 0.2 ship_recruit_speed = -0.01
+its localisation	Base Production
+change_price textual blocks	161
+change_price by tree	{'events': 93, 'decisions': 0, 'missions': 14, 'common': 1, 'history': 53}
+price partition below/exact/above/none	(13, 2, 4, 11)
+define TRADING_POLICY_COOLDOWN_MONTHS	12
+define TRADE_COMPANY_DAYS_TO_SWAP_LEADER	30
+define TRADE_COMPANY_COOLDOWN	60
+apparatus world wealth off	10607.4
+apparatus world wealth on	10712.7
+deleted apparatus in ducats	105.3
+apparatus pct of on-total	0.98
+apparatus pct of v6 field	0.99
+apparatus provinces touched	89

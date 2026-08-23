@@ -1,0 +1,284 @@
+"""Reference solver for the per-good trade spec, run on the real vanilla
+1444.11.11 dataset (00_tradenodes.txt + history/provinces + 00_prices.txt).
+
+Implements exactly the equations in spec §1.1-§1.6:
+    s(n,g) = goods_produced(n,g) / sum_m goods_produced(m,g)
+    s <- (1-eps)*s + eps/N
+    wealth(p) = tax_income(p) + production_income(p)
+    c(n,g) = sum_{p in n} wealth(p)^a(g) / sum_{q in world} wealth(q)^a(g)
+    L phi_g = s_g - c_g,  phi pinned to mean 0 per component
+    V_g = price(g) * sum_m goods_produced(m,g)
+    Phi = sum_g V_g phi_g
+    phi0 = solve with c at alpha=1 and s = node share of world TRADE VALUE
+"""
+import os, sys, json, itertools, collections, re, io
+import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pdx
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+EU4 = r"C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV"
+
+# ---------------------------------------------------------------- game data
+ND = json.load(open(os.path.join(HERE, "nodes.json")))
+ORDER, NODES = ND["order"], ND["nodes"]
+N = len(ORDER)
+NIDX = {n: i for i, n in enumerate(ORDER)}
+
+PRICES = {}
+for k, v in pdx.load(os.path.join(EU4, "common", "prices", "00_prices.txt")):
+    if isinstance(v, pdx.Node):
+        PRICES[k] = float(v.get("base_price", 1.0))
+
+PROV = {int(k): v for k, v in json.load(open(os.path.join(HERE, "prov1444.json"))).items()}
+
+# province -> node
+PNODE = {}
+for n in ORDER:
+    for p in NODES[n]["members"]:
+        PNODE[p] = n
+
+EXCLUDED = {"gold", "unknown"}
+GOODS = sorted(g for g in PRICES if g not in EXCLUDED)
+
+# adjacency (undirected, from the vanilla file)
+UND = [[] for _ in range(N)]
+EDGES = []
+for n in ORDER:
+    for m in NODES[n]["outgoing"]:
+        a, b = NIDX[n], NIDX[m]
+        UND[a].append(b); UND[b].append(a)
+        EDGES.append((a, b))
+EDGES_UND = sorted(set(tuple(sorted(e)) for e in EDGES))
+
+# ------------------------------------------------------- province quantities
+# ---------------------------------------------------------------- wealth, spec v6.0 §1.3
+# GP_COEFF is a SHIPPED FILE VALUE, not an engine constant: common/static_modifiers reads
+#   provincial_production_size = { trade_goods_size = 0.2 ... }   (localised "Base Production")
+# so it is read here rather than hardcoded.  TAX_COEFF is not in that file and stays measured.
+def _read_gp_coeff():
+    fp = os.path.join(EU4, "common", "static_modifiers", "00_static_modifiers.txt")
+    s = re.sub("#[^" + chr(10) + "]*", "", io.open(fp, encoding="latin-1").read())
+    m = re.search(r"provincial_production_size\s*=\s*\{([^}]*)\}", s)
+    if not m:
+        raise RuntimeError("provincial_production_size not found - re-derive GP_COEFF")
+    v = re.search(r"trade_goods_size\s*=\s*([\d.]+)", m.group(1))
+    if not v:
+        raise RuntimeError("provincial_production_size carries no trade_goods_size")
+    return float(v.group(1))
+
+GOODS_PRODUCED_FACTOR = _read_gp_coeff()      # 0.2 in 1.37.5.0
+TAX_COEFF = 1.0
+
+# spec v6.0 §1.3: wealth is a function of development, the trade good, and the province's own
+# current condition.  No trade-good modifiers, no great projects, no permanent province modifiers,
+# no buildings, no DLC conditionality -- every input is a bare attribute of the place.
+# The four province-state static modifiers, read from common/static_modifiers:
+STATE_GOODS_MOD = {"devastation": -2.0, "prosperity": 0.25,
+                   "occupied": -0.5, "under_siege": -0.25}
+STATE_TAX_MOD   = {"occupied": -0.5}
+
+# The 1444 start state is history/provinces PLUS on_startup.  on_startup fires flavor_boh.15
+# ("The Aftermath of the Hussite Wars"), which applies add_devastation to three Bohemian areas;
+# no history file records it.  Chain: common/on_actions/00_on_actions.txt -> on_startup_effect
+# -> common/scripted_effects/01_scripted_effects_for_on_actions.txt -> country_event flavor_boh.15.
+ON_STARTUP_DEVASTATION = {266: 50.0, 2968: 50.0, 2970: 50.0, 4724: 50.0, 4725: 50.0,
+                          265: 20.0, 267: 20.0, 1771: 20.0, 2967: 20.0, 4237: 20.0, 4726: 20.0}
+
+
+# Twenty counted provinces carry `trade_goods = unknown` in history; the engine rolls a good for
+# each at start from the good's `chance = { }` block. The model reads the state the engine actually
+# produced rather than pricing those provinces at zero. Primary source: the 1444 save's `gamestate`,
+# where a province record header sits at column 0 and its fields are indented two tabs.
+def _rolled_trade_goods():
+    save = os.path.join(os.path.expanduser("~"), "OneDrive", "Documents", "Paradox Interactive",
+                        "Europa Universalis IV", "save games", "VANILLA_start.eu4")
+    if not os.path.exists(save):
+        return {}
+    import zipfile
+    raw = zipfile.ZipFile(save).read("gamestate").decode("latin-1")
+    def mb(s, i):
+        d = 0; k = i; inq = False
+        while k < len(s):
+            c = s[k]
+            if c == '"': inq = not inq
+            elif not inq:
+                if c == "{": d += 1
+                elif c == "}":
+                    d -= 1
+                    if d == 0: return k
+            k += 1
+        return len(s) - 1
+    i = raw.index(chr(10) + "provinces={"); j = raw.index("{", i)
+    body = raw[j + 1:mb(raw, j)]
+    out = {}
+    for m in re.finditer(r"^-(\d+)=\{", body, re.M):
+        st = body.index("{", m.start())
+        rec = body[st + 1:mb(body, st)]
+        g = re.search(r"^		trade_goods=\"?([a-z_]+)", rec, re.M)
+        if g: out[int(m.group(1))] = g.group(1)
+    return out
+
+ROLLED = _rolled_trade_goods()
+
+
+def province_table():
+    """Every province the engine has at 1444.11.11, with its wealth under §1.3.
+
+    Counts a province when it has an owner and lies in a trade node.  It does NOT require
+    `is_city = yes`: 20 owned provinces omit or comment out that line in their history file and
+    the engine treats them as cities anyway (province 265 is one, and it is also devastated).
+    """
+    rows = []
+    for pid, s in PROV.items():
+        if not s.get("owner"):
+            continue
+        node = PNODE.get(pid)
+        if node is None:
+            continue
+        g = s.get("trade_goods")
+        if g in (None, "unknown") and pid in ROLLED:
+            g = ROLLED[pid]                      # the good the engine rolled at start
+        price = PRICES.get(g, 0.0)
+        dev = ON_STARTUP_DEVASTATION.get(pid, 0.0) / 100.0
+        gmod = STATE_GOODS_MOD["devastation"] * dev          # the only state modifier live at 1444
+        tmod = 0.0
+        gp = max(0.0, GOODS_PRODUCED_FACTOR * s["base_production"] * (1.0 + gmod))
+        rows.append(dict(pid=pid, node=node, good=g, gp=gp,
+                         tax=TAX_COEFF * s["base_tax"] * (1.0 + tmod),
+                         prod_income=gp * price,
+                         owner=s["owner"]))
+    return rows
+
+
+ROWS = province_table()
+
+
+def build_sc(alpha_of_good, eps=1e-6, wealth_key=None):
+    """returns S[G,N] supply shares, C[G,N] demand shares, V[G] values"""
+    G = len(GOODS)
+    gp = np.zeros((G, N))
+    for r in ROWS:
+        if r["good"] in EXCLUDED or r["good"] not in PRICES:
+            continue
+        gi = GOODS.index(r["good"])
+        gp[gi, NIDX[r["node"]]] += r["gp"]
+    world = gp.sum(axis=1)
+    S = np.zeros((G, N))
+    live = world > 0
+    S[live] = gp[live] / world[live][:, None]
+    # epsilon regularizer, field-level
+    S[live] = (1 - eps) * S[live] + eps / N
+
+    wealth = np.array([r["tax"] + r["prod_income"] for r in ROWS])
+    pn = np.array([NIDX[r["node"]] for r in ROWS])
+    C = np.zeros((G, N))
+    for gi, g in enumerate(GOODS):
+        a = alpha_of_good(g)
+        w = wealth ** a
+        tot = w.sum()
+        np.add.at(C[gi], pn, w / tot)
+    V = np.array([PRICES[g] * world[gi] for gi, g in enumerate(GOODS)])
+    return S, C, V, live, gp, world
+
+
+# ------------------------------------------------------------------- solver
+def laplacian():
+    L = np.zeros((N, N))
+    for a, b in EDGES_UND:
+        L[a, a] += 1; L[b, b] += 1
+        L[a, b] -= 1; L[b, a] -= 1
+    return L
+
+
+L = laplacian()
+
+
+def components():
+    seen = [-1] * N
+    comps = []
+    for i in range(N):
+        if seen[i] >= 0:
+            continue
+        c = len(comps); stack = [i]; seen[i] = c; members = []
+        while stack:
+            u = stack.pop(); members.append(u)
+            for v in UND[u]:
+                if seen[v] < 0:
+                    seen[v] = c; stack.append(v)
+        comps.append(members)
+    return comps, seen
+
+
+COMPS, COMPOF = components()
+
+
+def solve_phi(b):
+    """solve L phi = b per component, pin mean 0 in each component."""
+    phi = np.zeros(N)
+    for members in COMPS:
+        m = np.array(members)
+        if len(m) == 1:
+            continue
+        sub = L[np.ix_(m, m)]
+        rhs = b[m].copy()
+        rhs -= rhs.mean()                       # renormalize so it balances
+        # pin: add rank-1 to make SPD (grounded Laplacian via mean-zero pin)
+        A = sub + np.ones((len(m), len(m))) / len(m)
+        x = np.linalg.solve(A, rhs)
+        x -= x.mean()
+        phi[m] = x
+    return phi
+
+
+def solve_all(alpha_of_good, eps=1e-6):
+    S, C, V, live, gp, world = build_sc(alpha_of_good, eps)
+    PHI = np.zeros((len(GOODS), N))
+    for gi in range(len(GOODS)):
+        if not live[gi]:
+            continue
+        PHI[gi] = solve_phi(S[gi] - C[gi])
+    Phi = (V[:, None] * PHI).sum(axis=0)
+    return dict(S=S, C=C, V=V, live=live, PHI=PHI, Phi=Phi, gp=gp, world=world)
+
+
+def solve_phi0():
+    """single solve: demand at alpha=1, supply = node share of world trade value"""
+    tv = np.zeros(N)
+    for r in ROWS:
+        if r["good"] in EXCLUDED or r["good"] not in PRICES:
+            continue
+        tv[NIDX[r["node"]]] += r["gp"] * PRICES[r["good"]]
+    s0 = tv / tv.sum()
+    wealth = np.array([r["tax"] + r["prod_income"] for r in ROWS])
+    pn = np.array([NIDX[r["node"]] for r in ROWS])
+    c0 = np.zeros(N)
+    np.add.at(c0, pn, wealth / wealth.sum())
+    return solve_phi(s0 - c0), s0, c0
+
+
+def orient(phi, tol=0.0):
+    """directed edges u->v where phi[u] > phi[v] (+tol)"""
+    out = []
+    for a, b in EDGES_UND:
+        if phi[a] > phi[b] + tol:
+            out.append((a, b))
+        elif phi[b] > phi[a] + tol:
+            out.append((b, a))
+    return out
+
+
+def is_acyclic(directed, n=N):
+    adj = collections.defaultdict(list)
+    indeg = [0] * n
+    for u, v in directed:
+        adj[u].append(v); indeg[v] += 1
+    q = [i for i in range(n) if indeg[i] == 0]
+    seen = 0
+    while q:
+        u = q.pop(); seen += 1
+        for v in adj[u]:
+            indeg[v] -= 1
+            if indeg[v] == 0:
+                q.append(v)
+    return seen == n

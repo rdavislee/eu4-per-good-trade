@@ -1,0 +1,877 @@
+--- per-good-trade-spec-v6.1-frozen.md	2026-08-21 23:36:42.889249700 -0400
++++ per-good-trade-spec.md	2026-08-22 00:28:34.333198100 -0400
+@@ -1,6 +1,6 @@
+ # Per-Good Trade Network — Design Spec
+ 
+-**Version:** 6.1
++**Version:** 6.2
+ **Status:** Living document
+ **Target:** EU4 1.37.5 Inca. Extended-timeline compatible. **Connected maps only** — see §2.2a.
+ **Lineage:** supersedes v1.3 (`../v1-laplacian/`). v1 oriented each good by a Laplacian
+@@ -8,8 +8,7 @@
+ (`../v1-laplacian/diagnosis.md`), and after a four-operator bake-off the orientation core was
+ replaced by the DRAIN algorithm (`drain-orientation.md`). Every claim-audit correction from
+ `../v1-laplacian/validation.md` settleable from files is folded in here. **v2.1** replaces the
+-installed aggregate: `Φ_ord` (the value-weighted marking order) gives way to **`Φ_w`**, DRAIN run
+-once more with wealth itself as the good (§1.6, §3.9).
++installed aggregate with **`Φ_w`**, DRAIN run once more with wealth itself as the good (§1.6, §3.9).
+ 
+ **v6.0** keeps v3.0's owner-agnostic wealth and makes it true by construction rather than by a rule
+ that has to be policed. Its substantive change is to §1.3: **wealth is a function of the province's
+@@ -39,15 +38,35 @@
+ And **`α_Φ` moves from 1.5 to 2.0.** `α_Φ`, `TIE_EPS` and `TIE_EPS2` are hyperparameters whose values
+ are developer taste; §2.3 states them and offers no justification for any of them, and every
+ derivation previously offered for `α_Φ` is withdrawn without replacement. The 1444 sink set moves from
+-`{english_channel, hangzhou}` to `{genua, hangzhou}` and 29 of the 59 figures `measure6.py` prints
+-move with it. §2.1 records what multiplayer would additionally need, which is now build discipline
++`{english_channel, hangzhou}` to `{genua, hangzhou}`. What moves with it is every figure derived
++from the aggregate graph — the sink set and its ranks, the source set, the sensitivity bands, and the
++European scaling; what holds is everything computed before the aggregate solve: the wealth field, the
++per-province and per-node totals, the price census, and the per-good graphs, whose `α(g)` does not
++read `α_Φ`. *(A count was quoted here. It is not maintained: `measure6.py`'s figure list grows
++whenever a figure gains a guard, so the count moved for reasons that had nothing to do with `α_Φ`.)* §2.1 records what multiplayer would additionally need, which is now build discipline
+ rather than a design change.
+ 
++**v6.2** narrows the wealth rule and changes no number on the 1444 field. **The tax term takes no
++modifier at all** — `tax_value` is `TAX_COEFF · base_tax`, full stop — and `unrest` is dropped from
++§1.3's table rather than carried as an excluded row. Both follow the same reading: a trade node is
++owner-agnostic, so wealth measures what a province *can buy*, and neither a revolt nor an occupier
++changes that. Revolt risk is a relation between a province and its ruler, and the point of a revolt
++is that the rebels want the ruler changed; an occupying army is a fact about a war. What both cost
++the owner is real and is the owner's problem, which is exactly what §1.3 declines to model. The
++production side still carries the physical effect — occupied and devastated land ships less — so
++conquest still costs a province its wealth through `devastation`, `occupied` and `under_siege`.
++
++The 1444 figures are unchanged because neither input was ever live on that field: `unrest` was
++already not read, and no province is occupied at a start date with no wars. What moves is what
++happens **during a campaign**, which is where the rule now differs from v6.1. Every figure the
++retired `unrest` accounting carried is withdrawn rather than repaired, and with it the `revolt_risk`
++parse — an input surface maintained for a quantity nothing reads.
++
+ Two conventions govern the prose. **No empirical absolutes** — no superlative, no universal
+ quantifier and no threshold asserted as a fact about the world; a claim is either a directional
+ design statement or an observation scoped to the field and script that produced it. **No maintained
+ figures for any rejected operator** — §3.15's graveyard keeps its design arguments and loses its
+-measurements. That covers `Φ_ord`, the gravity kernels, the v1 Laplacian, RANK, the seeded basins and
++measurements. That covers the gravity kernels, the v1 Laplacian, RANK, the seeded basins and
+ anything else the section rejects: those numbers were re-measured and re-refuted in three successive
+ audits and not one of the rejection arguments depends on them. Where a comparison is genuinely
+ load-bearing it is stated as a direction ("scores higher on self-coherence", "does not concentrate
+@@ -55,7 +74,10 @@
+ field.
+ 
+ Every graded claim from `../v5-owner-agnostic/validation-v5.md` — 22 refuted, 39 partial, 1
+-unverifiable — is folded through; `fixes-agreed.md` maps each one to the change that answers it.
++unverifiable, 62 in all — is folded through; `fixes-agreed.md` maps each one to the change that
++answers it, and carries a row for all 62. That file is **frozen at v6.0**: it records what v6.0
++changed relative to v5.0 and is not maintained against later versions, so where a figure in it has
++since moved this document is the live one. Neither harness targets it by default.
+ Deleted text is quoted in `changes-v6.md`. Measured figures carry the script that produced them, and
+ `scripts/verify6.py` reads figures **out of the document text** and fails when they disagree with a
+ value computed from the install — but it does **not** cover every figure the document prints.
+@@ -69,7 +91,9 @@
+ "well under half" two sentences before refusing to give a ratio; the refusal is the part that survives.* `scripts/coverage6.py` is the honest measure — it corrupts each
+ spec-printed figure whether the harness looks at it or not — and it should be re-run rather than
+ quoted, because its number also moves with every edit. Some figures carry a script attribution
+-instead of a guard, and a few carry neither.
++instead of a guard, and some carry neither — and what that means for a reader is concrete: a figure
++with no script named at its line, and none named for its block, has not been reproduced by anything
++in `scripts/` since it was written.
+ *`scripts/mutate6.py` reports a higher score and should not be read as coverage: it plants errors
+ only in figures `verify6.py` already checks, so it cannot fail. That is the same circularity v4.0's
+ harness had, and it is recorded here rather than quietly fixed.*
+@@ -87,18 +111,21 @@
+ For each good `g`, form the balance `b_g(n) = s_g(n) − c_g(n)` and orient by **DRAIN** — peel,
+ select, route, sweep:
+ 
+-**Phase 0 — peel to the 2-core.** Repeatedly remove degree-1 nodes, orienting each pendant edge
+-by the sign of its absorbed subtree balance (net exporter → toward core; net importer → fed from
++**Phase 0 — peel to the 2-core.** Repeatedly remove degree-1 nodes, **determining** each pendant
++edge's orientation from the sign of its absorbed subtree balance (net exporter → toward core; net importer → fed from
+ core; zero → toward core) and folding the residual into the parent. Exact, not heuristic: every
+ removed edge is a bridge and flow on a tree is determined by conservation. On the vanilla map this
+ is a no-op (minimum degree 2, zero bridges); it exists for modded maps.
+ 
+ **Phase 1 — select the sink set.** Take the connected clusters of net demanders in the core,
+ compute the Herfindahl index of their demand masses, set `k = clamp(round(1/HHI), 1, |clusters|)`,
+-and select the heaviest demander of each of the top-k clusters. Knobs: a demand-mass quantile `ρ`
+-(cluster only the demanders covering the top-ρ of demand mass; default 1.0) and a cluster
+-dilation radius `r` (default 0). On vanilla 1444 demand is so ubiquitous that k = 1 for 27 of 29
+-goods at defaults; selection is deliberately weak because Phase 3 self-corrects upward.
++and select the heaviest demander of each of the top-k clusters. One knob: a cluster dilation
++radius `r` (default 0), which links demanders within `r` hops before clustering. On vanilla 1444
++demand is so ubiquitous that k = 1 for 27 of 29 goods at defaults; selection is deliberately weak
++because Phase 3 self-corrects upward. *(A demand-mass quantile `ρ` was documented here as a second
++knob. The shipped operator has no such parameter — `drain.py`'s Phase 1 clusters every demander — so
++it is not listed. The §3.13 calibration option carries its own Phase 1 and does implement a
++quantile; that is where `ρ` is described.)*
+ 
+ **Phase 2 — route: min-cost b-flow.** Solve the uncapacitated min-cost flow serving `b_g` and orient
+ every support edge by its net flow. Arc costs are near-unit, symmetric in the arc, and read from node
+@@ -141,7 +168,9 @@
+ and is set by Phase 2 (§2.4 item 1). Free
+ edges then orient from later-marked to earlier-marked.
+ 
+-**Phase 4 — un-peel** the Phase-0 pendants in reverse.
++**Phase 4 — un-peel and emit.** Restore the Phase-0 pendants in reverse order and emit the
++orientations Phase 0 determined for them. Phase 0 decides those directions; Phase 4 is where they
++enter the graph, which is why a pendant sink is visible only after this phase (**T1**, §3.2).
+ 
+ Properties, all stated as checkable claims and **measured where measurement applies**
+ (`drain-orientation.md`; regenerated for v6.0 by `measure6.py`). Where a property is proved for
+@@ -178,17 +207,23 @@
+   which the closure fixes. Free-edge direction is **deterministic** for the same reason plus the
+   priority key's index tiebreak. That it is a function of the graph and the balances *alone* — that
+   the node indexing never decides — is **measured, not proved**: it holds exactly where the key has
+-  no exact ties. Measured: zero orientation changes under scheduler permutations, and zero exact
+-  `(DEF, b)` key collisions across **all 2,320 core nodes** of the 29 per-good solves — not merely on
+-  the free edges, which is where earlier versions measured it. Phase 1's within-cluster argmin and its
+-  top-k cluster cut are untied on the same field, so no index tiebreak in the algorithm fires at all.
++  no exact ties. Measured: zero orientation changes over 145 scheduler
++  permutations (29 goods × 5), and zero exact `(DEF, b)` key collisions across **all 2,320 core
++  nodes** of the 29 per-good solves — not merely on the free edges, which is where earlier versions
++  measured it. Phase 1's within-cluster argmin and its top-k cluster cut are untied on the same
++  field, so no index tiebreak in the algorithm fires at all. *(`measure6.py` for the core-node
++  count; `props6.py` for the permutations, the argmin and cut ties, and the reachability and
++  orphan-sink figures in the bullet above. `props6.py` was renamed from a round-5 working file and the
++  permutation loop was written for this citation — the figure had been quoted since v2 with
++  nothing in the tree that computed it.)*
+ - **Efficiency.** The certificate flow is a near-fewest-hop routing in aggregate. With unit costs the
+   objective would be exactly `Σ (flow × hops)`; the tie-break makes it
+   `Σ (flow × cost)` with `cost ∈ [1, 1 + TIE_EPS + TIE_EPS2]`, so the optimum minimises a hop count in
+-  which a hop between two wealthy nodes counts marginally more (§2.3). At those values the spread is under
+-  a tenth of a percent of the base cost, so the routing is within that factor of fewest-hop — but
+-  "fewest-hop" is now an approximation with a stated bound rather than an identity, and that is the
+-  price of a unique optimum. No per-unit shortest-path claim is made, and none holds: a unit may
++  which a hop between two wealthy nodes counts marginally more (§2.3). The bound is that interval
++  itself, which is what an implementer needs; no percentage is derived from it, because the spread
++  relative to the base cost is a restatement of `TIE_EPS` and not a second fact. "Fewest-hop" is
++  therefore an approximation with a stated bound rather than an identity, and that is the price of a
++  unique optimum. No per-unit shortest-path claim is made, and none holds: a unit may
+   detour when sink assignment demands it.
+   **This one carries no measurement and wants none:** it follows from the construction of the LP, and
+   any hop count we produced would be re-deriving the objective rather than testing it. The §3.13
+@@ -197,8 +232,10 @@
+ 
+ Recomputed on a fixed monthly tick, aligned to the vanilla trade tick. Orientation is read from
+ the current solve every time, with no memory of the previous one. The LP is deterministic on one
+-machine and one build (six identical solves, one orientation, on the reference implementation);
+-across machines it is the open question of §3.13.
++machine and one build — six identical solves returning one orientation on the reference
++implementation, which is six solves **inside a single process** and so blind to anything that varies
++between processes; `fingerprint6.py` covers that second question separately (§2.1). Across machines
++it is the open question of §3.13.
+ 
+ ## 1.2 Supply
+ 
+@@ -220,7 +257,7 @@
+ **Wealth is owner-agnostic, and it reads three things about the province: its development, its
+ trade good, and its own current condition.** It is a property of the *place* — what the land is
+ worth per year, before anyone's government touches it. No autonomy, no production efficiency, no
+-national ideas, no estate or government modifiers, no technology. Two provinces with the same
++national ideas, no estate or government modifiers, no technology, no unrest. Two provinces with the same
+ development, trade good and condition have the same wealth whoever owns them, and a province's
+ wealth does not change when it is conquered.
+ 
+@@ -238,13 +275,17 @@
+ counted provinces — 43 `gems` plus 31 `incense` plus 16 great-project and permanent-modifier
+ provinces, less one that is both (province 542). *The count depends on the field: it is 87 under the
+ withdrawn `is_city` filter, and 89 rather than 88 because province 4856 is one of the twenty whose
+-good the engine rolls, and it rolled `incense`.* and the model trades that fidelity for an input surface with no classification
+-question in it.
++good the engine rolls, and it rolled `incense`. These figures are reproduced by `apparatus6.py`,
++which holds the deleted classifier's constants **frozen** — they record what v5.0's input surface was
++worth, not a live table, and they sit in their own file precisely so that nothing can wire them back
++into the wealth path. `measure6.py` imports the figures rather than restating them.*
++
++The model trades that fidelity for an input surface with no classification question in it.
+ 
+ ```
+ goods_produced(p)   = GP_COEFF · base_production(p) · (1 + Σ province-state goods modifiers)
+ trade_value(p)      = goods_produced(p) · price(good(p))     # ducats / YEAR
+-tax_value(p)        = TAX_COEFF · base_tax(p) · (1 + Σ province-state tax modifiers)
++tax_value(p)        = TAX_COEFF · base_tax(p)
+ wealth(p)           = tax_value(p) + trade_value(p)          # ducats / YEAR
+ 
+ c(n,g)  = Σ_{p ∈ n} wealth(p)^α(g)  /  Σ_{q ∈ world} wealth(q)^α(g)
+@@ -290,10 +331,11 @@
+ §1.3 no source grants one, so the ordering is stated for the emitter's benefit and is not exercised
+ by any province in the model.
+ 
+-**Province condition is the one thing besides development and the good that wealth reads.** Five
+-static modifiers describe a province's own state, all five are defined in
+-`common/static_modifiers/00_static_modifiers.txt`, and **four of the five are applied** — `unrest` is
+-excluded because revolt risk depends on the owner, which the note below the table sets out:
++**Province condition is the one thing besides development and the good that wealth reads.** Four
++static modifiers are applied, all four defined in
++`common/static_modifiers/00_static_modifiers.txt`, and **all four reach `goods_produced`**. A fifth,
++`unrest`, is defined in the same file and is deliberately not read — revolt risk depends on the
++owner, which the note below the table sets out:
+ 
+ | modifier | what it grants | enters |
+ |---|---|---|
+@@ -301,41 +343,43 @@
+ | | *The magnitudes and directions above are all read from `00_static_modifiers.txt`. That file does not state the **scaling law** for `devastation`, and it is the only row here whose scaling it leaves open — `unrest` and `nationalism` both carry per-unit comments in it. The wiki settles the law: the penalties are "scaled linearly according to the percentage value" and are quoted at 100% devastation, which is the `-2 × level/100` the model applies. **This is the one row whose scaling rests on community documentation rather than on a shipped file**, and that difference is worth stating rather than smoothing over.* | |
+ | `prosperity` | `trade_goods_size_modifier = 0.25` | `goods_produced` |
+ | `under_siege` | `trade_goods_size_modifier = -0.25` | `goods_produced` |
+-| `occupied` | `trade_goods_size_modifier = -0.5` **and** `local_tax_modifier = -0.5` | both |
+-| `unrest` | `local_tax_modifier = -0.02` **per point of revolt risk** | `tax_value` |
++| `occupied` | `trade_goods_size_modifier = -0.5` **and** `local_tax_modifier = -0.5` | `goods_produced` — the tax half is granted by the file and **not read**, see below |
+ 
+-`occupied` and `unrest` touch the tax term; the other three reach `goods_produced` alone. *Its
+-scaling is stated in the file:* the `unrest` block's own comment reads `#10% longer time to build
+-troops for each rr`, so its values apply per point, and the neighbouring `nationalism` block uses the
+-same convention.
+-
+-**`unrest` is live at the 1444 start and is deliberately not read.** It is the one row in the table
+-that fails the test the rest of §1.3 is built on: **revolt risk is not a property of the place.** In
+-play it carries separatism from recent conquest, unaccepted culture, wrong religion and nationalism —
+-all of them relations between a province and *its owner*. Read it, and a province's wealth changes
+-when it is conquered, which is precisely what this section exists to prevent. `solver.py`'s
+-`STATE_TAX_MOD` therefore carries `occupied` alone, and four of the five rows above are applied.
+-
+-The 1444 field shows the split directly. Of the 21 counted provinces carrying revolt risk in the start
+-save, **16 are authored in `history/provinces`** at integer 5/8/10/15 — Sofala's comment reads
+-"expansion of Shona into Sofala region causes major disruptions" — and the remaining **five are all
+-Shirvan-owned and receive theirs at runtime**. So even at the start date a quarter of it is owner-
+-derived, and during a campaign that share only grows.
++**No modifier reaches the tax term at all.** `tax_value` is a direct function of `base_tax`, and
++all four rows above enter `goods_produced`. `occupied` grants a `local_tax_modifier` as well, and the
++model does not read it: an occupier's presence is a fact about who is standing on the province, which
++is the class of input §1.3 exists to exclude — and the production half already carries the effect that
++matters, since occupied land ships less. `solver.py`'s `STATE_TAX_MOD` is therefore **empty**, and is
++kept as an empty declaration rather than deleted so that the shape of the exclusion stays legible in
++the code instead of becoming an absence a later editor has to infer.
++
++On the 1444 start only `devastation` is live, on eleven counted provinces; `prosperity`,
++`under_siege` and `occupied` are live on none (`round6.py`), because all three describe conditions a
++campaign produces and a start date without wars does not. So the wealth rule carries four modifiers,
++of which one is exercised by the reference field.
++
++**Why `unrest` is the one that is left out.** It fails the test the rest of
++§1.3 is built on: **revolt risk is not a property of the place.** In play it carries separatism from
++recent conquest, unaccepted culture, wrong religion and nationalism — every one of them a relation
++between a province and *its owner*, and the point of a revolt is that the rebels want the owner
++changed. Read it, and a province's wealth changes when it is conquered, which is precisely what this
++section exists to prevent. A province in revolt still has the buying power its development gives it. Whether its
++owner manages to collect against that buying power is a fact about the owner, and a trade node is not
++a fact about the owner.
+ 
+ **And the effect it would buy is already bought.** Conquest costing a province its wealth is delivered
+-by `devastation`, `occupied` and `under_siege`, all three of which are properties of the place and all
+-three of which the model applies. `unrest` would add owner-dependence without adding a mechanic.
++by `devastation`, `occupied` and `under_siege` — all three properties of the place, and all three
++applied. `unrest` would add owner-dependence without adding a mechanic.
+ 
+-What the exclusion costs is measured, so it is a known quantity rather than an assumption: **12.23
+-ducats, 0.115%** of the 10,607.40 world wealth reading it from the save, or **9.40 ducats, 0.089%**
+-reading only the authored 16. Either way it moves **4 of 159 edges** of the installed graph and leaves
+-the sink set `{genua, hangzhou}` unchanged. *(An earlier draft of this paragraph said admitting it
+-moves no edge. That was measured at α_Φ = 1.5 and does not hold at 2.0.)*
+-
+-*(Sixteen of the 21 are resolvable from `history/provinces` at integer risk 5/8/10/15; the other five,
+-all Shirvan-owned, receive theirs at runtime, so reading them needs the save.)* These are what
+-make the map answer to war — §1.2's volatility and §3.3's "a besieged province genuinely produces
+-less" both rest on them, and §2.8's war rows are their test.
++*No figure is quoted for what the exclusion costs, and none should be reconstructed.* Earlier drafts
++carried one, and keeping it accurate meant parsing `revolt_risk` out of the save — an input surface
++maintained for a quantity the model does not read, which is the maintenance §1.3 deleted the modifier
++classifier to be rid of. The exclusion is a decision about what wealth *means*, and a measured cost
++would not bear on it.
++
++`devastation`, `occupied` and `under_siege` are what make the map answer to war — §1.2's volatility
++and §3.3's "a besieged province genuinely produces less" both rest on them, and §2.8's war rows are
++their test.
+ 
+ **They are not all quiet at the 1444 start.** Eleven counted provinces begin devastated — Bohemia at 50 and
+ Erzgebirge and Moravia at 20 — and no province-history file says so: the devastation is applied by
+@@ -419,8 +463,8 @@
+ elsewhere. Gold is also inert in vanilla trade value
+ (`base_price = 0`, `goldtype = yes`), so the exclusion costs nothing. Whether the per-province
+ production-income *field* nevertheless carries the gold figure before the country-level split is
+-still unknown, and under this model it is also **moot**: nothing in the model reads that field, which is
+-why §2.7 item 12 was dropped rather than run.
++still unknown, and under this model it does not matter: **nothing in the model reads that field.**
++That is why §2.7 item 12 was dropped rather than run.
+ 
+ **Any good with zero world production this month.** `s(n,g)` is undefined when nothing produces
+ `g`, so the good has no graph, contributes nothing to the value weights (`V_g = 0`), and is absent
+@@ -450,8 +494,8 @@
+ near the upper end of what one good's activation can do. *(v2.1 held that a latent good leaves
+ `Φ_w` unaffected because "`Φ_w` reads wealth, not goods". `Φ_w` does read wealth — and wealth reads
+ the province's trade good and its price, which is exactly what activation changes. The proposition
+-was true under v2.0's `Φ_ord`, where `V_g = 0` gave a latent good zero weight, and became false
+-with the operator change.)*
++held under v2.0's aggregate, which weighted each good by `V_g` and so gave a latent good none, and
++became false with the operator change.)*
+ 
+ Latent goods stay latent for long stretches — coal produces nowhere at the 1444 start, and
+ its default trigger fires on **Enlightenment** (the Manufactories branches require special flags),
+@@ -477,25 +521,15 @@
+ the world pulls edges toward itself — arrows point from wealthy nodes toward the wealthiest — and
+ the sinks are wherever the wealth flow terminates. **Both their count and their locations move with
+ the wealth field, and `α_Φ` sets how sharply concentration is read.** At α_Φ = 2.0 the 1444 field
+-gives two sinks, and a modestly grown Europe gives two, three or five (the Europe table below), so
+-neither the count nor the placement is fixed by the constant. *(v2.0 through v4.0 said the count
++gives two sinks, and scaling European development alone moves the count both up and down before it
++settles back at two (the sweep below), so neither the count nor the placement is fixed by the
++constant. *(v2.0 through v4.0 said the count
+ "emerges from concentration exactly as per-good sink counts do"; v5.0 over-corrected to "the count is
+ set by `α_Φ`". Both are wrong the same way — the count is a function of the field **and** the
+ constant. v2.1 also chose the value with a target count in view, a calibration §2.3 withdraws
+ without replacing.)* What the world state moves is *where* the sinks are and *how the map drains
+ toward them*, which is the property §3.1's first goal actually asks for.
+ 
+-**Scale.** In exact arithmetic only the sign pattern and proportions of `b_w` matter: Phase 0
+-reads signs, Phase 1's HHI is built from mass *shares*, the LP optimum scales linearly with
+-identical net-flow signs, and the priority key is order-isomorphic under positive scaling. The
+-implementation adds one premise — the zero-flow tolerance is **absolute** (`1e-11`, §2.3), so
+-scaling `b` *down* pushes genuine flow arcs into the free set. Measured: identical orientation from
+-×1 down to ×10⁻², **22** edge flips at ×10⁻⁴ where the sink set becomes `{english_channel, hangzhou}`,
+-and **96** at ×10⁻⁶ where it becomes `{hangzhou}`. The orientation degrades before the sink set does,
+-so the sink set is not the quantity to watch here.
+-Normalising into (−1, 1) scales 1444's `b_w` *up* (its largest magnitude is 0.0347) and is safe;
+-scaling down is not. Either scale `b` up, or scale the tolerance with it.
+-
+ Measured on 1444 data at α_Φ = 2.0 (`measure6.py`): **two sinks, `genua` and `hangzhou`** — `c_w`
+ ranks 2 and 1, node-wealth ranks 4 and 12. **Both are properties of the world, because the
+ orientation does not depend on how the nodes are numbered.** That is a change from v6.0, and it is
+@@ -551,9 +585,10 @@
+ Per good, on the same field: **2–8 sinks, mean 3.69**, 29/29 acyclic, **0 fallbacks fired**, and
+ **90.6%** of ordered node pairs (5,723 of 6,320) connected by at least one good's directed path.
+ 
+-Agreement with the per-good graphs is **55.1%** of edge-goods (**54.8%** value-weighted). The
+-superseded marking-order aggregate scored higher on that measure; §3.9 records why the trade was
+-taken and no longer maintains a figure for an operator the model does not install.
++Agreement with the per-good graphs is **55.1%** of edge-goods (**54.8%** value-weighted). It is a
++description of how often one power map coincides with twenty-nine commodity maps, not a quality
++score: `Φ_w` models power and the per-good graphs model cargo (§3.9), so full agreement is neither
++expected nor wanted.
+ 
+ **`α_Φ = 2.0`, `TIE_EPS = 1e-3` and `TIE_EPS2 = 1e-6` are hyperparameters. The choice is developer
+ taste, and this document offers no justification for any of them beyond that.** No derivation is claimed, none is
+@@ -584,40 +619,31 @@
+ directly, and `Φ_w`'s ends follow the wealth.
+ 
+ Observed on the 1444 field, holding α_Φ = 2.0 and scaling European development only (`europe.py`,
+-824 counted European provinces). Boundaries are bisected, so each row is the interval over which the
+-set is constant:
++824 counted European provinces, sampled uniformly on a 0.001 grid from ×1.000 to ×2.600).
+ 
+-| European development | `Φ_w` sinks |
+-|---|---|
+-| ×1.00 – ×1.14 | `genua`, `hangzhou` |
+-| ×1.14 – ×1.16 | `english_channel`, `genua`, `hangzhou`, **`rheinland`** |
+-| ×1.16 – ×1.19 | `genua`, `hangzhou` |
+-| ×1.19 – ×1.35 | `genua`, `hangzhou`, **`gulf_of_siam`** |
+-| ×1.35 – ×1.36 | `english_channel`, `genua`, `gulf_of_siam`, `hangzhou`, `rheinland` |
+-| ×1.36 – ×1.38 | `genua`, `gulf_of_siam` |
+-| **×1.38 – ×1.95** | **`english_channel`, `genua`, `rheinland` — Asia holds none** |
+-| ×1.95 – ×1.97 | `english_channel`, `genua`, `hangzhou`, `rheinland` |
+-| ×1.97 – ×2.46 | `english_channel`, `genua`, `rheinland` |
+-| ×2.46 – ×2.50 | `genua`, `rheinland` |
+-
+-**Read the table as a direction, not a trajectory.** The direction is unambiguous: Europe goes from
+-one end to three and Asia goes from one to none, and the widest single interval in the table — ×1.38
+-to ×1.95 — is three European ends with nothing in Asia. But the path is not monotone. `hangzhou`
+-leaves at ×1.19, returns at ×1.95 and leaves again; `gulf_of_siam` holds an end across ×1.19–×1.38
+-and nowhere else; two intervals narrower than ×0.03 carry sets that appear once. Those reversals are
+-in the field, not in the solver: the orientation is order-invariant at every row.
+-
+-*What this table is not evidence for. It scales all 824 counted European provinces by one factor at
+-once, which is not how development happens — real growth is province by province, with price changes
+-and colonisation on top. No save later than 1444 was available to test against, so the honest scope
+-is: this is the field's response to a uniform European multiplier, and the design intent is that
+-Europe's end strengthens as Europe develops. The intent is the claim; the row boundaries are a
+-property of one synthetic experiment.*
+-These are properties of this snapshot, not constants of the model: they are what one field yielded
+-under one scaling, and a different world state moves them. Because §1.3's wealth is linear in
+-development, **scaling development and scaling wealth are the same operation here** — maximum
+-difference 0.0 across the European set — so the distinction that made v5.0's version of this table
+-wrong does not arise.
++**Read this as a direction, not a trajectory.** The direction is unambiguous: Europe goes from one
++end to three and Asia goes from one to none. The widest interval carrying three European ends and
++none in Asia runs **×1.973 to ×2.456**, with `english_channel`, `genua` and `rheinland` holding them.
++But the path there is not monotone — `hangzhou` leaves, returns and leaves again, `gulf_of_siam` holds
++an end over one stretch and nowhere else, and several intervals narrower than ×0.01 carry sets that
++appear once. Those reversals are in the field, not in the solver: the orientation is order-invariant
++throughout.
++
++*A table of interval boundaries was published here and is withdrawn.* Its rows came from bisection
++and disagree with a uniform grid about where several boundaries lie — the effect of a boundary that
++sits between samples is a row that looks like a fact and is an artifact of the sampling. The
++direction and the widest interval survive that difference; the row boundaries did not, and quoting
++them invited exactly the trajectory reading the paragraph above warns against.
++
++*What this experiment is not evidence for. It scales all 824 counted European provinces by one
++factor at once, which is not how development happens — real growth is province by province, with
++price changes and colonisation on top. No save later than 1444 was available to test against, so the
++honest scope is: this is the field's response to a uniform European multiplier, and the design intent
++is that Europe's end strengthens as Europe develops. The intent is the claim; the interval quoted
++above is a property of one synthetic sweep.* It is what one field yielded under one scaling, and a
++different world state moves it. Because §1.3's wealth is linear in development, **scaling development
++and scaling wealth are the same operation here** — maximum difference 0.0 across the European set —
++so the distinction that made v5.0's version of this experiment wrong does not arise.
+ 
+ What the shipped files settle, independently of any threshold: all three institutions the period is
+ named for begin **in Europe** between 1450 and 1550 — Renaissance `1450.1.1` at Florence (province
+@@ -627,7 +653,7 @@
+ are country-scoped, so §1.3 excludes them from wealth directly; they reach the map only by changing
+ how fast development grows, which is the input scaled above.
+ 
+-**And the 1444 map draws the pre-Columbian trade geography unprompted.** Two long overland routes
++**And the 1444 map draws a recognisable pre-Columbian trade geography.** Two long overland routes
+ reach the Asian end. From the north it is the Volga and the steppe:
+ `white_sea → novgorod → kazan → siberia → samarkand → lahore → lhasa → ganges_delta → burma →
+ gulf_of_siam → canton → hangzhou`. From Iberia it is the African coast and the Red Sea:
+@@ -639,8 +665,9 @@
+ 
+ **No Europe→sink route passes the Cape of Good Hope.** Checked exhaustively rather than sampled: of
+ the 23 European nodes there are **27** connected Europe→sink pairs, and for **0 of them** does a
+-Cape-transiting path exist. That is what a 1444 map should say, and it is the one place in this
+-section where a universal is asserted, because here the whole set was enumerated.
++Cape-transiting path exist. That is what a 1444 map should say, and it is asserted as a universal
++because the whole set was enumerated rather than sampled — which is the only ground on which this
++document states one.
+ 
+ The Cape is nonetheless a live conduit, not an idle one: in-degree 2, out-degree 2, with **81
+ ordered node pairs** for which a path through it exists (`measure6.py`). It takes flow from
+@@ -652,8 +679,12 @@
+ 
+ Other observations on the same field, for the emitter's benefit rather than as thresholds of the
+ model: scaling the 18 western and central European *nodes* rather than European provinces makes
+-`genua` the sole sink from about ×1.55, while scaling all 22 does not produce a sole sink anywhere
+-below ×4 — the eastern four keep pulling ends of their own. The Cape of Good Hope **reverses** under
++`genua` the sole sink from ×1.52, and it stays the sole sink continuously through the top of the
++range swept, with no break anywhere in it. Scaling all 22 produces no sole sink anywhere below ×25: from about ×2.50 the set is
++`{genua, rheinland}` and stays there. *(An earlier draft attributed that to "the eastern four
++pulling ends of their own". They do not: swept from ×2.50 to ×25.00, none of the eastern four holds
++an end at any multiple, and both surviving ends are western throughout (`round6.py`). The clause was
++invented and is deleted rather than repaired.)* The Cape of Good Hope **reverses** under
+ the same growth: 1444's `ivory_coast`/`zanzibar`→Cape→`comorin_cape`/`malacca` drainage becomes
+ `comorin_cape`/`malacca`/`zanzibar`→Cape→`ivory_coast` by about ×1.6 on the 22-node scaling. It is not
+ a single window — the Cape's in- and out-sets change several times across ×1–×3 and reverse more than
+@@ -665,6 +696,22 @@
+ `kazan`. Dev-stacking a single node's top province concentrates the map on that node; extra sinks at
+ intermediate boosts are expected behaviour, not noise.
+ 
++**What this section's figures are scoped to.** They are measured under the shipped sweep key,
++`(DEF ascending, β ascending, index)`, and that key is a design choice inside Phase 3 rather than a
++property of the world — so a different key moves some of them. Measured against DEF-*descending* on
++the same field: of the **19** aggregate-graph facts `round6.py` checks, **6 move**. Thirteen do not —
++the sink set and its count, the promotion count, the fallback count, acyclicity, the number of oriented edges,
++`genua`'s in- and out-degree, the Cape's in- and out-degree, the northern route's reach to
++`hangzhou`, and the two-hop `english_channel → champagne → genua` route and its via-`champagne`
++form. The six that move are the source count (5 against 10), the sources' `c_w` rank range, their
++mean degree, the Cape's ordered-pair count (81 against 42), and **the two reaches that together are
++the Iberian long route** — under the descending key `sevilla` reaches neither `ganges_delta` nor the
++Asian end, so that route ceases to exist. The northern route's *endpoints* stay connected under both
++keys — the check is that `white_sea` still reaches `hangzhou`, not that it does so by the same hops,
++and the intermediate routing is exactly the kind of fact a key change moves. So the two long routes
++above are properties of this field *and* this key, and the sink set is a property of the field
++alone.
++
+ The v1 diagnostic identity (`Φ ≡ φ₀` at α = 1) does not survive the operator change: DRAIN
+ performs no linear solve, so no linearity argument exists. Its replacement as the end-to-end
+ correctness check is **exact orientation equality** between the reference and DLL implementations
+@@ -790,9 +837,16 @@
+ 
+ **Scripted content.** No mission, decision, event, or trade company in 1.37.5 names a trade node
+ — zero non-comment references across all of `common/`, `missions/`, `decisions/`, `events/`;
+-trade companies are bare province lists. Scripted content reaches nodes only structurally:
+-`home_trade_node`, `any/random/every_active_trade_node`, `*_trade_node_member_province`, and
+-`highest_value_trade_node`. Nodes themselves never change under the mod — only connections do —
++trade companies are bare province lists. Scripted content reaches nodes only structurally, through four families:
++`home_trade_node`, the `any/random/every_active_trade_node` and
++`any/random/every/all_trade_node_member_province` scope families, and `highest_value_trade_node`. Measured across
++`common/`, `missions/`, `decisions/` and `events/` with comments stripped (`round6.py`): those
++constructs account for several hundred uses, and none of the 80 node names appears anywhere in the
++four trees. *The count is not quoted as exhaustive*: the token scan matches `trade_node` as a bare
++word, which by construction cannot see every compound key containing it (`add_trade_node_income`,
++`agenda_trade_node`, `trade_node_value` and others exist too), so "bounded by class" is the honest
++claim only for the families named — the full key inventory is an emitter-time enumeration, not a
++figure this document maintains. Nodes themselves never change under the mod — only connections do —
+ so the name-collision class of conflict is empty and the conclusion is *stronger* than v1 stated.
+ What remains exposed is the semantics: `highest_value_trade_node` and node-scoped triggers are
+ evaluated against a reoriented graph, so a mission written against vanilla's flow can change
+@@ -859,11 +913,11 @@
+ 
+ | | |
+ |---|---|
+-| randomness in the solve | none. Identical output fingerprint over repeated runs, separate processes, and five `PYTHONHASHSEED` values including `random` — so there is no seed to pin and no set-iteration order to depend on |
++| randomness in the solve | none. Identical output fingerprint over repeated runs, separate processes, and five `PYTHONHASHSEED` values including `random` — so there is no seed to pin and no set-iteration order to depend on (`fingerprint6.py`, one SHA-256 over `Φ_w` and all 29 per-good graphs including sinks, sources, promotions, fallbacks and the Phase-2 objective) |
+ | margin by which the optimum is unique | **3.8e-8** worst per good, **7.5e-6** on the aggregate — 8 to 10 orders above double-precision unit roundoff |
+ | orientation under LP column permutation | **0** flips, aggregate and all 29 goods; objective spread 1.1e-15 |
+ | orientation under node relabelling | **0** of 180 aggregate, **0** of 290 per-good (§2.4 item 1) |
+-| free-versus-flow classification margin | the per-good `\|net\|` distribution is bimodal — 2,321 edge-goods at exactly 0 and 2,290 above 1e-6, with **nothing between** — so the absolute `1e-11` threshold sits in an empty band six orders wide and last-bit noise cannot reclassify an edge |
++| free-versus-flow classification margin | the per-good `\|net\|` distribution is bimodal — 2,321 edge-goods at exactly 0 and 2,290 above 1e-6, with **nothing between**, the smallest non-zero magnitude being 6.94e-06 — so the absolute `1e-11` threshold sits in an empty band six orders wide and last-bit noise cannot reclassify an edge (`round6.py`) |
+ 
+ So a few units in the last place cannot change any decision this solver makes. **What remains is not
+ bit-reproducibility of a simplex, which would be a hard guarantee to earn, but three checks:**
+@@ -888,11 +942,9 @@
+ orientation margins above are 3.8e-8 to 7.5e-6, three to five orders *below* a 1e-3 grid, so
+ quantising the model's own inputs to match would erase the tie-break rather than protect it.
+ 
+-**Until points 1–3 are done, ship single-player only.** The reason has changed, though, and the change
+-is the point: it is no longer "vertex selection is machine-dependent" but "the build discipline is
+-unverified and the DLL that would prove it does not exist yet." Until that is built and verified, ship
+-single-player
+-only.
++**Until points 1–3 are done, ship single-player only.** The reason has changed, though, and the
++change is the point: it is no longer "vertex selection is machine-dependent" but "the build
++discipline is unverified, and the DLL that would prove it does not exist yet."
+ 
+ ## 2.2 Solver
+ 
+@@ -900,11 +952,11 @@
+ 2. Parser for non-ironman saves — province owner, `base_tax`, `base_production`, trade good, goods produced, development.
+ 3. Parser for `common/defines.lua`, merged with `common/defines/` overrides in load order (§2.3).
+ 4. Per-province `wealth` — **owner-agnostic** per §1.3:
+-   `TAX_COEFF · base_tax · (1 + province-state tax modifiers) + GP_COEFF · base_production ·
+-   (1 + province-state goods modifiers) · price`, and no autonomy, efficiency, ideas or owner terms.
+-   The only modifiers in scope are the five that describe the province's own condition, of which the
+-   reference implementation applies four; at 1444 `devastation` is live on eleven provinces, and
+-   `unrest` is live on twenty-one and **not read** (§1.3). `GP_COEFF` is **read from**
++   `TAX_COEFF · base_tax + GP_COEFF · base_production · (1 + province-state goods modifiers) ·
++   price`, and no autonomy, efficiency, ideas or owner terms. The tax term takes no modifier at all.
++   The only modifiers in scope are the four that describe the province's own condition, and all four
++   reach `goods_produced`; at 1444 only `devastation` is live, on eleven provinces. `unrest` is
++   defined in the same file and **not read** (§1.3). `GP_COEFF` is **read from**
+    `common/static_modifiers/00_static_modifiers.txt` rather than hardcoded (§2.3). Then per-node
+    `trade_value`, `s`,
+    `c` with per-province α, and the per-good balance `b = s − c`.
+@@ -920,8 +972,9 @@
+ 
+ Cost per good is one uncapacitated min-cost flow on 80 nodes / 318 arcs plus an O(V+E) sweep.
+ Measured on the reference implementation (scipy/HiGHS plus the deterministic sweep, one machine):
+-**of order 0.1 s for all 29 goods, and single-digit milliseconds per good on average.** That is the
+-whole of the claim. Repeated 12-run experiments on one machine do not reproduce each other closely
++**of order 0.1 s for all 29 goods, and milliseconds rather than tens of milliseconds per good on
++average.** That is the whole of the claim — and it is deliberately not "single-digit", because two of
++the three replicates below reach 10.5 and 10.8 ms. Repeated 12-run experiments on one machine do not reproduce each other closely
+ enough to support anything finer — three replicates gave per-good averages spanning 3.5–10.5,
+ 3.5–10.8 and 3.1–4.7 ms — so no range is quoted, because the quantity being measured is a machine
+ and a scheduler rather than the algorithm. *(v5.0 quoted "0.17–0.21 s for all 29 goods"; across
+@@ -967,7 +1020,7 @@
+ |---|---|---|
+ | Global DAG (§1.1) | proved | **still proved** — pendant edges are bridges and cannot close a cycle |
+ | Sink-set equality (§1.1, §3.2) | measured exact 29/29 | **fails** — a pendant net-importer is a sink outside the set |
+-| Marking order reproduces the DAG (§1.6) | proved | **fails** — pendants have no marking order, so `Φ_ord`-style order comparison is undefined on pendant edges |
++| Marking order reproduces the DAG (§1.6) | proved | **fails** — pendants have no marking order, so comparing nodes by marking order is undefined on pendant edges |
+ | Free-edge determinism (§1.1) | proved as determinism; **measured** as independence from the node indexing (zero exact ties, 29/29 goods) | the determinism half is unaffected; the index-independence half is **not** — the key reads the post-fold balance β, so peeling can create exact ties the raw balances do not have, and the 1444 measurement does not transfer (§3.2) |
+ 
+ Two further cases are independent of Phase 0, and both break sink-set equality inside the 2-core: a
+@@ -1020,11 +1073,12 @@
+ Design constants: the excluded-goods list (defaults to gold), the α price anchor `P₀ = 2.0`,
+ the aggregate-graph exponent `α_Φ = 2.0`, the Phase-2 tie-break strengths `TIE_EPS = 1e-3` and
+ `TIE_EPS2 = 1e-6`, and
+-DRAIN's three knobs at their defaults — demand-mass
+-quantile `ρ = 1.0`, cluster dilation `r = 0`, and the zero-flow tolerance `1e-11`. That tolerance
+-is **not** purely numerical: it is an absolute threshold, so it couples to the scale of `b`. See
+-§1.6's scale-invariance note and §3.13. A measured calibration option
+-that moves all three plus α's clamp is recorded in §3.13; the baseline does not use it.
++DRAIN's two knobs at their defaults — cluster dilation
++`r = 0` and the zero-flow tolerance `1e-11`. That tolerance is an **absolute** threshold rather than
++a relative one; §3.13 records why that is settled rather than open. *(A demand-mass quantile `ρ` was
++listed here as a third knob. The shipped Phase 1 has no such parameter; the §3.13 calibration option
++carries its own Phase 1, which does.)* That calibration option replaces Phase 1, moves the zero-flow
++tolerance and removes α's clamp; it is recorded in §3.13, and the baseline does not use it.
+ 
+ **`α_Φ`, `TIE_EPS` and `TIE_EPS2` are hyperparameters. Their values are developer taste, and this
+ document offers no justification for any of them.** Every derivation previously offered for `α_Φ` is withdrawn and
+@@ -1059,10 +1113,14 @@
+ the second-order term takes that to **1 arc on 1 good**, and per-good relabelling sensitivity from
+ **84 of 290 runs to 13**.
+ 
+-*A structured second term does not do this.* `+ TIE_EPS²·|w[u] − w[v]|` was tried and rejected: it
+-makes all 159 arc costs distinct where the shipped cost leaves 3 pairs equal, and still leaves 72 of
+-232 per-good supports moving. Distinct arc costs are not the obstruction — different routings with
+-equal **totals** are — so what is needed is genericity, not distinctness.
++*A structured second term does not do this, and the reason is not distinctness.* `+ TIE_EPS²·|w[u]
++− w[v]|` was tried and rejected. Both costs make **all 159 edge costs distinct**, so distinctness
++cannot be what separates them; what differs is the mechanism. `|w[u] − w[v]|` **telescopes**: summed
++along a path it collapses to a function of the endpoints, so two routings between the same endpoints
++can still total the same and the term cancels exactly where a tie needs breaking. `frac(lo·hi·7919)`
++has no such structure, and that is the whole of its job. Measured on the same field (`round6.py`): the
++structured term leaves **11 of 29** goods admitting an alternative optimum against the shipped
++term's **1** (`paper`). Genericity is what is needed, not distinctness.
+ 
+ **The solver's optimality tolerance is a correctness requirement, not a performance knob.** HiGHS
+ stops when reduced costs are within its dual feasibility tolerance of zero, and **`scipy.optimize.linprog`'s
+@@ -1077,7 +1135,7 @@
+ *The mechanism is confirmed rather than inferred, by bisecting the tolerance against `copper`.* Leaving
+ it unset and setting it to 1e-7 give the same 8 flips over four permutations, which is what pins the
+ effective default independently of the documentation; **1e-8 already gives 0**, and 1e-8 is the first
+-value below `copper`'s 3.765e-8 margin. So the flips appear exactly when the tolerance exceeds the
++value below `copper`'s 3.765e-8 margin (`round6.py`). So the flips appear exactly when the tolerance exceeds the
+ margin, which is the claim. `flowop.LP_OPTS` ships **1e-10** — HiGHS's floor for these options, taken
+ for headroom rather than necessity — and the objective spread there is 1.1e-15. No figure in this
+ document moved when it went in: the shipped column order was already reaching the true optimum, and
+@@ -1099,11 +1157,22 @@
+ first-order term alone it was not: rescaling `w` is exactly equivalent to rescaling `TIE_EPS`, and the
+ answer is constant over about six orders of magnitude of that (§1.6), so dividing by the maximum, the
+ mean or the world total gave the same orientation. `frac(lo·hi·7919)` is not linear in `w`, so that
+-argument no longer applies. Measured across the three normalisations: the aggregate `Φ_w` is unchanged
+-— **0 of 159 edges differ** — but **5 of the 29 per-good graphs do**. So the choice of normalisation is
+-a third arbitrary decision with an observable consequence, where before it was free. It is recorded
+-here rather than defended: min-max is what the implementation uses, and an implementer changing it
+-should expect a handful of per-good graphs to move.
++argument no longer applies. Measured across the candidate normalisations: dividing by the **world
++total** moves the aggregate `Φ_w` by **7 of 159 edges**, and across all candidates **13 of the 29**
++per-good graphs move under at least one of them. So the choice of normalisation is a third arbitrary
++decision with an observable consequence, where before it was free.
++
++*Two cautions for anyone re-measuring this. First, check the candidates are distinct vectors before
++trusting any diff: `w/mean` and `N·w/sum` are **algebraically the same vector**, and on this field
++min-max and `w/max` are too, because the minimum node wealth is exactly zero: `cape_of_good_hope`
++holds **no counted province at all** — its 20 `members` are one sea zone and nineteen land provinces,
++none of them owned at 1444, and §1.3 counts only owned provinces. A sweep over five "normalisations" is therefore a sweep over
++three. Second, the probe must inherit `flowop.LP_OPTS`: without the pinned tolerance the same sweep
++**undercounts** — under `w/mean` it returns 5 goods against the pinned 9, and the 5 are a strict
++subset of the 9 (`round6.py`).*
++
++**The choice is recorded rather than defended:** min-max is what the implementation uses, and an
++implementer changing it should expect a handful of per-good graphs to move.
+ 
+ **Every DRAIN solve uses this cost, per good as well as aggregate** — Phase 2 is Phase 2 — and since
+ `w` is node wealth the same cost vector serves all of them. What keeps unit arc costs is the separate
+@@ -1275,12 +1344,12 @@
+ 
+ | Case | Expected |
+ |---|---|
+-| Spice and cloves, 1444 | Source in Indonesia, and both source there alone: `spices` from `the_moluccas` and `kongo`, `cloves` from `the_moluccas` only. Baseline DRAIN measured: `spices` sinks at **Genoa and Brazil** — Genoa is that good's demand rank 1, Brazil its rank 73, which is the barbell in one row — and `cloves` at **Genoa, Kongo and Brazil** (demand ranks 2, 55 and 72). **No Chinese node holds a spices sink in either configuration** — under the §3.13 α-calibration `spices` sinks at Genoa alone, and it is **cloves** that moves to Deccan. The v1 expectation of simultaneous China+Europe spice sinks is not the baseline behaviour and is not recovered by the calibration either. *(v2 said "China holds a spice sink only under the calibration", which its own parenthetical contradicted. v6.0 listed Australia, Venice and Deccan among these termini; none of the three holds either sink on this field.)* |
+-| Most goods, 1444 | Sinks are `{selected ∩ flow-terminal} ∪ promoted` (§1.1) — 2 to 8 per good; high-demand nodes are sinks at **19.8%** among each good's top eight demanders (46 of 232) against **6.9%** among its bottom eight (16 of 232), a barbell whose lower arm is LP branch ends landing in poor pockets. *The statistic is per-good deciles of nodes pooled over the 29 goods, not deciles of the pooled (good, node) pairs; the two constructions differ and only this one gives these figures.* |
++| Spice and cloves, 1444 | Source in Indonesia, and both source there alone: `spices` from `the_moluccas` and `kongo`, `cloves` from `the_moluccas` only. Baseline DRAIN measured: `spices` sinks at **Genoa and Brazil** — Genoa is that good's demand rank 1, Brazil its rank 73, which is the barbell in one row — and `cloves` at **Genoa, Kongo and Brazil** (demand ranks 2, 55 and 72). **No Chinese node holds a `spices` sink in either configuration** — under the §3.13 α-calibration `spices` sinks at `doab` and `genua`, and it is **cloves** that moves to a Chinese node, `beijing`. So the v1 expectation of simultaneous China-and-Europe spice sinks is met by **no single good**: the calibration puts a Chinese end on cloves and a European one on spices, in two different graphs. *(v6.0 listed Australia, Venice and Deccan among these termini; none of the three holds either sink on this field. The calibration figures moved when §2.3's tie-break cost reached the calibration's own Phase 2 — it was the last solve in the tree still passing unit costs, and it had been reading a different vertex from the shipped operator on every good.)* |
++| Most goods, 1444 | Sinks are `{selected ∩ flow-terminal} ∪ promoted` (§1.1) — 2 to 8 per good; high-demand nodes are sinks at **19.4%** among each good's top eight demanders (45 of 232) against **7.3%** among its bottom eight (17 of 232) (`round6.py`), a barbell whose lower arm is LP branch ends landing in poor pockets. *The statistic is per-good deciles of nodes pooled over the 29 goods, not deciles of the pooled (good, node) pairs; the two constructions differ and only this one gives these figures.* |
+ | Malacca ↔ Cape, post-1500 | Spice routes Malacca → … → Cape → … → Europe |
+ | Malacca ↔ Cape, pre-1500 | Corridor withheld by range and the power-at-both-ends gate, not by direction |
+ | 1000 AD start | Sinks in the Muslim world and Song China, no era data |
+-| Razed China | Zeroing `hangzhou`-node development relocates an end in one solve — measured: the `Φ_w` sinks move from `{genua, hangzhou}` to `{genua, gulf_of_siam}`, 30 of 159 edges flipping. `hangzhou`, not `beijing`, is China's wealth pole under §1.3: node wealth 226.7 against 143.0 — ranks 12 and 39 of the 79 nodes holding counted provinces — and it holds the richest single province the model counts. Zeroing `beijing` **also** moves the map — 8 flips — because deleting a percent of world wealth renormalises `c_w` everywhere; what separates the two is that `hangzhou` **survives as a sink** when `beijing` is zeroed and does not when `hangzhou` is. *(v2 through v4.0 said zeroing `beijing` "moves nothing". It does; the asymmetry is which node keeps its end, not whether the map moves.)* *On the razed field the result is order-invariant like the baseline: 40 of 40 relabellings return `{genua, gulf_of_siam}` and `hangzhou` holds an end in none of them. v6.0 had to argue this row was robust where the baseline sink set was not; §2.3's tie-break removes the distinction.* |
++| Razed China | Zeroing `hangzhou`-node development relocates an end in one solve — measured: the `Φ_w` sinks move from `{genua, hangzhou}` to `{genua, gulf_of_siam}`, 32 of 159 edges flipping (`round6.py`). `hangzhou`, not `beijing`, is China's wealth pole under §1.3: node wealth 226.7 against 143.0 — ranks 12 and 39 of the 79 nodes holding counted provinces — and it holds the richest single province the model counts. Zeroing `beijing` **also** moves the map — 8 flips — because deleting a percent of world wealth renormalises `c_w` everywhere; what separates the two is that `hangzhou` **survives as a sink** when `beijing` is zeroed and does not when `hangzhou` is. *(v4.0 said zeroing `beijing` "moves nothing". It does — 8 edges — and the asymmetry is which node keeps its end, not whether the map moves.)* *On the razed field the result is order-invariant like the baseline: 40 of 40 relabellings return `{genua, gulf_of_siam}` and `hangzhou` holds an end in none of them. v6.0 had to argue this row was robust where the baseline sink set was not; §2.3's tie-break removes the distinction.* |
+ | Ming loses the Mandate | **Nothing moves on the day it happens.** The Mandate is an owner property and §1.3 reads none, so the demand vector is unchanged; the pull collapses only as the consequences reach `base_tax` and `base_production`. This row is the owner-agnosticism check, not a responsiveness check |
+ | Major war in China | Corridors shift for the duration, revert as devastation heals |
+ | Many poor provinces vs. few rich | Luxury demand goes to the rich-province node; bulk to the many-province node |
+@@ -1295,8 +1364,8 @@
+ | Economy tab vs. overlay | Every displayed trade figure matches the per-good economy to the ducat. **This is a self-consistency check, not a comparison against stock EU4** — stock trade values are not reproducible run to run: two identical vanilla 1444 Castile starts differ on 49 of 80 nodes by up to 8.96%, over the five node fields `current`, `local_value`, `outgoing`, `total` and `retention` (AI merchant placement is randomised at start, and it is the three power-dependent fields that inherit it: `retention` is identical on 80 of 80 nodes and `total` on 78 of 79, the exception — `zambezi` — drifting 0.012%). Any comparison against unmodded numbers needs a tolerance and a null run |
+ | Reachability | 100% of every good's demand reachable from its supply, asserted every tick; zero orphan sinks (an LP feasibility theorem — its failure means the implementation broke, not the world) |
+ | Conservation | Phase-4 `Σ unserved == Σ stranded` to machine precision, every good, every tick |
+-| Determinism | Re-running a tick reproduces the orientation bit-for-bit; promotions and fallbacks are scheduler-invariant (monotone closure). Measured on the reference implementation: one fingerprint over `Φ_w` and all 29 per-good graphs — including sinks, sources, promotions and fallbacks — was identical across repeated runs, separate processes, and five `PYTHONHASHSEED` values including `random`. The solve carries no randomness, so there is no seed to pin |
+-| Solver optimality tolerance | Assert the LP is configured tighter than the tie-break margin — `flowop.LP_OPTS` sets both feasibility tolerances to 1e-10 against a worst-case margin of 3.8e-8 (§2.3). **This can regress silently on a solver upgrade:** at HiGHS's 1e-7 default the margin sits inside the tolerance and the solver may return a suboptimal vertex, which is what made two goods order-dependent before it was pinned. Assert the option is set and that the returned objective's reduced costs clear the tolerance |
++| Determinism | Re-running a tick reproduces the orientation bit-for-bit; promotions and fallbacks are scheduler-invariant (monotone closure). Measured on the reference implementation: one fingerprint over `Φ_w` and all 29 per-good graphs — including sinks, sources, promotions and fallbacks — was identical across repeated runs, separate processes, and five `PYTHONHASHSEED` values including `random` (`fingerprint6.py`). The solve carries no randomness, so there is no seed to pin. Note what a single-process repeat cannot see: six identical solves inside one process (§1.1) test the solve, not the process, and it is the separate-process runs above that cover iteration order varying between processes |
++| Solver optimality tolerance | Assert the LP is configured tighter than the tie-break margin — `flowop.LP_OPTS` sets both feasibility tolerances to 1e-10 against a worst-case margin of 3.8e-8 (§2.3). **This can regress silently on a solver upgrade:** at HiGHS's 1e-7 default the margin sits inside the tolerance and the solver may return a suboptimal vertex, which is what made two goods order-dependent before it was pinned. Assert the option is set, then classify each off-support arc's reduced cost in three branches, because a single "clears the tolerance" test halts on correct behaviour: **halt** if the smallest *positive* reduced cost is at or below the tolerance, since the optimum is then not separated from its neighbours; **report** if a reduced cost is zero and the arc carries no flow in any optimum, which is a genuine tie the tie-break did not reach and is the state `paper` is in today; **halt** if a reduced cost is zero and the arc can carry flow, which means an alternative optimum is reachable and the orientation is not determined. The per-good floor on this field is **3.765e-08**, on `copper` — the same measurement §3.6 quotes, from `round6.py` |
+ | Acyclicity | Asserted on every per-good graph, on `Φ_w`, and on the emitted file's declaration order |
+ | Sink set, 2-core | Two checks, not one. **Containment is a hard assertion, every tick, unconditionally:** every sink inside the 2-core lies in `{selected} ∪ {promoted} ∪ {fallbacks}` — the set the sweep actually maintains — because every other core node is handed an out-arc by the sweep (§3.2). A violation is an implementation bug. Asserting containment in `{selected} ∪ {promoted}` alone would halt on **T3** (§3.2), which is correct behaviour, so the fallback set is part of the assertion and not an escape clause on it. **Equality — `{selected ∩ flow-terminal} ∪ {promoted}` exactly — is monitored, not asserted:** it is measured exact on 1444 (29/29 goods, zero fallbacks) but is not a theorem, and **T2** and **T3** (§3.2) are the two ways it can fail while the algorithm is behaving correctly — a free edge handing a selected flow-terminal demander an out-arc to an earlier-marked node, and a fallback promotion. Report an equality miss with the node and the good; halt only on a containment miss |
+ | Sink set, pendants | Where Phase 0 acts, the equality above **does not apply and is not asserted**. The check on a peeled edge is the Phase-4 orientation rule: the edge is oriented by the sign of its absorbed subtree balance, and the un-peel reproduces it. **A net-importing pendant leaf that ends a sink is expected behaviour, not a violation** — that is **T1** (§3.2), and treating it as a fault is how a weakened single assertion would hide it |
+@@ -1319,10 +1388,13 @@
+ 
+ Not phases. Two tracks, run in parallel.
+ 
+-**Solver track** — the **defines parser first**: §2.3 makes every constant in the model a runtime read, so the eligibility threshold, the propagation share, the off-home penalty, the merchant bonuses and the caravan terms are all downstream of it and cannot be written correctly before it exists. Then the b-flow and sweep with their per-tick assertions (reachability, conservation, acyclicity, determinism, 2-core sink containment in `{selected} ∪ {promoted} ∪ {fallbacks}`) and
+-the per-tick sink-set equality monitor; per-good eligibility; realized flows; the Φ_w-vs-realized disagreement measurement; the reachability census; the flip-rate measurement.
++**Solver track** — the **defines parser first**: §2.3 makes every *define* the model reads a runtime read — `TAX_COEFF` is the one constant that is not, because it is in no shipped file that has been found (§2.3) — so the eligibility threshold, the propagation share, the off-home penalty, the merchant bonuses and the caravan terms are all downstream of it and cannot be written correctly before it exists. Then the b-flow and sweep with their per-tick assertions (reachability, conservation, acyclicity, determinism, 2-core sink containment in `{selected} ∪ {promoted} ∪ {fallbacks}`) and
++the per-tick sink-set equality monitor — **each of them paired with a negative fixture that makes it
++fail**, because an assertion nobody has watched go red is an assertion nobody has tested, and four of
++the defects the round-5 audit found were checks that could not fail (`scripts/redtest6.py` is the
++reference-side version of this); per-good eligibility; realized flows; the Φ_w-vs-realized disagreement measurement; the reachability census; the flip-rate measurement.
+ 
+-**Memory track** — the §2.7 probe session, all ten items on one trace.
++**Memory track** — the §2.7 probe session: the twelve items still open there (1–11 and 16) on one trace.
+ 
+ **Then** — write §1.10's classified call-site list into the spec; gate income balance on both metrics; decide the negative-link display policy against a measured number.
+ 
+@@ -1442,8 +1514,11 @@
+    argument. (Its marking order is a per-node scalar reproducing the DAG, for any consumer that
+    needs a potential.)
+ 
+-Conduits still work: a node with `s = c = 0` (the 1444 Cape exactly) carries flow through — in-
+-and out-degree both nonzero for all 29 goods — and the corridor runs *through* the Cape, which is
++Conduits still work: a node with `s = c = 0` (the 1444 Cape exactly) carries flow through. Degree
++is the weaker evidence and was the only kind offered before — in- and out-degree are both nonzero for
++all 29 goods, but an oriented edge is not a routed unit. On the certificate flow itself the Cape has
++both incoming and outgoing flow on **28 of 29** goods; the exception is `paper`, which routes none
++through it in either direction (`round6.py`). The corridor runs *through* the Cape, which is
+ the short route to Atlantic Europe (Malacca reaches the Channel in 3 hops through the Cape
+ against 7 through Alexandria; the flow routes 24% of world spice supply through it) where v1's
+ potential never used it at all.
+@@ -1567,7 +1642,14 @@
+ removes where that bites in practice: with both cost terms and the solver's optimality tolerance
+ pinned, the optimum is unique on the aggregate and on all 29 per-good solves, with a margin of 3.8e-8
+ at worst against double-precision noise of 2e-16 — so the result no longer rests on the solver's
+-tie-selection at all. The discontinuity remains a property of the *program*: an input that made two
++tie-selection at all. **That margin is not a constant of the design, and it is worth knowing how
++much of it is a gift of the chosen `α_Φ`.** On the aggregate it is **7.53e-06** at `α_Φ = 2.0` and
++**1.267e-07** at 1.5 — a factor of sixty for a change §1.6 treats as taste. Per good it is smaller
++still: **two of the 29** solves sit inside HiGHS's 1e-7 default (`copper` at 3.765e-08, `paper` at
++8.92e-08) and 27 sit above it. All four figures are from `round6.py`, which reports the margin as the
++smallest positive reduced cost on an arc outside the support. Pinning the tolerance is therefore load-bearing at these values rather
++than precautionary, and a future change to `α_Φ` or to the wealth field should re-measure it rather
++than assume the headroom survives. The discontinuity remains a property of the *program*: an input that made two
+ routings exactly equal in cost would still have no unique answer. Nothing on this field does.
+ 
+ **v1's ε is deleted, because the problem it patched no longer exists.** The Laplacian oriented
+@@ -1620,29 +1702,29 @@
+ intent from the world state instead of authoring it. **Wealth pulls, but the wealthiest node is not
+ automatically an end.** On this field `english_channel` is the richest node at 316.6 and is *not* a
+ sink: it drains to `genua`, which is 4th at 296.0. `mexico` (300.4, 2nd), `gulf_of_siam` (297.9, 3rd)
+-and `sevilla` (266.5, 7th) are likewise net demanders that draw more edges in than they send out
+-while flow still passes through them. What makes an end is where the flow *terminates*, which is a
+-property of the whole field and the graph rather than of a single node's rank — and the ends emerge
++and `sevilla` (266.5, 7th) are likewise net demanders with flow still passing through them. The
++quantity that separates them from an end is not a degree comparison — a node can draw more edges in
++than it sends out and still be a thoroughfare — but the flow identity the LP enforces:
++`flow_in(n) − flow_out(n) = −b_w(n)`, which holds on all **36** net demanders and on all 80 nodes,
++to a maximum residual of **5.2e-17** (`round6.py`). Every net demander absorbs exactly its own deficit and passes
++the rest on; an end is a node that passes none on. That the two are different questions is visible
++directly — **18 of 80** nodes have out-degree above zero while carrying no outgoing flow at all
++(`round6.py`).
++What makes an end is where the flow *terminates*, which is a property of the whole field and the
++graph rather than of a single node's rank — and the ends emerge
+ and move when the wealth moves —
+ a razed `hangzhou`, a dev-stacked capital, a colonizing Europe that flips the Cape (§1.6). It reuses
+ the §1.1 operator unchanged: one implementation, one set of guarantees (LP feasibility,
+ acyclicity, determinism, scan-invariance), and the correctness check stays a single combinatorial
+ comparison.
+ 
+-Three aggregates were tested; one is impossible and one was superseded:
++Two aggregates were tested and rejected before the third was adopted:
+ 
+ - The value-weighted **net flow** `Σ_g V_g·net_g` is a flow, flows circulate, and it measurably
+   contains directed cycles — it cannot be installed.
+-- The value-weighted **marking order** `Φ_ord = Σ_g V_g·order_g` (v2.0's choice) is acyclic for
+-  free and scores **higher** than `Φ_w` on self-coherence with the per-good graphs — that is the
+-  cost of the trade and it is not disputed. It was superseded on design grounds: its ends are
+-  artifacts of sweep scheduling rather than places — and the sharpest evidence for that is what
+-  relabelling does to them: its end count and end set both move with the node order, where `Φ_w`'s do
+-  not (§2.4 item 1 measures the installed graph as invariant over the orderings tried). Most of
+-  `Φ_ord`'s ends terminate no good, none of the demand capitals is among them, and the end count does
+-  not concentrate as demand concentrates. *No figure is quoted for any of that here*: the operator is
+-  not installed, its numbers moved with every change to the wealth field, three successive audits
+-  spent their effort recounting them, and the design argument above depends on none of them.
++- An aggregate built from the per-good **marking orders** is acyclic for free, but its ends are a
++  function of the order Phase 3 pops its ready queue, which is a design choice inside the operator
++  rather than a fact about the world. That follows from the definition and needs no measurement.
+ - `Φ_w`, adopted: **one operator, one set of guarantees, and ends that move with the world.** It
+   reuses §1.1 unchanged, so LP feasibility, acyclicity, determinism and scan-invariance come for
+   free and the correctness check stays a single combinatorial comparison; and its ends are places
+@@ -1650,9 +1732,8 @@
+   adoption by "two vanilla-like ends at 1444" — a resemblance to vanilla's authored map. That is not
+   the argument, and it should not be revived even though the 1444 field again gives two ends: the
+   count is a property of the field, not of the operator, and pinning the operator to it would be the
+-  calibration §2.3 withdrew. What the trade actually costs is self-coherence with the per-good
+-  graphs, which the superseded marking-order aggregate scores higher on; what it buys is one
+-  operator, one set of guarantees, and ends that sit where the wealth is.*
++  calibration §2.3 withdrew. What it buys is one operator, one set of guarantees, and ends that sit
++  where the wealth is.*
+ 
+ Note what `Φ_w` is **not**: a difference in `Φ_w` across a link is *not* the net value crossing
+ it. Realized movement follows vanilla propagation — a good can be diluted by an even split across
+@@ -1672,9 +1753,9 @@
+             = powershare_C(n) · collect_pool(n)
+ ```
+ 
+-This is an **identity, not a measurement**: `powershare_C(n)` carries no `g`, so it factors out of the sum, and by §1.1's vocabulary the property is true by construction and carries no measurement. Every term that feeds a collector's power at a node is node-wide — the merchant bonus, the off-home penalty, propagation off the one installed graph, the caravan grant — so none of them can reintroduce a `g`. What a run can show is only that the implementation does the algebra in doubles: across Sevilla, Genoa, Champagne, Malacca and the Gulf of Siam, using each node's real 1444 country table, the two forms agree to a worst relative disagreement of **0 to 3.7e-16** — one to three units in the last place. So one scalar per node reproduces every country's income exactly, and the engine's own math does the rest. *(v1 through v4.0 quoted "agreement to 5.7e-14" here, and 1.4e-14 below. Both are floating-point residuals of an exact identity, produced by constructions none of those documents states — a theorem decorated with an experiment, which is the confusion §1.1 exists to prevent.)*
++This is an **identity, not a measurement**: `powershare_C(n)` carries no `g`, so it factors out of the sum, and by §1.1's vocabulary the property is true by construction and carries no measurement. Every term that feeds a collector's power at a node is node-wide — the merchant bonus, the off-home penalty, propagation off the one installed graph, the caravan grant — so none of them can reintroduce a `g`. A run can show only that the implementation does the algebra in doubles, and no residual is quoted for that: a floating-point residual of an exact identity measures the arithmetic, not the design, and every version that quoted one quoted a different number from a different construction. So one scalar per node reproduces every country's income exactly, and the engine's own math does the rest. *(v1 through v4.0 quoted "agreement to 5.7e-14" here, and 1.4e-14 below. Both are floating-point residuals of an exact identity, produced by constructions none of those documents states — a theorem decorated with an experiment, which is the confusion §1.1 exists to prevent.)*
+ 
+-**This is also why propagation is kept on a single graph — and the reason is not the one v1 through v6.0's own first draft gave.** Reading the one installed graph leaves the propagated term good-independent, so the identity holds by construction, and in doubles to within one to three units in the last place. Per-good propagation makes a country's power at the node differ by good, because §1.9 reads a node's downstream neighbours and those differ per good: `gulf_of_siam`'s 29 goods leave it by **seven** distinct downstream sets. **What that does *not* do is break the identity.** Define `ps̄_C = Σ_g v_g·cs_g·ps_C(g) / Σ_g v_g·cs_g` — the per-good shares weighted by *collected* value — and `collect_pool · ps̄_C = income_C` follows algebraically, with `Σ_C ps̄_C = 1`, so `ps̄_C` is a legal share vector and one scalar per node still reproduces every collector's income exactly. Both inputs already exist per good at write time; §2.6 sums exactly them into `collect_pool`.
++**This is also why propagation is kept on a single graph — and the reason is not the one v1 through v6.0's own first draft gave.** Reading the one installed graph leaves the propagated term good-independent, so the identity holds by construction. Per-good propagation makes a country's power at the node differ by good, because §1.9 reads a node's downstream neighbours and those differ per good: `gulf_of_siam`'s 29 goods leave it by **seven** distinct downstream sets. **What that does *not* do is break the identity.** Define `ps̄_C = Σ_g v_g·cs_g·ps_C(g) / Σ_g v_g·cs_g` — the per-good shares weighted by *collected* value — and `collect_pool · ps̄_C = income_C` follows algebraically, with `Σ_C ps̄_C = 1`, so `ps̄_C` is a legal share vector and one scalar per node still reproduces every collector's income exactly. Both inputs already exist per good at write time; §2.6 sums exactly them into `collect_pool`.
+ 
+ **The real cost is that `ps̄_C` is not derivable from trade power alone.** It is value-weighted, so installing it means writing a country a fictitious per-node trade power whose ratio happens to equal it — and every other consumer of that power field then reads the fiction. That is a claim about what the engine exposes, not about a magnitude, and it is why the single graph stays: on one graph the scalar *is* the country's power share, needing no invention. *(The magnitudes previous versions quoted were all artifacts of substituting some other weighting. v1 through v3.0: "off by 5.96 ducats on a node paying ~250", where no node in the model has local trade value near 250 — v4.0 deleted it and its own harness asserted the deletion. v4.0: 0.41%. v5.0: "redistributive and single-digit percent". v6.0's first draft: "at most 0.1%". Each froze or reweighted the share differently, so each measured its own construction rather than a property of the design — and the size of the discrepancy depends on which collectors are taken to be collecting, which is a choice of the construction too. **No figure of my own is quoted here**, because the identity holds and the objection is structural.)*
+ 
+@@ -1739,9 +1820,8 @@
+ carries no value for it. Two others that v3.0 listed here are settled and have moved into §1.3.
+ 
+ - **Should any source beyond province condition be allowed to multiply `goods_produced`?** §1.3
+-  reads development, the trade good and the province-state modifiers of §1.3 — four of the five
+-  applied — and nothing else, so
+-  this is now a **design** question rather than a classification one. The keys
++  reads development, the trade good and the four province-state modifiers of §1.3 — and nothing else,
++  so this is now a **design** question rather than a classification one. The keys
+   `trade_goods_size` and `trade_goods_size_modifier` are granted in many places (buildings, event
+   modifiers, great projects, static and province-triggered modifiers, holy orders, state edicts,
+   trade-company investments), and v3.0 through v5.0 tried to admit the province-scoped subset by
+@@ -1761,20 +1841,41 @@
+ **Calibration, and unresolved parameters.**
+ 
+ - `k`, `α_min`, `α_max`. The test is whether they produce the intended three-regime split, not whether they differentiate same-geography goods, which they are not meant to do.
+-- **The zero-flow tolerance is scale-coupled.** §2.3 now records it as absolute rather than purely numerical — v2.1 filed it as numerical-only — and being absolute is what makes it interact with the magnitude of `b` (§1.6). Either normalise `b` to a fixed scale before the solve or make the tolerance relative. Undecided.
++- **The zero-flow tolerance was filed here as scale-coupled and undecided. It is now closed, and
++  the entry is kept because the reasoning is what stops it being reopened.** The tolerance is
++  absolute, and v2.1 was wrong to file it as purely numerical. But the hazard that made it an open
++  question — that scaling `b` down would push genuine flow arcs into the free set — is not reachable
++  from inside the model. `b_w` is built with `s_w(n) = 1/N` uniform against a `c_w` that sums to 1,
++  so its largest magnitude cannot fall below `1/N` without changing what the model computes; there is
++  no scale knob to turn. The free-versus-flow margin measured in §2.1 is six orders wide with
++  nothing inside it, so nothing is close to the `1e-11` boundary — and that threshold is
++  `flowop.ZERO_TOL`, a post-solve classification constant the implementation may set to anything, so
++  no solver floor constrains it. **A different tolerance is genuinely floor-limited, and the warning
++  belongs to it**: the *solver's* feasibility tolerances (`flowop.LP_OPTS`, the primal and dual pair
++  §2.3's correctness requirement rides on) bottom out at HiGHS's 1e-10 — below that the option is
++  rejected with `Invalid option value` while `success` stays true and the solver **silently reverts
++  to the 1e-7 default**, which is worse than not setting it because it looks like it worked. The
++  revert is measured rather than inferred (`round6.py`): on `copper`, whose margin the default
++  straddles, an unset tolerance and 1e-7 each move 8 edge-slots over four column permutations, 1e-8
++  and 1e-10 each move none, and **a rejected 1e-11 moves 8** — it behaves like the default, not like
++  the last valid setting.
+ - Does `α_min` ever bite? Bounded from files now (§3.5): the sublinear regime is reachable through
+   vanilla price events for 13 of 30 goods, unreachable for 11, and exactly on the boundary for 2.
+   Whether those events fire often enough in a real campaign remains the open half.
+ - **The sink-count-span option.** A measured calibration exists that makes sink counts track price
+-  — span exactly 1..5, spearman(price, sinks) = −0.20: α unclamped at exponent 2 (cloves α = 16),
+-  demand-mass quantile ρ = 0.5, twig tolerance 3e-4 (`drain-orientation.md` §5–6). Its costs are
+-  real and recorded: unclamped α² is a *demand-model* decision (luxuries become court goods —
+-  under α = 16 the cloves demand order is `hangzhou`, `beijing`, `doab`, and the sink lands on a
+-  high-demand node rather than a geographic accident; v2 said Beijing "holds the richest single
+-  province", which it does not — that is `hangzhou`), the tolerance re-routes arcs
+-  individually carrying <0.03% of world supply — up to about **0.18%** of a good's mass in total,
+-  not <0.03% — and drops **cloves** to 99.97% reach, and it is one-snapshot
+-  tuning. The baseline does not adopt it; adopting it is a §1.4 decision, not a solver knob.
++  more closely than the baseline does. Its configuration is what matters and is recorded: α unclamped
++  at exponent 2 (cloves reaches α = 16), a demand-mass quantile ρ = 0.5 in its own Phase 1, and a twig
++  tolerance of 3e-4 (`drain-orientation.md` §5–6, `changes-v5.md` §39–41). *No span, correlation or
++  reach figure is quoted for it*, for the reason the graveyard gives throughout (§3.15): it is not
++  adopted, its numbers move with every change to the wealth field and to §2.3's cost, and the
++  decision about it does not turn on them — as the last such change demonstrated, moving its sink sets while the
++  argument for and against it stayed exactly the same. Its costs are qualitative and unchanged:
++  unclamped α² is a *demand-model* decision, not a solver knob — luxuries become court goods, and
++  under α = 16 the cloves sink lands on a high-demand node rather than a geographic accident; the twig
++  tolerance re-routes arcs carrying a small fraction of a good's mass, and it costs one good full
++  reach; and the whole thing is one-snapshot tuning. The baseline does not adopt it; adopting it is a
++  §1.4 decision. *(v2 said Beijing "holds the richest single province", which it does not — that is
++  `hangzhou`.)*
+ - **Multiplayer build discipline.** Not LP pivot determinism, which §2.1 retires: the optimum is
+   unique with a margin 8 to 10 orders above float noise, so a few units in the last place cannot
+   change it. What is open is whether the shipped solver build does runtime CPU dispatch or threads its
+@@ -1860,16 +1961,11 @@
+ `φ₀` and the identity left with the Laplacian.
+ 
+ **`φ₀` as the installed graph.** *(v1 entry, moot in v2.)* It was not the economy the model runs;
+-the installed graph is `Φ_w` (v2.0 briefly used `Φ_ord`) and its correctness check is
+-cross-implementation orientation equality.
++the installed graph is `Φ_w` and its correctness check is cross-implementation orientation equality.
+ 
+-**`Φ_ord = Σ_g V_g·order_g` as the installed graph.** *(v2.0 entry, superseded in v2.1.)* It is
+-the most self-coherent aggregate measured — better than `Φ_w` on that one axis, and acyclic for
+-free — but its ends are scheduling artifacts rather than places, and its end count does not
+-concentrate as demand concentrates (§3.9). *No figures are maintained for it:* it is not installed,
+-its numbers moved with every change to the wealth field, and the design argument does not rest on
+-them. The self-coherence ceiling v2.0 and v2.1 quoted predates the deterministic sweep of §3.6 and
+-was never regenerated after it.
++**A value-weighted aggregate of the per-good marking orders as the installed graph.** *(v2.0 entry,
++superseded in v2.1.)* Acyclic for free, but its ends are a function of Phase 3's queue discipline
++rather than of the world (§3.9). The rejection is structural, so no figure is kept for it.
+ 
+ **Pinned-count wealth fields (top-k seeding, gravity kernels).** Tested en route to `Φ_w`: a
+ 3-mass gravity field `Φ(n) = max_m c_α(m)·γ^dist(n,m)` over the top-3 pairwise-unconnected
+@@ -1884,7 +1980,11 @@
+ 
+ **A vestigial in-game economy with net treasury settlement.** Correct treasuries, wrong displays, wrong AI inputs (§3.10).
+ 
+-**Per-good propagation.** Breaks the income factoring and with it Goal 7.
++**Per-good propagation.** *Not* because it breaks the income factoring — it does not; §3.10 shows
++the identity survives with a value-weighted share `ps̄_C`. It is rejected because installing that
++share means writing each country a **fictitious per-node trade power** whose ratio happens to equal
++it, and every other consumer of that power field then reads the fiction. Goal 7 — the game's own
++numbers being the model's numbers — is what that costs.
+ 
+ **Node-level collect/transfer rules.** The collect/transfer split is per good because whether a good has anywhere to go is per good.
+ 

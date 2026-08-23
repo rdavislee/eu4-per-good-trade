@@ -1,0 +1,6 @@
+replicate 0: all-29 total  min 0.135 s  median 0.179 s  max 0.227 s
+             per-good avg  4.7 - 7.8 ms   |  runs inside v5.0's [0.17, 0.21] s : 7 of 12
+replicate 1: all-29 total  min 0.183 s  median 0.265 s  max 0.309 s
+             per-good avg  6.3 - 10.7 ms   |  runs inside v5.0's [0.17, 0.21] s : 1 of 12
+replicate 2: all-29 total  min 0.171 s  median 0.293 s  max 0.391 s
+             per-good avg  5.9 - 13.5 ms   |  runs inside v5.0's [0.17, 0.21] s : 2 of 12

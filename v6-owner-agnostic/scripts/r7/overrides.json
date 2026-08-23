@@ -1,0 +1,158 @@
+{
+ "Y977": {
+  "claim": "Arc costs are not unit because with unit costs the optimum is not unique and order-dependent; the near-unit perturbation leaves one optimum to return",
+  "verdict": "CONFIRMED",
+  "method": "measurement (parent recheck: forced-flow LP test on the one residual tied arc)",
+  "ev": "Rechecked personally, overturning a subagent PARTIAL. Under the shipped two-term cost the aggregate `b_w` has 0 zero-reduced-cost off-support arcs and the 29 per-good solves have 1, on `paper` (`cape_of_good_hope`->`malacca`). Forcing that arc to carry flow raises paper's optimum from 1.07657706605183 by exactly 2*eps (2e-9 at eps=1e-9, 2e-6 at 1e-6), so it carries no flow in any optimum: the optimal flow, and hence the support and orientation, is unique on all 30 solves. Under unit costs the same count is 40 (aggregate) and 1,078 arcs on 29 of 29 goods."
+ },
+ "Y1043": {
+  "claim": "v6.0 listed Australia, Venice and Deccan among these termini; none of the three holds either sink on this field",
+  "verdict": "CONFIRMED",
+  "method": "file read (parent recheck: `changes-v6.md`, the v6 change record that quotes deleted text) + measurement",
+  "ev": "Rechecked personally, overturning a subagent PARTIAL that called the historical half unverifiable. `changes-v6.md:5938` preserves v6.0's row verbatim: \"spices sink at Genoa (demand rank 1) plus branch-end termini (Australia, Brazil); cloves at Venice, Kongo, Deccan, Australia, Brazil\" — all three named nodes present. The document itself states deleted text is quoted in `changes-v6.md`. On the current field the baseline sinks are spices {brazil, genua} and cloves {brazil, genua, kongo}, calibration spices {doab, genua} and cloves {beijing} (`f.out` V107/V179 plus a fresh per-good run): none of australia, venice or deccan appears."
+ },
+ "Y972": {
+  "claim": "The 1444 sink set moves from {english_channel, hangzhou} to {genua, hangzhou} when alpha_Phi moves 1.5 -> 2.0",
+  "verdict": "PARTIAL",
+  "method": "measurement (parent recheck: alpha_Phi sweep on the shipped operator) + file read (`changes-v6.md`)",
+  "ev": "Rechecked personally, softening a subagent REFUTED. Destination confirmed: alpha_Phi=2.0 gives {genua, hangzhou} (`m6.out`). Origin not reproducible on this field with the shipped tie-broken solver: alpha_Phi=1.5 gives a SINGLE sink, {english_channel}. My sweep: 1.0 -> {english_channel, gulf_of_siam, mexico}; 1.4 -> {english_channel, hangzhou, rheinland}; 1.5 -> {english_channel}; 1.6 -> {genua}; 1.63 -> {genua, hangzhou}. Consistent with the document's own count row [3, 1, 2, 2, 1, 1] at alpha in {1,1.5,2,3,4,8} (spec L611, `m6.out`). As a version-to-version changelog statement it is corroborated - `changes-v6.md:71` and `:272` record the pre-change installed ends as {english_channel, hangzhou} - because v6.1 bundled alpha_Phi 1.5->2.0 with the Phase-2 tie-break, and it is the tie-break that moved the 1.5 answer. What fails is the sentence read as alpha_Phi's own effect on this field."
+ },
+ "Y017": {
+  "claim": "Some figures carry a script attribution instead of a guard, and some carry neither",
+  "verdict": "CONFIRMED",
+  "method": "file read (spec L96-97) + measurement (`coverage6.py`, `verify6.py` on the current spec)",
+  "ev": "Rechecked personally, overturning a subagent PARTIAL that graded the inventory label's wording (\"a few\") rather than the document's. Spec L96-97 reads \"Some figures carry a script attribution instead of a guard, and some carry neither\" - both quantifiers are \"some\". Fresh runs: `verify6.py ../per-good-trade-spec.md` -> \"RESULT: 36 checks, 0 failed\"; `coverage6.py ../per-good-trade-spec.md` -> \"coverage: 4 of 6 uniquely-locatable spec figures are protected (67%)\". Both halves hold."
+ },
+ "Y011": {
+  "claim": "The rejected-operator numbers were re-measured and re-refuted in three successive audits, and no rejection argument depends on them",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: the three prior-version validation files)",
+  "ev": "Rechecked personally. `../v3-owner-agnostic/validation-v3.md` (laplacian x6, RANK x1, gravity x1) and `../v5-owner-agnostic/validation-v5.md` (laplacian x2, RANK x8, gravity x2) do re-examine them. `../v4-owner-agnostic/validation-v4.md` has zero occurrences of \"laplacian\", \"RANK\" or \"basin\" and exactly one gravity row - L164, W190, \"The gravity kernel's 'hits any chosen end count exactly' gains its gamma range\", verdict PASS. A PASS is not a re-refutation, so \"re-refuted in three successive audits\" outruns the middle audit. The independence half holds: SS3.15's entries argue from structure (pinned end count, a second operator with its own reach knob, monotone local comparison) with no figure load-bearing."
+ },
+ "Y177": {
+  "claim": "mexico (300.4, 2nd), gulf_of_siam (297.9, 3rd) and sevilla (266.5, 7th) are net demanders with flow still passing through them",
+  "verdict": "PARTIAL",
+  "method": "measurement (parent recheck: aggregate min-cost b-flow, per-node flow_in/flow_out)",
+  "ev": "Rechecked personally. Wealth figures reproduce exactly (english_channel 316.6 rank 1, mexico 300.4 rank 2, gulf_of_siam 297.9 rank 3, genua 296.0 rank 4, sevilla 266.5 rank 7). The flow half fails for two of the three: mexico has flow_in 0.0110 / flow_out 0.0000 at out-degree 1, gulf_of_siam flow_in 0.0156 / flow_out 0.0000 at out-degree 1 - both are members of the \"18 of 80 nodes with out-degree above zero carrying no outgoing flow at all\" the same paragraph counts. Only sevilla passes flow on: flow_in 0.0324, flow_out 0.0201. (english_channel, named in the preceding sentence, is likewise flow_out 0.0000 at out-degree 3.) The identity flow_in - flow_out = -b_w holds on 80 of 80 nodes to 5.2e-17."
+ },
+ "Y438": {
+  "claim": "Solver item 2 is a parser for non-ironman saves reading province owner, base_tax, base_production, trade good, goods produced and development",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: `solver.py`, `provinces.py`, tree-wide grep for zipfile/gamestate)",
+  "ev": "Rechecked personally, softening a subagent REFUTED because the row is a DESIGN stipulation. As a stipulation it stands. What fails is SS2.2's own characterisation of the list - \"The list above is the reference solver: standalone, run against parsed saves\". The reference solver builds its province table from `history/provinces` via `provinces.py` (docstring: \"Build the 1444.11.11 province dataset from history/provinces\"), and the only save read on the solve path is `solver.py::_rolled_trade_goods()`, which opens `VANILLA_start.eu4` and extracts `trade_goods` alone for the 20 unknown-good provinces. No owner, base_tax, base_production, goods-produced or development field is read from a save on that path; the save-reading scripts that do exist (`audit_delta.py`, `audit_f4.py`, `p3_wealth.py`, `preconfirm3.py`) are audit instruments, not the solver."
+ },
+ "Y439": {
+  "claim": "Solver item 3 is a parser for common/defines.lua merged with common/defines/ overrides in load order",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: tree-wide grep for defines.lua and common/defines/ across `scripts/`)",
+  "ev": "Rechecked personally, softening a subagent REFUTED. The stipulation stands and the document itself flags it as unbuilt - SS2.9 says the defines parser must come first because the downstream terms \"cannot be written correctly before it exists\". What exists is one ad-hoc read: `measure6.py:252` opens `common/defines.lua` and regexes out three constants (TRADING_POLICY_COOLDOWN_MONTHS, TRADE_COMPANY_DAYS_TO_SWAP_LEADER, TRADE_COMPANY_COOLDOWN). Nothing in `scripts/` merges `common/defines/` overrides in load order, and that directory is non-empty in 1.37.5 (00_dummy.lua, difficulty_*.lua). `solver.py` hardcodes TAX_COEFF and reads GP_COEFF from `00_static_modifiers.txt`, not from defines."
+ },
+ "Y444": {
+  "claim": "Solver item 6 is a survival table S_g[n][H] for AI scoring, one table serving every country",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: tree-wide grep of `scripts/*.py` for survival / S_g)",
+  "ev": "Rechecked personally, softening a subagent REFUTED. The stipulation stands, and SS3.14 derives its size (29 x 80 x 80 x 8 bytes = 1,484,800). No implementation exists: grep over `scripts/*.py` finds \"survival\" only in the round-6 working files v61d/g/q/s/t.py, never in `solver.py`, `drain.py`, `flowop.py` or `measure6.py`, and no such table is built or dumped anywhere. SS2.9's build order lists it as still to be written."
+ },
+ "Y437": {
+  "claim": "Solver item 1 is a parser for 00_tradenodes.txt reading adjacency, members, path/control render data and end/inland/AI flags",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: `nodes.py`, `nodes.json`, `common/tradenodes/00_tradenodes.txt`)",
+  "ev": "Rechecked personally. `nodes.py` reads outgoing names (adjacency), `members`, `inland`, `end` and `ai_will_propagate_through_trade` - four of the five groups. `path` and `control` are present in the shipped file (every `outgoing` block carries both) and are read by nothing: no node-field occurrence of either in `nodes.py`, and `nodes.json` stores neither. SS2.4 item 3 nevertheless requires the emitter to reverse both, so the render data is stipulated and unimplemented."
+ },
+ "Y133": {
+  "claim": "Repeated 12-run timing experiments do not reproduce each other; three replicates gave per-good averages spanning 3.5-10.5, 3.5-10.8 and 3.1-4.7 ms",
+  "verdict": "PARTIAL",
+  "method": "measurement (parent recheck: ran the shipped `p3_time.py`, 3 replicates x 12 runs)",
+  "ev": "Rechecked personally. The conclusion holds and is strengthened: my three replicates gave per-good averages spanning 3.1-7.3, 4.0-6.6 and 3.7-5.0 ms (all-29 medians 0.158 / 0.144 / 0.125 s), mutually inconsistent and inconsistent with the document's. The three quoted intervals themselves do not reproduce - in particular no replicate of mine reaches the 10.5 and 10.8 ms the same paragraph uses to justify refusing the word \"single-digit\"; every per-good average I measured is single-digit milliseconds."
+ },
+ "Y134": {
+  "claim": "v5.0's 0.17-0.21 s is not reproducible: across three replicates of twelve runs the number of runs inside that interval was 1, then 0, then 0",
+  "verdict": "PARTIAL",
+  "method": "measurement (parent recheck: ran the shipped `p3_time.py`, 3 replicates x 12 runs)",
+  "ev": "Rechecked personally. The conclusion holds: 3 of my 36 runs landed inside [0.17, 0.21] s. The specific triple does not: I measured 2, then 1, then 0 (a parallel re-run of the same instrument by a subagent measured 3, 3, 4). Three independent executions of `p3_time.py` give three different triples, which is the non-reproducibility the claim asserts - and which means the quoted 1/0/0 cannot be confirmed as stated."
+ },
+ "Y365": {
+  "claim": "SS2.7 item 11 settles the caravan recipient, and SS3.11 carries both readings of the exposure surface",
+  "verdict": "CONFIRMED",
+  "method": "file read (parent recheck: spec L763-765, L1363, L1818-1821, L1865)",
+  "ev": "Rechecked personally, overturning a subagent PARTIAL that read \"settles\" as asserting completion. The document distinguishes tenses deliberately: SS1.7 writes \"SS2.7 item 14 settled which of those it does today\" (past, for a probe that ran) beside \"SS2.7 item 11 settles the recipient\" (present, designating the probe that will). SS3.11 L1818 uses the identical construction for an admittedly unexecuted probe - \"SS2.7 item 11 settles it with one merchant and two node windows\" - and SS3.13 L1865 lists \"the caravan recipient is pending\". SS2.7's numbered item 11 exists at L1363. The second half holds verbatim: SS3.11 L1820-1821 states both the tooltip reading (~26 inland nodes) and the v1 reading (every node adjacent to one)."
+ },
+ "Y125": {
+  "claim": "What is left exposed is everything without a cooldown, which is most of the ladder",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: `common/trading_policies/00_trading_policies.txt`, `common/defines.lua`)",
+  "ev": "Rechecked personally. The damping facts hold: the policy file carries exactly 9 entries in 5 families (maximize_profit(+_upgraded), hostile_trading(+_upgraded), improve_inland_routes(+_upgraded), establish_communities(+_upgraded), propagate_religion), with `cooldown = no` on lines 25 and 52 - i.e. inside maximize_profit and maximize_profit_upgraded only - so 7 of 9 entries are rate-limited by TRADING_POLICY_COOLDOWN_MONTHS = 12 (defines.lua:1045). But \"most of the ladder\" fails on the SS1.10 table it refers to: of its 7 threshold rows, 4 are damped (Improve Inland Routes and Propagate Religion by the policy cooldown; the two trade-company rows by TRADE_COMPANY_DAYS_TO_SWAP_LEADER = 30 and TRADE_COMPANY_COOLDOWN = 60 at defines.lua:1212 and 1214) and only 3 are undamped (both trade-conflict CB rows and privateer blocking). Three of seven is not most."
+ },
+ "Y1166": {
+  "claim": "The earlier 84 -> 13 printings mixed seeds: 84 at seeds 1 and 2024, 13 at seed 606, with no single seed yielding both",
+  "verdict": "CONFIRMED",
+  "method": "measurement (parent recheck: `p3_relabel_pergood.py` re-run at seeds 1, 2024 and 606 with the first-order configuration at the HiGHS default tolerance as well as pinned)",
+  "ev": "Rechecked personally, overturning a subagent PARTIAL that had measured the first-order configuration only with the tolerance pinned. Patching the hardcoded seed (20260821) and adding a first-order/default-tolerance configuration gives, at the HiGHS default tolerance: seed 1 -> first-order 84 of 290, full cost 11; seed 2024 -> first-order 84, full cost 11; seed 606 -> first-order 86, full cost 13. So 84 appears at seeds 1 and 2024, 13 at seed 606, and no seed yields both - exactly as claimed. (With the tolerance pinned the first-order figures instead read 85, 89 and 87, which is how the disagreement arose, and is itself the point the neighbouring sentence makes.)"
+ },
+ "Y1169": {
+  "claim": "The copper flip count over four column permutations is seed-dependent, taking the values 2, 8 or 6",
+  "verdict": "PARTIAL",
+  "method": "measurement (parent recheck: `round6.py`'s exact permutation mechanism swept over seeds 0-30)",
+  "ev": "Rechecked personally, softening a subagent REFUTED. Seed-dependence is confirmed and is the load-bearing half (it is why no single count is quoted). The enumerated set is wrong: replicating round6.py's mechanism exactly - identity plus four `default_rng(seed).permutation(len(ARCS))` column orders, counting distinct (permutation, edge-slot) flips against the identity solve at the HiGHS default tolerance - over seeds 0-30 gives {4, 6, 8, 10, 12, 14}, with 8 most common (11 of 31), 10 next (8 of 31), and **2 never observed**. Per-seed: 0->10, 1->4, 2->6, 3->8, 4->8 (the shipped seed, matching round6.py's printed 8), 5->10, 13->12, 16->14, 17->14, 29->14, 30->12."
+ },
+ "Y1030": {
+  "claim": "The solver's optimality tolerance is a correctness requirement rather than a performance knob, and HiGHS stops when reduced costs are within its dual feasibility tolerance of zero",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: scipy 1.18.0 `_linprog_doc.py`) + measurement (the tolerance bisection in `round6.py`)",
+  "ev": "Rechecked personally. The correctness half is established behaviourally: on `copper`, whose margin is 3.765e-08, an unset tolerance and 1e-7 give identical flip sets over four column permutations while 1e-8 and 1e-10 give none (`r6.out`), so the tolerance decides which vertex is returned. The stopping-rule half is not settleable from the materials: scipy 1.18.0's `_linprog_doc.py` documents only the option and its value - \"dual_feasibility_tolerance : double (default: 1e-07) Dual feasibility tolerance for 'highs-ds'\" - and states no termination test; HiGHS's own source and documentation are not in the install or the tree. What would settle it: the HiGHS source or its solver documentation."
+ },
+ "Y476": {
+  "claim": "Neither coefficient is read off a province window, because a window figure carries the owner's modifiers and some of those are randomised at game start",
+  "verdict": "CONFIRMED",
+  "method": "file read (parent recheck: `history/countries/GRA - Granada.txt`, `common/ruler_personalities/00_core.txt`)",
+  "ev": "Rechecked personally, overturning a subagent PARTIAL that could not source the randomisation half. `GRA - Granada.txt` contains zero occurrences of `personality`; its 1444 monarch is the `1419.1.1`-era `monarch = { name = \"Muhammad IX\" dynasty = \"Nasrid\" adm 1 dip 1 mil 0 }` with no personality key. `common/ruler_personalities/00_core.txt` carries 191 `chance = { }` blocks - one per personality's `ruler_allow`, e.g. `industrious_personality` at line 1359 - which is the roll table the engine draws from where history scripts none. `industrious_personality` grants `global_trade_goods_size_modifier = 0.1`, exactly the +10% that reconciles Garnatah's window Trade Value 3.52 with 0.80 x 4.00 = 3.20. So a window figure does carry an owner modifier that is randomised at game start."
+ },
+ "Y631": {
+  "claim": "Node-level alpha overweights a k-province node by k^(alpha-1); at alpha(g)=1.5 the comparisons give ~2x and ~1.44x, at alpha_Phi=2.0 they give 4.1x and 2.1x, so the slicing distortion is larger on the aggregate graph than on any per-good one",
+  "verdict": "PARTIAL",
+  "method": "derivation check + file read (parent recheck: `common/prices/00_prices.txt`, the shipped alpha formula)",
+  "ev": "Rechecked personally. The algebra and all four multipliers are right: (77/19)^0.5 = 2.01, (68/33)^0.5 = 1.436, 77/19 = 4.05, 68/33 = 2.06. The closing conclusion is false. The shipped alpha is `max(0.2, min(3.0, price/2.0))`, so any good priced at or above 6.0 clamps to alpha = 3.0 and carries exponent alpha-1 = 2.0, against alpha_Phi = 2.0's exponent of 1.0. `cloves` is priced 8.0 in `common/prices/00_prices.txt` and is one of the 29 live 1444 goods (it is the single-producer good `m6.out` names), giving alpha 3.00 and exponent 2.00; the same two node comparisons then read (77/19)^2 = 16.4x and (68/33)^2 = 4.25x, both larger than the aggregate's. `coal` (10.0) is the same but latent. So a live good on the same field carries a bigger slicing distortion than the aggregate graph does."
+ },
+ "Y001": {
+  "claim": "v6.0 makes owner-agnosticism true by construction rather than by a rule that has to be policed",
+  "verdict": "CONFIRMED",
+  "method": "file read (`solver.py` wealth path) + measurement (`round6.py`, `verify6.py`)",
+  "ev": "Rechecked personally against the implementation rather than the document's restatement. `solver.py`'s wealth path is exactly `tax = TAX_COEFF * base_tax * (1 + tmod)` (line 158) with `tmod` drawn from `STATE_TAX_MOD`, which is `{}` (line 89), plus `prod_income = gp * price` (line 159) where `gp = GP_COEFF * base_production * (1 + sum of the four province-state goods modifiers)`. A tree-wide grep of `solver.py` for autonomy, production efficiency, ideas, estates, government reforms and technology finds no occurrence anywhere on that path; `owner` appears only as an inclusion filter at line 144 (\"Counts a province when it has an owner and lies in a trade node\"). There is no modifier classifier left to police. Fresh run: `round6.py` prints `solver.LIVE_STATE_MODS = ('devastation',)` and `solver.STATE_TAX_MOD = {} (empty: no modifier reaches the tax term)`, and `verify6.py` asserts behaviourally that \"0 of 2472 counted provinces disagree with TAX_COEFF*base_tax\"."
+ },
+ "Y002": {
+  "claim": "The substantive change of v6.0 is to SS1.3: wealth is a function of the province's development, its trade good and its own current condition, and of nothing else",
+  "verdict": "CONFIRMED",
+  "method": "file read (`solver.py` wealth path) + measurement (`round6.py`, `verify6.py`)",
+  "ev": "Rechecked personally against the implementation rather than the document's restatement. `solver.py`'s wealth path is exactly `tax = TAX_COEFF * base_tax * (1 + tmod)` (line 158) with `tmod` drawn from `STATE_TAX_MOD`, which is `{}` (line 89), plus `prod_income = gp * price` (line 159) where `gp = GP_COEFF * base_production * (1 + sum of the four province-state goods modifiers)`. A tree-wide grep of `solver.py` for autonomy, production efficiency, ideas, estates, government reforms and technology finds no occurrence anywhere on that path; `owner` appears only as an inclusion filter at line 144 (\"Counts a province when it has an owner and lies in a trade node\"). There is no modifier classifier left to police. Fresh run: `round6.py` prints `solver.LIVE_STATE_MODS = ('devastation',)` and `solver.STATE_TAX_MOD = {} (empty: no modifier reaches the tax term)`, and `verify6.py` asserts behaviourally that \"0 of 2472 counted provinces disagree with TAX_COEFF*base_tax\". The three inputs the path reads are precisely base_tax/base_production (development), price(good(p)) (the trade good) and the four static condition modifiers."
+ },
+ "Y003": {
+  "claim": "The two-test modifier classifier and everything it governed - trade-good modifiers, great projects, permanent province modifiers, buildings, centres of trade and DLC conditionality - are deleted, along with the whole-install sweep that maintained them",
+  "verdict": "CONFIRMED",
+  "method": "file read (`solver.py`, `apparatus6.py`; tree-wide search for the sweep script)",
+  "ev": "Rechecked personally against the implementation rather than the document's restatement. `solver.py`'s wealth path is exactly `tax = TAX_COEFF * base_tax * (1 + tmod)` (line 158) with `tmod` drawn from `STATE_TAX_MOD`, which is `{}` (line 89), plus `prod_income = gp * price` (line 159) where `gp = GP_COEFF * base_production * (1 + sum of the four province-state goods modifiers)`. A tree-wide grep of `solver.py` for autonomy, production efficiency, ideas, estates, government reforms and technology finds no occurrence anywhere on that path; `owner` appears only as an inclusion filter at line 144 (\"Counts a province when it has an owner and lies in a trade node\"). There is no modifier classifier left to police. Fresh run: `round6.py` prints `solver.LIVE_STATE_MODS = ('devastation',)` and `solver.STATE_TAX_MOD = {} (empty: no modifier reaches the tax term)`, and `verify6.py` asserts behaviourally that \"0 of 2472 counted provinces disagree with TAX_COEFF*base_tax\". The deleted classifier's constants survive only in `apparatus6.py`, held frozen and imported by `measure6.py` purely to price what was removed (105.30 ducats over 89 provinces); nothing in the wealth path reads them. The whole-install sweep script `audit_modifiers.py` exists only under `../v4-owner-agnostic/scripts/` and has no counterpart in this tree."
+ },
+ "Y214": {
+  "claim": "The claim-audit corrections from ../v1-laplacian/validation.md settleable from files were folded in at v2 and carried since, spot-verified on 7 of 60 with none missing",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: `../v1-laplacian/validation.md` status table; the round-7 artifacts)",
+  "ev": "Rechecked personally. The denominator is confirmed: `../v1-laplacian/validation.md`'s own status table (L15-23) gives CONFIRMED 276, REFUTED 23, PARTIAL 37, NEEDS_GAME 49, OUT_OF_SCOPE 208, DEFERRED 92, total 685 - and 23 + 37 = **60**, exactly the corrections the sentence counts against. A sample of those corrections (the node-size spread, the supply-range wording, the autonomy floor, the trade-power bands, plus the grain/livestock price misreads and the Propagate Religion gating, all named in SS3.16) is present and carried in the current text. What the claim outruns is verification of its own spot-check: no artifact in `fixes-round7.md`, `claims-delta-round7.md`, `round7.diff` or the round-7 working tree records which 7 of the 60 were checked or what each returned (that self-report is graded separately as Y1142, UNTESTABLE), and the sentence itself concedes no exhaustive re-check exists."
+ },
+ "Y665": {
+  "claim": "Per-good eligibility returns true for some goods at every node, so no nation is ever globally inert",
+  "verdict": "PARTIAL",
+  "method": "measurement (parent recheck: out-degree per node across all 29 per-good DRAIN orientations)",
+  "ev": "Rechecked personally. The node-level half is confirmed exactly: running DRAIN on all 29 live goods, **no node has out-degree 0 for every good** - the minimum number of goods giving a node an outgoing arc is **18** and the maximum is 29, and 30 of the 80 nodes are a sink for at least one good. What the claim outruns is the per-*nation* universal: whether every country has at least one good for which its power counts additionally requires that country's merchant placement and collection points, which the reference implementation does not model and no shipped instrument computes. The node-level fact is necessary for the nation-level conclusion, not sufficient for it."
+ },
+ "Y695": {
+  "claim": "AI light-ship building, trade-league behaviour, peace valuation and income-threshold events all read the engine's node value figures",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: search of `common/`, `events/` for trade-income consumers and light-ship defines)",
+  "ev": "Rechecked personally. The income-threshold half is file-confirmed: `trade_income_percentage` is read by shipped scripted content - `common/church_aspects/02_anglican_aspects.txt`, `common/decrees/00_china.txt`, `common/estates/003_vaisyas.txt`, `common/estates/03_burghers.txt`, `common/estate_agendas/003_vaisya_agendas.txt` among others. The other three consumers are engine-internal AI behaviours: `common/defines.lua` exposes only light-ship cost and maintenance constants (LIGHT_SHIP_COST 20 at L1334, LIGHT_SHIP_MAINT_FACTOR 0.03 at L1173, LIGHT_SHIP_TIME 365 at L1341, LIGHT_SHIP_SAILORS_COST 50 at L1310), never a rule tying the build decision to node value, and no shipped file states the trade-league or peace-valuation inputs. Settling those three needs the disassembly SS2.7 item 10 specifies."
+ },
+ "Y503": {
+  "claim": "The binary is frozen - offsets found stay found",
+  "verdict": "PARTIAL",
+  "method": "file read (parent recheck: `eu4_rev.txt`, `clausewitz_rev.txt`, the three crash dumps' `meta.yml`)",
+  "ev": "Rechecked personally. Stability across the observed window is confirmed: `eu4_rev.txt` and `clausewitz_rev.txt` both read `835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18`, and all three crash dumps' `meta.yml` carry the same `SCMCommit: 835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18` with `SCMTimeStamp: \"2024-10-03 10:50:26 +0200\"`, across launches three hours apart, while the fault address `0x00007FF6DDE6A8B4` is byte-identical in all three. What cannot be tested is the unqualified permanence the sentence asserts: no second build of EU4 exists in these materials, so \"offsets found stay found\" holds for 1.37.5 and is untested against any future patch - which is the scope the sentence does not state."
+ }
+}

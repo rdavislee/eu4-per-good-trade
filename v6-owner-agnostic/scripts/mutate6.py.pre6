@@ -1,0 +1,80 @@
+# -*- coding: utf-8 -*-
+"""Acceptance test for verify6.py. Plants ten factual errors in a copy of a document, one at a time,
+and reports how many the verifier catches. v5.0's harness caught 1 of 10; the bar for v6.0 is 9.
+
+Usage: python mutate6.py [document]
+"""
+import io, os, re, sys, subprocess, tempfile
+HERE = os.path.dirname(os.path.abspath(__file__))
+DOC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "fixes-agreed.md")
+orig = io.open(DOC, encoding="utf-8").read()
+
+CHECKLIST = [
+    ("world wealth",        "**10,594.70**",             "**12,345.67**"),
+    ("counted provinces",   "over **2,472** counted",    "over **2,481** counted"),
+    ("self-coherence",      "**53.5%** edge-goods",      "**58.5%** edge-goods"),
+    ("value-weighted",      "edge-goods, **52.1%**",     "edge-goods, **62.1%**"),
+    ("sinks per good",      "**1–8, mean 3.52**",  "**1–7, mean 3.52**"),
+    ("connected pairs",     "**90.2%** (5,703",          "**92.2%** (5,703"),
+    ("largest b_w",         "**0.0226**",                "**0.0227**"),
+    ("alpha band",          "[1.38, 1.63], width 0.25",  "[1.38, 1.93], width 0.25"),
+    ("European provinces",  "Europe (824 provinces)",    "Europe (823 provinces)"),
+    ("cape degrees",        "in-degree 1, out-degree 3", "in-degree 2, out-degree 3"),
+]
+# The spec anchors are DERIVED from the computed figures, not typed. Typed anchors go stale the
+# moment the field moves, and a stale anchor SKIPS -- which quietly lowers the caught count and
+# looks like a weaker harness rather than an unmaintained test.
+def _spec_mutations():
+    import measure6 as M
+    O = M.OUT
+    cp = O["ordered pairs connected"].split(" of ")
+    band = O["band containing alpha=1.5"]
+    smm = O["sinks per good min/max/mean"]
+    def pair(label, template, good, bad):
+        return (label, template.format(*good), template.format(*bad))
+    return [
+        pair("world wealth", "**{:,.2f}** annual", (O["world wealth"],), (12345.67,)),
+        pair("counted provinces", "over **{:,}** counted", (O["counted provinces"],),
+             (O["counted provinces"] + 9,)),
+        pair("self-coherence", "**{:.1f}%** of edge-goods", (O["Phi_w self-coherence edge-goods"],),
+             (O["Phi_w self-coherence edge-goods"] + 5,)),
+        pair("value-weighted", "(**{:.1f}%** value-weighted)",
+             (O["Phi_w self-coherence value-weighted"],),
+             (O["Phi_w self-coherence value-weighted"] + 10,)),
+        pair("sinks per good", "mean {:.2f}, zero fallbacks", (smm[2],), (smm[2] - 0.2,)),
+        pair("connected pairs", "**{:.1f}%** ({:,} of", (O["ordered pairs connected pct"], int(cp[0])),
+             (O["ordered pairs connected pct"] + 3, int(cp[0]))),
+        pair("largest b_w", "largest `|b_w|` **{:.4f}**", (O["largest |b_w|"],),
+             (O["largest |b_w|"] + 0.0001,)),
+        pair("alpha band", "**[{:.2f}, {:.2f}], width {:.2f}**", (band[1], band[2], band[3]),
+             (band[1], band[2] + 0.3, band[3])),
+        pair("European provinces", "{:,} counted European", (O["European counted provinces"],),
+             (O["European counted provinces"] - 1,)),
+        pair("coal flips", "flips **{} of", (O["coal activation edge flips"],),
+             (O["coal activation edge flips"] + 19,)),
+        pair("coal delta", "adds {:.2f} ducats", (O["coal activation wealth delta"],),
+             (O["coal activation wealth delta"] + 2.4,)),
+        pair("price census", "**{}** textual", (O["change_price textual blocks"],),
+             (O["change_price textual blocks"] - 7,)),
+    ]
+MUTATIONS = _spec_mutations() if os.path.basename(DOC).startswith("per-good-trade-spec") else CHECKLIST
+
+tmp = os.path.join(HERE, "_mutated.md")
+caught = 0
+print("=" * 96); print("mutation test: %s" % os.path.basename(DOC)); print("=" * 96)
+for name, old, new in MUTATIONS:
+    if old not in orig:
+        print("  [SKIP] %-22s anchor absent: %s" % (name, str(old[:40]).encode("ascii","replace").decode("ascii"))); continue
+    io.open(tmp, "w", encoding="utf-8", newline="\n").write(orig.replace(old, new, 1))
+    r = subprocess.run([sys.executable, os.path.join(HERE, "verify6.py"), tmp],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    failed = r.returncode != 0
+    caught += failed
+    def _s(x): return str(x).encode("ascii","replace").decode("ascii")
+    print("  [%s] %-22s %s -> %s" % ("CAUGHT" if failed else "MISSED", name, _s(old)[:26], _s(new)[:26]))
+if os.path.exists(tmp):
+    os.remove(tmp)
+print()
+print("caught %d of %d planted errors" % (caught, len(MUTATIONS)))
+print("v5.0's harness caught 1 of 10.  Acceptance bar for v6.0: 9 of 10.")
+sys.exit(0 if caught >= 9 else 1)

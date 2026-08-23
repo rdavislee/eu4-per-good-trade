@@ -1,0 +1,26 @@
+instrument validation on the identity permutation
+  edges agreeing with drain.py : 159 of 159
+  sink set matches             : True
+  validated.
+
+Phase 2 under relabelling: the degeneracy, and whether the tie-break removes it
+  unit cost (former)     objective 0.789420000928  max rel deviation 5.626e-16
+                         permutations returning a DIFFERENT optimal support: 40 of 40
+  tie-break cost         objective 0.789746281866  max rel deviation 7.029e-16
+                         permutations returning a DIFFERENT optimal support: 0 of 40
+
+  seed 4242      hangzhou  60/60  english_channel   0/60  baseline set 60/60
+  seed 7         hangzhou  60/60  english_channel   0/60  baseline set 60/60
+  seed 999       hangzhou  60/60  english_channel   0/60  baseline set 60/60
+
+pooled over 180 relabellings
+  orientation changed        : 0 of 180
+  edges moving               : mean 0.00, range 0-0
+  baseline sink set returned : 180 (100.0%)
+  hangzhou an end            : 60-60 per hundred
+  english_channel an end     : 0-0 per hundred
+  sink-count distribution    : {2: 180}
+  most frequent end holders  : [('genua', 180), ('hangzhou', 180)]
+  LP objective deviation     : not available - the implementation exposes no flow map,
+                               so no figure here may be attributed to this script
+EXIT=0

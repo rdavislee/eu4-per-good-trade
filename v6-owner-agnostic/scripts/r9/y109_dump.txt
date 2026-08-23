@@ -1,0 +1,110 @@
+=== Y109 ===
+{
+  "ID": "Y109",
+  "§": "§1.6",
+  "claim": "the table is withdrawn (\"A table of interval boundaries was published here and is withdrawn\"); the sweep is re-reporte …",
+  "type": "MEASURED",
+  "line": "659",
+  "_table": "UNCHANGED",
+  "_raw": "| Y109 | §1.6 | the table is withdrawn (\"A table of interval boundaries was published here and is withdrawn\"); the sweep is re-reporte … | MEASURED | 659 |"
+}
+=== Y1097 ===
+{
+  "ID": "Y1097",
+  "§": "§1.6",
+  "claim": "A table of interval boundaries was published here and is withdrawn: its rows came from bisection and disagree with a u …",
+  "type": "PROCESS",
+  "line": "670",
+  "_table": "UNCHANGED",
+  "_raw": "| Y1097 | §1.6 | A table of interval boundaries was published here and is withdrawn: its rows came from bisection and disagree with a u … | PROCESS | 670 |"
+}
+=== Y1098 ===
+{
+  "ID": "Y1098",
+  "§": "§1.6",
+  "claim": "The effect of a boundary that sits between samples is a row that looks like a fact and is an artifact of the sampling.",
+  "type": "MODEL",
+  "line": "671",
+  "_table": "UNCHANGED",
+  "_raw": "| Y1098 | §1.6 | The effect of a boundary that sits between samples is a row that looks like a fact and is an artifact of the sampling. | MODEL | 671 |"
+}
+=== Y1099 ===
+{
+  "ID": "Y1099",
+  "§": "§1.6",
+  "claim": "The direction and the widest interval survive the bisection-versus-grid difference; the row boundaries did not, and qu …",
+  "type": "PROCESS",
+  "line": "672",
+  "_table": "UNCHANGED",
+  "_raw": "| Y1099 | §1.6 | The direction and the widest interval survive the bisection-versus-grid difference; the row boundaries did not, and qu … | PROCESS | 672 |"
+}
+=== Y340 ===
+{
+  "ID": "Y340",
+  "§": "§1.6",
+  "claim": "These are properties of this snapshot rather than constants of the model — what one field yielded under one scaling, w …",
+  "type": "DESIGN",
+  "line": "681",
+  "_table": "UNCHANGED",
+  "_raw": "| Y340 | §1.6 | These are properties of this snapshot rather than constants of the model — what one field yielded under one scaling, w … | DESIGN | 681 |"
+}
+=== Y112 ===
+{
+  "ID": "Y112",
+  "§": "§1.6",
+  "claim": "Because §1.3's wealth is linear in development, scaling development and scaling wealth are the same operation here — m …",
+  "type": "MEASURED",
+  "line": "682",
+  "_table": "UNCHANGED",
+  "_raw": "| Y112 | §1.6 | Because §1.3's wealth is linear in development, scaling development and scaling wealth are the same operation here — m … | MEASURED | 682 |"
+}
+=== Y1010 ===
+{
+  "ID": "Y1010",
+  "§": "§1.6",
+  "claim": "`TIE_EPS2` behaves the same way as `TIE_EPS` and was measured at 1e-7, 1e-6 and 1e-5, all three leaving the …",
+  "type": "MEASURED",
+  "line": "644",
+  "_table": "UNCHANGED",
+  "_raw": "| Y1010 | §1.6 | `TIE_EPS2` behaves the same way as `TIE_EPS` and was measured at 1e-7, 1e-6 and 1e-5, all three leaving the … | MEASURED | 644 |"
+}
+=== Y105 ===
+{
+  "ID": "Y105",
+  "§": "§1.6",
+  "claim": "A written warning against reintroducing the withdrawn justifications for `α_Φ` — resemblance to vanilla's …",
+  "type": "DESIGN",
+  "line": "648",
+  "_table": "UNCHANGED",
+  "_raw": "| Y105 | §1.6 | A written warning against reintroducing the withdrawn justifications for `α_Φ` — resemblance to vanilla's … | DESIGN | 648 |"
+}
+=== Y106 ===
+{
+  "ID": "Y106",
+  "§": "§1.6",
+  "claim": "\"Europe becomes the centre of trade as it develops\" is the design claim, and it is what §3.1's first goal …",
+  "type": "DESIGN",
+  "line": "653",
+  "_table": "UNCHANGED",
+  "_raw": "| Y106 | §1.6 | \"Europe becomes the centre of trade as it develops\" is the design claim, and it is what §3.1's first goal … | DESIGN | 653 |"
+}
+=== Y108 ===
+{
+  "ID": "Y108",
+  "§": "§1.6",
+  "claim": "The mechanism carrying that is that wealth is linear in development, so developing a region moves its `c_w` …",
+  "type": "MODEL",
+  "line": "655",
+  "_table": "UNCHANGED",
+  "_raw": "| Y108 | §1.6 | The mechanism carrying that is that wealth is linear in development, so developing a region moves its `c_w` … | MODEL | 655 |"
+}
+=== Y100 ===
+{
+  "ID": "Y100",
+  "§": "§1.6",
+  "claim": "`α_Φ = 2.0`, `TIE_EPS = 1e-3` and `TIE_EPS2 = 1e-6` are hyperparameters; the choice is developer taste and …",
+  "type": "DESIGN",
+  "line": "628",
+  "_table": "UNCHANGED",
+  "_raw": "| Y100 | §1.6 | `α_Φ = 2.0`, `TIE_EPS = 1e-3` and `TIE_EPS2 = 1e-6` are hyperparameters; the choice is developer taste and … | DESIGN | 628 |"
+}

@@ -1,0 +1,5 @@
+first-order  Phi_w sinks genua,hangzhou           sinks/good 2-8 mean 3.69  acyclic 29/29
+             self-coherence edge-goods 55.2%  value-weighted 54.9%   +/-1% noise edges moved (6 seeds) [0, 0, 0, 0, 0, 0]
+shipped full Phi_w sinks genua,hangzhou           sinks/good 2-8 mean 3.69  acyclic 29/29
+             self-coherence edge-goods 55.1%  value-weighted 54.8%   +/-1% noise edges moved (6 seeds) [0, 0, 0, 0, 0, 0]
+self-coherence delta (full - first): edge-goods -0.04  value-weighted -0.10

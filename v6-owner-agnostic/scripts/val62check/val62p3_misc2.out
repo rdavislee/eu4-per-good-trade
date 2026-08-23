@@ -1,0 +1,11 @@
+v5 reimplementation, OLD unit objective, identity: edges disagreeing with shipped: 26 of 159
+any member in europe             -> 25 nodes, 30 Europe->sink pairs
+any counted member in europe     -> 25 nodes, 30 Europe->sink pairs
+majority members in europe       -> 23 nodes, 27 Europe->sink pairs
+location province in europe      -> 18 nodes, 23 Europe->sink pairs
+  the 25 by any-member: ['aleppo', 'astrakhan', 'baltic_sea', 'bordeaux', 'champagne', 'constantinople', 'crimea', 'english_channel', 'genua', 'kazan', 'kiev', 'krakow', 'lubeck', 'north_sea', 'novgorod', 'pest', 'ragusa', 'rheinland', 'saxony', 'sevilla', 'siberia', 'valencia', 'venice', 'white_sea', 'wien']
+cape pairs, SOME shortest path via cape : 71
+cape pairs, EVERY shortest path via cape: 60
+identity: promotions 1 fallbacks 0 (shipped: 1/0)
+over 180 relabellings, (promotions, fallbacks, edges identical) -> count: {(1, 0, True): 180}
+EXIT=0

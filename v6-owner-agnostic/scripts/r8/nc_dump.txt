@@ -1,0 +1,34 @@
+=== S01.md Y1142 [UNTESTABLE]
+  claim: Folded corrections spot-verified on 7 of 60 in the round-7 audit, none missing
+  method: file read
+  evid: Spec L11 states this verbatim, with IDs C037/C038/C049/C101/C128/C130/C132. Independently: `v1-laplacian/validation.md` gives REFUTED=23 + PARTIAL=37 = 60 (matches "60"), and all 7 named IDs are genuine REFUTED entries there. But whether round-7's audit actually performed this spot-check and found "none missing" can only be settled by opening `validation-round7.md` / `scripts/r7/out/*`, which are FORBIDDEN sources for this round.
+
+=== S01.md Y1143 [UNTESTABLE]
+  claim: No exhaustive re-check of those corrections has been made
+  method: file read
+  evid: Same sentence as Y1142 (spec L11). This is a negative claim about the full audit history (rounds 1-8), most of whose verdict files (`validation-round7.md`, `validation-v6-round*.md`, `validation-v62*.md`, `preconfirm-round*.md`) are FORBIDDEN sources, so completeness of "no exhaustive re-check" cannot be established from permitted materials.
+
+=== S02.md Y1185 [UNTESTABLE]
+  claim: The seven round-7-spot-verified corrections are C037, C038, C049, C101, C128, C130, C132
+  method: file read: spec.md line 11; ../v1-laplacian/validation.md
+  evid: Spec line 11 states this list verbatim, and all seven IDs are genuine REFUTED entries in validation.md (23 REFUTED + 37 PARTIAL = 60, matching "60"); but confirming round-7 itself selected exactly these seven requires round-7's own verdict record (scripts/r7/out/*, validation-round7.md), which this round's brief forbids as a source.
+
+=== S03.md Y1081 [PARTIAL]
+  claim: `props6.py` copied+extended from `val5_pergood.py`; permutation loop written for this citation, "quoted since v2 with nothing in the tree that computed it"
+  method: file read (diff) + measurement (`final.py`/`final.out`)
+  evid: `diff val5_pergood.py props6.py` (scripts/r8/S03w): 0 deletions, 27 insertions at line 130 — copy-and-extend confirmed. But "nothing in the tree that computed it" is false: `scripts/final.py` L162-179 (V035) already runs the identical `sweep_priority(..., pid=...)` scheduler-permutation measurement (2 perms × 29 goods), with output in `final.out` L19: "V035 orientation flips under 2 index permutations x29 goods: 0" — that script and output are already in the current tree (final.out is one of the brief's cited already-run instrument outputs). `v4-owner-agnostic/scripts/v4measure.py` and `v5-owner-agnostic/scripts/v5measure.py` compute the same thing in prior-version trees too.
+
+=== S04.md Y258 [REFUTED]
+  claim: §2.2 states the connectedness requirement and what the solver does when it is violated
+  method: file read
+  evid: Spec line 216 in the **current** document reads "**§2.2a** states the connectedness requirement..." (verified `sed -n '216p' per-good-trade-spec.md`), not §2.2. §2.2 (lines 988-1035) contains no mention of connectedness/components at all (grepped); only §2.2a (line 1041-1045, "Premise 1 — the node graph is connected") does.
+
+=== S05.md Y037 [PARTIAL]
+  claim: `tax_value(p) = TAX_COEFF · base_tax(p)`, no modifier at all (restated L49-50, L349, L955)
+  method: file read
+  evid: Formula and "no modifier" confirmed: spec.md:304, spec.md:55 ("full stop"), spec.md:994-995, and `solver.py:91` `STATE_TAX_MOD = {}`. But the cited restatement lines are wrong for the current document: the true restatements sit at lines 55 and 994-995, not 49-50/349/955 — line 349 is mid-way through the unrelated 0.6125-truncation example, and line 955 is a solver-determinism table row about randomness in the solve, not about the tax formula
+
+=== S08.md Y114 [PARTIAL]
+  claim: genua is a sink, out-degree 0 / in-degree 5, "so the western Mediterranean, the Adriatic and the Rhône carry power into it"
+  method: measurement (probe on Φ_w directed edge set + `common/tradenodes/00_tradenodes.txt`, `map/definition.csv`)
+  evid: Degree figures exact: genua out-degree 0, in-degree 5, in-edges = {alexandria, champagne, ragusa, tunis, valencia} (`y114_probe.py`). tunis/valencia = western Mediterranean, ragusa = Adriatic, champagne = Rhône corridor — but `alexandria`'s node location is province 358 = "Alexandria" (`map/definition.csv:359`), Egypt/Eastern Mediterranean, not covered by any of the three named regions. The three-region gloss accounts for only 4 of the 5 in-edges

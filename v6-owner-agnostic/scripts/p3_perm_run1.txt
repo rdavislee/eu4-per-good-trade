@@ -1,0 +1,19 @@
+============================================================================================
+VALIDATION: identity column order reproduces drain.phase2
+============================================================================================
+  30 of 30 reproduce exactly
+
+============================================================================================
+A. spec 2.1 table: orientation under LP column permutation, LP_OPTS=1e-10
+============================================================================================
+  aggregate : flips [0, 0, 0, 0, 0, 0]   objective rel spread 8.43e-16
+  goods/aggregate with any flip over 6 permutations: 0 of 30
+  max objective relative spread over all 30 solves: 1.03e-15
+
+============================================================================================
+B. spec 2.3: same at HiGHS default tolerance (options omitted)
+============================================================================================
+  aggregate : flips [0, 0, 0, 0, 0, 0]  spread 8.43e-16
+  copper           flips [0, 0, 2, 0, 0, 2]  max spread 1.93e-10
+  paper            flips [2, 2, 2, 0, 2, 0]  max spread 7.66e-10
+  goods with any flip: ['copper', 'paper']

@@ -1,0 +1,34 @@
+=== TEST 1: 'cells sharing an owner sit at one ratio regardless of autonomy' (as written) ===
+  owners with >=2 singleton cells      : 37
+  of those, ALL cells at one ratio(3dp): 24  (65%)
+  -> the universal is FALSE for 13 owners
+     MNG  n=16  ratios=[0.7, 1.0]
+     ARA  n=7   ratios=[1.0, 1.0967]
+     VIJ  n=5   ratios=[1.0675, 1.0683, 1.0687]
+     TIM  n=5   ratios=[0.9, 1.0, 1.22, 1.2217]
+     MOS  n=5   ratios=[1.0, 1.2383, 1.275]
+     TUR  n=4   ratios=[1.0562, 1.057, 1.14]
+     GEO  n=4   ratios=[1.1333, 1.1338]
+     HUN  n=3   ratios=[0.9, 1.0]
+
+=== TEST 2: the control that actually has force — owners whose cells SPAN autonomy ===
+    (an owner-group is only a control on autonomy if its cells differ in autonomy)
+  owners with >=2 cells spanning >=20 autonomy points: 7
+    ARA  n=7  aut   1.0.. 91.0  ratios=[1.0, 1.097]               NOT FLAT
+    MNG  n=16 aut   5.0.. 61.0  ratios=[0.7, 1.0]                 NOT FLAT
+    GEO  n=4  aut   0.0.. 52.0  ratios=[1.133, 1.134]             NOT FLAT
+    VIJ  n=5  aut   1.0.. 42.0  ratios=[1.067, 1.068, 1.069]      NOT FLAT
+    MAL  n=2  aut   5.0.. 35.0  ratios=[1.0]                      FLAT
+    TFL  n=2  aut   2.0.. 27.0  ratios=[1.0]                      FLAT
+    AJU  n=2  aut   1.0.. 25.0  ratios=[1.0]                      FLAT
+  flat within owner: 3 of 7
+
+=== TEST 3: within-owner correlation of ratio with autonomy (the honest population control) ===
+  cells in multi-cell owner groups: 117 over 37 owners
+  within-owner (owner-demeaned) r(autonomy, ratio) = -0.0298
+
+=== GEO, verbatim ===
+    ('crimea', 'dyes')     pid 423   aut   0.0%  ratio 1.1338
+    ('crimea', 'silk')     pid 4301  aut   0.0%  ratio 1.1338
+    ('crimea', 'cloth')    pid 422   aut  51.0%  ratio 1.1333
+    ('crimea', 'fish')     pid 2196  aut  52.0%  ratio 1.1333

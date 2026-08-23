@@ -1,0 +1,16 @@
+298| Y350 | §1.7 | Merchant placement, range and the collect/steer choice are vanilla, with one merchant per country per node. | ENGINE | 722 |
+299| Y351 | §1.7 | A merchant present gives +2 trade power (`MERCHANT_MAX_POWER_BONUS`) and a +10% bonus on trade income … | ENGINE | 722 |
+300| Y352 | §1.7 | v1 and v2 both called the second bonus "+10% trade efficiency"; trade efficiency and a flat income bonus are … | ENGINE | 722 |
+301| Y353 | §1.7 | Collect is vanilla, including the −50% penalty outside the home node. | ENGINE | 724 |
+302| Y354 | §1.7 | Under Steer the node window lists every link incident to the node. | MODEL | 726 |
+303| Y355 | §1.7 | The vanilla window already renders both an incoming and an outgoing link list as clickable entries … | ENGINE | 726 |
+304| Y356 | §1.7 | What changes is what an incoming entry does — it must accept a merchant assignment rather than merely … | DESIGN | 729 |
+305| Y357 | §1.7 | §2.7 item 14 settled that the incoming entry only navigates: clicking `Safi` in Sevilla's window switched the … | ENGINE | 730 |
+306| Y358 | §1.7 | A merchant assigned to link {n,m} steers every good oriented n → m. | MODEL | 735 |
+307| Y359 | §1.7 | A merchant assigned to link {n,m} is inert for every good oriented m → n. | MODEL | 736 |
+308| Y360 | §1.7 | A merchant keeps its assignment when a link flips; only its active good set changes. | MODEL | 737 |
+309| Y361 | §1.7 | The same physical link can host a merchant at each end, active on disjoint good sets. | MODEL | 739 |
+310| Y362 | §1.7 | Caravan power requires the merchant to be steering at least one good on that link; assignment alone does not … | MODEL | 741 |
+311| Y363 | §1.7 | That constrains only the two steering conditions — collecting at an inland node as main trading port is … | MODEL | 742 |
+312| Y364 | §1.7 | The engine's own caravan grant conditions are `merchant_present_inland` and `merchant_steering_to_inland`, … | ENGINE | 743 |
+313| Y365 | §1.7 | §2.7 item 11 settles the caravan recipient, and §3.11 carries both readings of the exposure surface. | DESIGN | 745 |

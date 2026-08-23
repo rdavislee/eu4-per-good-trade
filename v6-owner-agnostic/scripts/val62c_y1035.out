@@ -1,0 +1,3 @@
+full  : coh_edge=55.129 coh_val=54.786 sinks=['genua', 'hangzhou'] spg=(2, 8, 3.69) acyc=29
+first : coh_edge=55.172 coh_val=54.884 sinks=['genua', 'hangzhou'] spg=(2, 8, 3.69) acyc=29
+delta : edge=0.043 val=0.098  (claim: falls 0.1-0.2 points going first->full)

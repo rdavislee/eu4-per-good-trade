@@ -1,0 +1,6 @@
+instrument validation on the identity permutation, per good: PASSED
+per-good relabellings: 290 trials (29 goods x 10)
+  runs moving an edge      : 0 of 290
+  runs moving the sink set : 0 of 290
+  edges moving             : mean 0.00 max 0
+  offenders                : []

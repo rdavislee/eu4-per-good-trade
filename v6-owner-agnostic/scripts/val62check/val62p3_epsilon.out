@@ -1,0 +1,19 @@
+alpha_Phi = 2   eps = 0 reproduces the shipped map: genua, hangzhou   (159 edges)
+
+eps          n    sinks                                          moved   cyc   promo/fb
+0            2    genua, hangzhou                                0       False 1/0
+Traceback (most recent call last):
+  File "C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\scripts\epsilon6.py", line 80, in <module>
+    s, d, pr, fb, cy = solve(e)
+                       ^^^^^^^^
+  File "C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\scripts\epsilon6.py", line 56, in solve
+    r = drain.run_drain(BW)
+        ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\scripts\drain.py", line 288, in run_drain
+    flow_arc, free, net, cost = phase2(core, beta)
+                                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\scripts\drain.py", line 113, in phase2
+    f, duals, res = mincost_flow(b, np.zeros(N), cost=TIE_COST)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: solve.<locals>.mcf() got an unexpected keyword argument 'cost'
+EXIT=1

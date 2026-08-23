@@ -1,0 +1,63 @@
+# Task: inventory the claims in a design specification
+
+## What you are looking at
+
+`C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\per-good-trade-spec.md`
+
+is the design spec for an Europa Universalis IV mod. It is version 6.1 of a document that has been
+revised across several versions. The previous version is at `../v5-owner-agnostic/per-good-trade-spec.md`
+and the list of changes between them is `../v6-owner-agnostic/changes-v6.md`.
+
+The spec's own scripts are in `v6-owner-agnostic/scripts/`. The game install is at
+`C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV`.
+
+Freeze: the spec is at MD5 `ab3515e4172d42aef16d9673a438c5f6`. Compute it before you start and
+again when you finish. If either differs, stop and say so — the document changed under you.
+
+## What to produce
+
+A complete census of the document's claims, as a markdown file at
+`../claims-v6.md`.
+
+One row per claim. A claim is any statement the document makes that could be true or false: a
+numeric figure, a mechanism assertion, a statement about what the game engine does, a statement about
+what the model does, a citation of a file or a script.
+
+For each claim record:
+
+- **ID** — the ID prefix for this version is `Y`. Round 10 issued up to `Y999`, so the
+  three-digit range is full: **use four digits from `Y1000` onward** for new claims. `Y001`-`Y999`
+  keep the meanings they already have. This is the eleventh inventory of this version's document. The
+  previous one is `scripts/claims-v6-round10.md`, a full census of 992 claims. **Keep an ID attached to the same claim across
+  inventories**: if a claim was `Y083` last time and is still in the document, it is `Y083` now, even
+  if its wording changed. Give new claims unused numbers. Do not renumber to close gaps.
+- **Section** — the `§` number it appears under.
+- **Claim** — the statement, in your words, one sentence.
+- **Status** — `UNCHANGED` (present in v5 with the same content), `CHANGED` (present in v5, content
+  differs), `NEW` (not in v5), `REMOVED` (in v5, not here — list these too).
+- **Type** — `ENGINE` (asserts something about how EU4 behaves), `MODEL` (asserts something about
+  what this mod's design or its scripts do), `INSTALL` (asserts the content of a file in the game
+  install), `MATH` (an algebraic or numerical identity), `DESIGN` (a stated intent or preference).
+- **Provenance** — how the document says it knows. `read from a file` / `computed by a named script`
+  / `measured in-game` / `numerical test` / `engine test` / `algebraic derivation` / `stipulated`
+  (asserted as a design choice, no evidence claimed) / `unsourced` (asserts a fact and cites nothing).
+  A **numerical test** is a computation over the model's own data; an **engine test** is an
+  observation of the running game. They are different provenances and must not be merged.
+- **Locator** — the line number or a short quoted fragment, enough to find it again.
+
+Then a short summary: counts by Status, by Type, by Provenance; how many IDs carried over; which v5
+claims are gone.
+
+## What this task is and is not
+
+This is enumeration, not evaluation. Record what the document claims and where it says the claim
+comes from. Do not assess whether a claim is true, whether the document is consistent with itself,
+whether a figure looks stale, or whether the writing is good. Another agent does that separately, and
+if you pre-judge here it will inherit your guesses instead of testing the document.
+
+If a claim's provenance is genuinely ambiguous — the document states a figure and names a script, but
+the script's name does not appear near the figure, say — record the ambiguity in the Provenance cell
+as a fact about the document ("figure stated at line 412; nearest script citation is six lines
+earlier and covers a different quantity"). That is still enumeration: you are describing the page.
+
+Read the whole document. It is about 1,700 lines. Do not sample it.

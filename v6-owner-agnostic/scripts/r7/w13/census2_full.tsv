@@ -1,0 +1,162 @@
+tree	file	line	trade_goods	key	value
+events	events\flavorBYZ.txt	1921	silk	BYZ_growing_demand	0.2
+events	events\FlavorGBR.txt	466	fur	FUR_TRADE	0.25
+events	events\flavorHOL.txt	1787	paper	ned_dutch_bookmarket_key	0.15
+events	events\flavorITA.txt	448	wine	ITA_wine_upgrade	0.4
+events	events\flavorJOL.txt	240	ivory	JOL_INCREASED_IVORY_DEMAND	0.25
+events	events\flavorMAL.txt	1701	ivory	MALI_IVORY	0.33
+events	events\flavorMAL.txt	1736	ivory	MALI_IVORY	0.33
+events	events\FlavorPER.txt	1175	silk	PERSIA_SILK_MONOPOLIZATION	1.5
+events	events\FlavorPER.txt	1181	cloth	PERSIA_CLOTH_MONOPOLIZATION	0.25
+events	events\FlavorPER.txt	1187	dyes	PERSIA_DYES_MONOPOLIZATION	0.25
+events	events\FlavorPER.txt	1212	silk	PERSIA_SILK_FLOOD	-0.5
+events	events\FlavorPER.txt	1218	cloth	PERSIA_CLOTH_FLOOD	-0.15
+events	events\FlavorPER.txt	1224	dyes	PERSIA_DYES_FLOOD	-0.15
+events	events\FlavorPER.txt	1250	silk	PERSIA_SILK	0.2
+events	events\FlavorPER.txt	1256	cloth	PERSIA_CLOTH	0.1
+events	events\FlavorPER.txt	1262	dyes	PERSIA_DYES	0.1
+events	events\FlavorPER.txt	1463	silk	PERSIAN_SILK	0.25
+events	events\FlavorPER.txt	1469	dyes	PERSIAN_DYES	0.5
+events	events\FlavorPER.txt	1475	cloth	PERSIAN_CLOTH	0.35
+events	events\FlavorSWE.txt	3538	copper	SWEDEN_COPPER_MONOPOLIZATION	1.5
+events	events\FlavorSWE.txt	3544	iron	SWEDEN_IRON_MONOPOLIZATION	0.25
+events	events\FlavorSWE.txt	3569	copper	SWEDEN_COPPER_FLOOD	-0.5
+events	events\FlavorSWE.txt	3575	iron	SWEDEN_IRON_FLOOD	-0.15
+events	events\FlavorSWE.txt	3601	copper	SWEDEN_COPPER	0.2
+events	events\FlavorSWE.txt	3607	iron	SWEDEN_IRON	0.1
+events	events\FlavorTUR.txt	7839	chinaware	TUR_SILK_ROAD_TRADE	0.5
+events	events\flavorYEM.txt	89	coffee	YEM_coffee_price_boost	0.25
+events	events\PriceChanges.txt	45	slaves	TRIANGLE_TRADE	0.5
+events	events\PriceChanges.txt	100	chinaware	EUROPEANS_IN_CHINA	0.5
+events	events\PriceChanges.txt	172	chinaware	JOHAN_FRIEDRICH_BOTTGER	-0.5
+events	events\PriceChanges.txt	219	fish	PROTESTANT_DONT_EAT_FISH	-0.1
+events	events\PriceChanges.txt	271	coffee	COFFEE_BOOM	0.5
+events	events\PriceChanges.txt	355	wool	COTTON_IMPORTS	-0.1
+events	events\PriceChanges.txt	361	cotton	COTTON_IMPORTS	0.2
+events	events\PriceChanges.txt	490	tea	TEA_AND_SUGAR	0.25
+events	events\PriceChanges.txt	496	sugar	TEA_AND_SUGAR	0.25
+events	events\PriceChanges.txt	568	spices	SPICE_TRADE	0.5
+events	events\PriceChanges.txt	602	slaves	ABOLITIONISM	-0.4
+events	events\PriceChanges.txt	641	grain	HUAYNAPUTINA	-0.75
+events	events\PriceChanges.txt	647	wine	HUAYNAPUTINA	-0.75
+events	events\PriceChanges.txt	682	grain	LITTLE_ICE_AGE	-0.25
+events	events\PriceChanges.txt	688	livestock	LITTLE_ICE_AGE	-0.25
+events	events\PriceChanges.txt	694	wine	LITTLE_ICE_AGE	-0.25
+events	events\PriceChanges.txt	700	fish	LITTLE_ICE_AGE	-0.25
+events	events\PriceChanges.txt	706	salt	LITTLE_ICE_AGE	0.25
+events	events\PriceChanges.txt	712	fur	LITTLE_ICE_AGE	0.25
+events	events\PriceChanges.txt	745	wine	WINE_CORKS	0.25
+events	events\PriceChanges.txt	751	glass	WINE_CORKS	0.15
+events	events\PriceChanges.txt	783	cloth	NEW_DRAPERIES	0.2
+events	events\PriceChanges.txt	789	wool	NEW_DRAPERIES	-0.2
+events	events\PriceChanges.txt	820	cloth	REGULATED_UNIFORMS	0.15
+events	events\PriceChanges.txt	826	wool	REGULATED_UNIFORMS	0.1
+events	events\PriceChanges.txt	832	dyes	REGULATED_UNIFORMS	0.25
+events	events\PriceChanges.txt	869	fish	GREAT_FISHERIES	-0.1
+events	events\PriceChanges.txt	875	salt	GREAT_FISHERIES	0.1
+events	events\PriceChanges.txt	940	cotton	CALICOES	0.45
+events	events\PriceChanges.txt	974	fur	DEPLETION_OF_EUROPEAN_BEAVER	0.4
+events	events\PriceChanges.txt	1018	fur	FELT_HATS	0.35
+events	events\PriceChanges.txt	1050	naval_supplies	PERMANENT_NAVIES	0.5
+events	events\PriceChanges.txt	1056	glass	PERMANENT_NAVIES	0.15
+events	events\PriceChanges.txt	1062	livestock	PERMANENT_NAVIES	0.1
+events	events\PriceChanges.txt	1094	copper	BRONZE_CANNONS	0.5
+events	events\PriceChanges.txt	1129	tea	JAPANESE_TEA_CULTURE	0.25
+events	events\PriceChanges.txt	1135	incense	JAPANESE_TEA_CULTURE	0.1
+events	events\PriceChanges.txt	1177	spices	DECLINE_OF_SPICE_TRADE	-0.4
+events	events\PriceChanges.txt	1230	sugar	POPULARIZATION_OF_SUGAR	0.5
+events	events\PriceChanges.txt	1312	silk	POPULAR_SILK_FABRICS	0.25
+events	events\PriceChanges.txt	1366	dyes	BENGALI_INDIGO_PRODUCTION	-0.25
+events	events\PriceChanges.txt	1439	tropical_wood	VENEERING	0.5
+events	events\PriceChanges.txt	1471	ivory	IVORY_SHORTAGE	0.25
+events	events\PriceChanges.txt	1502	iron	IRON_WORKING	0.5
+events	events\PriceChanges.txt	1508	copper	IRON_WORKING	-0.35
+events	events\PriceChanges.txt	1550	cocoa	HOT_CHOCOLATE	0.35
+events	events\PriceChanges.txt	1591	tobacco	POPULARIZATION_OF_TOBACCO	0.5
+events	events\PriceChanges.txt	1653	coffee	JAVA_COFFEE	-0.4
+events	events\PriceChanges.txt	1760	paper	INCREASED_PRINTING	0.25
+events	events\PriceChanges.txt	1776	paper	INCREASED_PRINTING	0.25
+events	events\PriceChanges.txt	1955	paper	HOLLENDER_BEATER	-0.5
+events	events\PriceChanges.txt	2007	paper	PAPER_IN_BUREAUCRACY	0.25
+events	events\PriceChanges.txt	2084	paper	LENDING_LIBRARIES	0.35
+events	events\PriceChanges.txt	2161	grain	COLUMBIAN_EXCHANGE	-0.2
+events	events\PriceChanges.txt	2167	livestock	COLUMBIAN_EXCHANGE	0.25
+events	events\PriceChanges.txt	2245	gems	FACETING	0.25
+events	events\PriceChanges.txt	2298	gems	BRAZILIAN_DIAMONDS	-0.5
+events	events\PriceChanges.txt	2344	incense	REFORMED_REJECTION_OF_INCENSE	-0.25
+events	events\PriceChanges.txt	2447	incense	GROWTH_OF_PERFUME_BUSINESS	0.35
+events	events\PriceChanges.txt	2485	livestock	SELECTIVE_BREEDING	0.35
+events	events\PriceChanges.txt	2491	wool	SELECTIVE_BREEDING	0.35
+events	events\PriceChanges.txt	2549	glass	BOHEMIAN_GLASS	0.25
+events	events\PriceChanges.txt	2591	glass	MODERN_OPTICS	0.25
+events	events\PriceChanges.txt	2660	glass	LEAD_CRYSTAL	-0.65
+events	events\PriceChanges.txt	2745	coal	IMPROVED_COAL_MINING	-0.3
+events	events\USADLC.txt	775	fur	FUR_TRADE	0.25
+missions	missions\DOM_Britain_Missions.txt	919	fur	ENGLISH_FUR_TRADE	0.25
+missions	missions\DOM_Chinese_Missions.txt	7015	chinaware	qing_chinaware	0.5
+missions	missions\DOM_Japanese_Missions.txt	1466	iron	chinese_iron_key	0.25
+missions	missions\GC_Portuguese_Missions.txt	569	slaves	triangle_trade_key	0.5
+missions	missions\KoK_Byzantine_Missions.txt	2070	silk	BYZ_growing_demand	0.2
+missions	missions\KoK_Persia_Missions.txt	3384	silk	PERSIAN_SILK	0.25
+missions	missions\KoK_Persia_Missions.txt	3390	dyes	PERSIAN_DYES	0.5
+missions	missions\KoK_Persia_Missions.txt	3396	cloth	PERSIAN_CLOTH	0.35
+missions	missions\KoK_Yemen_Missions.txt	954	coffee	YEM_coffee_price_boost	0.25
+missions	missions\SCA_Polish_Missions.txt	2264	grain	polish_grain	0.2
+missions	missions\WOC_Hisn_Kayfa_Missions.txt	1448	grain	granary_of_the_mediterranean_key	0.1
+missions	missions\WOC_Hisn_Kayfa_Missions.txt	1459	grain	granary_of_the_mediterranean_key	0.1
+missions	missions\WOC_Hisn_Kayfa_Missions.txt	1493	grain	granary_of_the_mediterranean_key	0.1
+missions	missions\WOC_Italian_Missions.txt	2841	wine	ITA_wine_upgrade	0.4
+common	common\parliament_issues\01_english_parliament_actions.txt	658	tea	the_tea_act	0.5
+history	history\countries\HAB - Austria.txt	137	gems	FACETING	0.25
+history	history\countries\HAB - Austria.txt	158	paper	PAPER_IN_BUREAUCRACY	0.25
+history	history\countries\HAB - Austria.txt	212	copper	BRONZE_CANNONS	0.5
+history	history\countries\HAB - Austria.txt	224	spices	SPICE_TRADE	0.5
+history	history\countries\HAB - Austria.txt	230	fish	GREAT_FISHERIES	-0.1
+history	history\countries\HAB - Austria.txt	236	salt	GREAT_FISHERIES	0.1
+history	history\countries\HAB - Austria.txt	295	wool	COTTON_IMPORTS	-0.1
+history	history\countries\HAB - Austria.txt	301	cotton	COTTON_IMPORTS	0.2
+history	history\countries\HAB - Austria.txt	307	cloth	NEW_DRAPERIES	0.25
+history	history\countries\HAB - Austria.txt	313	wool	NEW_DRAPERIES	-0.25
+history	history\countries\HAB - Austria.txt	319	tea	JAPANESE_TEA_CULTURE	0.25
+history	history\countries\HAB - Austria.txt	325	incense	JAPANESE_TEA_CULTURE	0.1
+history	history\countries\HAB - Austria.txt	331	incense	REFORMED_REJECTION_OF_INCENSE	-0.25
+history	history\countries\HAB - Austria.txt	342	fish	PROTESTANT_DONT_EAT_FISH	-0.1
+history	history\countries\HAB - Austria.txt	354	paper	INCREASED_PRINTING	0.25
+history	history\countries\HAB - Austria.txt	376	grain	COLUMBIAN_EXCHANGE	-0.2
+history	history\countries\HAB - Austria.txt	424	fur	DEPLETION_OF_EUROPEAN_BEAVER	0.4
+history	history\countries\HAB - Austria.txt	430	tropical_wood	VENEERING	0.35
+history	history\countries\HAB - Austria.txt	441	slaves	TRIANGLE_TRADE	0.5
+history	history\countries\HAB - Austria.txt	485	coffee	COFFEE_BOOM	0.5
+history	history\countries\HAB - Austria.txt	491	fur	FELT_HATS	0.35
+history	history\countries\HAB - Austria.txt	497	tobacco	POPULARIZATION_OF_TOBACCO	0.5
+history	history\countries\HAB - Austria.txt	503	glass	BOHEMIAN_GLASS	0.25
+history	history\countries\HAB - Austria.txt	622	silk	POPULAR_SILK_FABRICS	0.25
+history	history\countries\HAB - Austria.txt	628	iron	IRON_WORKING	0.5
+history	history\countries\HAB - Austria.txt	634	copper	IRON_WORKING	-0.35
+history	history\countries\HAB - Austria.txt	640	glass	MODERN_OPTICS	0.25
+history	history\countries\HAB - Austria.txt	707	chinaware	EUROPEANS_IN_CHINA	0.5
+history	history\countries\HAB - Austria.txt	713	tea	TEA_AND_SUGAR	0.25
+history	history\countries\HAB - Austria.txt	719	sugar	TEA_AND_SUGAR	0.25
+history	history\countries\HAB - Austria.txt	755	coffee	JAVA_COFFEE	-0.4
+history	history\countries\HAB - Austria.txt	767	spices	DECLINE_OF_SPICE_TRADE	-0.4
+history	history\countries\HAB - Austria.txt	773	sugar	POPULARIZATION_OF_SUGAR	0.5
+history	history\countries\HAB - Austria.txt	801	wine	WINE_CORKS	0.25
+history	history\countries\HAB - Austria.txt	807	glass	WINE_CORKS	0.25
+history	history\countries\HAB - Austria.txt	813	cloth	REGULATED_UNIFORMS	0.15
+history	history\countries\HAB - Austria.txt	819	wool	REGULATED_UNIFORMS	0.1
+history	history\countries\HAB - Austria.txt	825	dyes	REGULATED_UNIFORMS	0.25
+history	history\countries\HAB - Austria.txt	831	paper	HOLLENDER_BEATER	-0.5
+history	history\countries\HAB - Austria.txt	837	glass	LEAD_CRYSTAL	0.25
+history	history\countries\HAB - Austria.txt	900	cotton	CALICOES	0.45
+history	history\countries\HAB - Austria.txt	906	naval_supplies	PERMANENT_NAVIES	0.5
+history	history\countries\HAB - Austria.txt	912	glass	PERMANENT_NAVIES	0.15
+history	history\countries\HAB - Austria.txt	918	livestock	PERMANENT_NAVIES	0.1
+history	history\countries\HAB - Austria.txt	943	cocoa	HOT_CHOCOLATE	0.4
+history	history\countries\HAB - Austria.txt	993	chinaware	JOHAN_FRIEDRICH_BOTTGER	-0.5
+history	history\countries\HAB - Austria.txt	999	paper	LENDING_LIBRARIES	0.35
+history	history\countries\HAB - Austria.txt	1005	gems	BRAZILIAN_DIAMONDS	-0.5
+history	history\countries\HAB - Austria.txt	1011	livestock	SELECTIVE_BREEDING	0.5
+history	history\countries\HAB - Austria.txt	1017	wool	SELECTIVE_BREEDING	0.25
+history	history\countries\HAB - Austria.txt	1129	ivory	IVORY_SHORTAGE	0.25
+history	history\countries\HAB - Austria.txt	1135	incense	GROWTH_OF_PERFUME_BUSINESS	0.35
+history	history\countries\HAB - Austria.txt	1181	slaves	ABOLITIONISM	-0.4

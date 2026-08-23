@@ -1,0 +1,74 @@
+{
+ "Y1012": {
+  "claim": "There is no randomness in the solve: an identical output fingerprint over repeated runs, separate processes, and five `PYTHONHASHSEED` values including `random`.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: measurement (`for s in 0 1 2 42 12345 random; do PYTHONHASHSEED=$s python fingerprint6.py; done`, the instrument's own documented sweep)",
+  "evidence": "The substance holds and is stronger than stated: all six settings return the identical SHA-256 `8b13dddb9a345aa6d1990cac70d64e0b649b01f8cab1a9ec41cf9c87faa1012c`. The count does not: `fingerprint6.py`'s own docstring L11 prescribes `0 1 2 42 12345 random` — six values, not five — and no artifact in the tree records a five-value run. One figure-shaped element of the sentence is off by one against the instrument that produced it."
+ },
+ "Y1021": {
+  "claim": "Every trade number EU4 writes to a save is quantised to 1/1000: 495 of 495 sampled values land exactly on that grid across `total`, `val`, `p_pow`, `retention`, `collector_power` and `max_pow`.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: measurement (`python val62p4_quant.py`, the script written for this claim, against `VANILLA_start.eu4` and `Castile1444_12_22.eu4`)",
+  "evidence": "The quantisation holds absolutely — 0 off-grid values — but the sample size does not reproduce. Over the six named fields the instrument finds **3,354** values in `VANILLA_start.eu4` (total 744, val 1187, p_pow 79, retention 80, collector_power 77, max_pow 1187) and **3,810** in `Castile1444_12_22.eu4`, every one of them on the 1/1000 grid. Nothing in `scripts/` produces 495, and no subsampling rule is stated that would."
+ },
+ "Y134": {
+  "claim": "v5.0's \"0.17–0.21 s for all 29 goods\" is not reproducible: the number of twelve runs landing inside that interval varies from 0 to 11 across replicates.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: measurement (`python p3_time.py` → `scripts/r8/p3_time.out`) plus a read of the recorded replicate batches already in the tree",
+  "evidence": "The variance claim holds — my fresh batch gives 4, 0 and 0 of twelve inside [0.17, 0.21] s, with all-29 medians 0.153, 0.126 and 0.133 s — but the stated ceiling is wrong: a recorded batch of the same instrument in this tree, `scripts/val62check/p3_time_p4.out`, reads 3, **12** and 7 of twelve. The observed span across replicate batches is therefore 0 to 12, and the sentence's 11 understates its own record. The load-bearing half — that no count is reproducible and v5.0's interval is not a figure — is unaffected."
+ },
+ "Y1212": {
+  "claim": "The binary is at build `835bfdf8`, SCM timestamp 2024-10-03, constant across `eu4_rev.txt` and all three crash dumps.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`eu4_rev.txt`, byte dump; `crashes/eu4_20260820_134250|_134617|_165621/meta.yml`)",
+  "evidence": "The build id is exactly right and is constant across all four sources: `eu4_rev.txt` is 40 bytes containing only `835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18`, and each dump's `meta.yml` carries `SCMCommit: 835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18`. The timestamp is not: `SCMTimeStamp: \"2024-10-03 10:50:26 +0200\"` appears in the three dumps only — `eu4_rev.txt` has no timestamp field at all — so \"SCM timestamp 2024-10-03, constant across `eu4_rev.txt` and all three crash dumps\" is true of the build hash and false of the timestamp."
+ },
+ "Y515": {
+  "claim": "Items 1–10 are the v1 probe set, settled with a debugger on a vanilla install in one session, though the claim audit found several are observable without one.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`../v1-laplacian/per-good-trade-spec.md` L284; `per-good-trade-spec.md` L1350-1353, L1467, L1929-1933)",
+  "evidence": "The phrase is v1's own plan line carried forward — v1 L284 reads \"Settled with a debugger on a vanilla install, in one session.\" as the header over its probe list — and the qualifier that follows (\"though the claim audit found several are observable without one\") only makes sense of an unrun set. But nothing in the document records a result for any of items 1–10, unlike items 13–15 which are marked \"**were run**\" with findings; §2.9 counts them among \"the fourteen items still open there (1–11 and 16–18)\" and §3.13 lists pass caching, pass-2 content, write windows and the caller enumeration as still needing the debugger. The past participle names an intended method rather than a completed session, and the sentence does not say so."
+ },
+ "Y549": {
+  "claim": "Caribbean 1650: sugar production income makes it a sink for cloth, tools and wine.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/tradegoods/00_tradegoods.txt`, `common/prices/00_prices.txt`; `solver.py`'s `GOODS`)",
+  "evidence": "`cloth` and `wine` are real goods; there is no `tools` trade good in 1.37.5. The shipped list is exactly grain, wine, wool, cloth, fish, fur, salt, naval_supplies, copper, gold, iron, slaves, ivory, tea, chinaware, spices, coffee, cotton, sugar, tobacco, cocoa, silk, dyes, tropical_wood, livestock, incense, glass, paper, gems, coal, cloves plus `unknown` — 32 blocks in `00_tradegoods.txt`, no `tools`, and none in `00_prices.txt` either. One of the row's three named goods cannot be a sink for anything because it does not exist."
+ },
+ "Y173": {
+  "claim": "`verify6.py` checks the census only by requiring the printed total to match a computed one rather than by reconciling per file, and `measure6.py`'s walker still swallows parse failures in a bare `except`.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`verify6.py` L153, L254-255, L292-293; `measure6.py` L230-236)",
+  "evidence": "The first half is right in substance but slightly understates the harness: `verify6.py` L254 checks the printed total against `measure6`'s computed `change_price textual blocks`, and L292 additionally checks the `events/` component (93) against the computed breakdown, while the rest of the partition is a literal-string `present()` check at L153 — so it is a total plus one component, not a per-file reconciliation. The second half is wrong as worded: `measure6.py` L236 reads `except Exception: pass`, a broad catch-all, not a **bare** `except:`. The behaviour described (silently swallowing parse failures) is real; the construct named is not in the file."
+ },
+ "Y749": {
+  "claim": "v1 and v2 both said 0.75 MB, the single-precision figure; the rest of the solver is double precision — 29 × 80 × 80 at 8 bytes is 1,484,800 bytes — and its residuals sit at 1e-16, one ULP of a double (§3.10).",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: arithmetic check + file read (`../v1-laplacian/per-good-trade-spec.md` L484, `../v2-drain/per-good-trade-spec.md` L788, `per-good-trade-spec.md` §3.10)",
+  "evidence": "The attribution and the arithmetic hold: v1 L484 and v2 L788 each read \"about 0.75 MB, well under a million operations per solve\"; 29 × 80 × 80 × 4 = 742,400 bytes and × 8 = 1,484,800, so \"about 1.5 MB at double precision\" is right. The `(§3.10)` citation for the 1e-16 residual is not: §3.10 states \"**No figure of my own is quoted here**\", and the only 1e-16 it carries is v4.0's 1.3e-16, quoted as a prior version's number on a different construction — the income-factoring identity at `gulf_of_siam`, not the survival table."
+ },
+ "Y695": {
+  "claim": "Paying countries correctly while leaving the display wrong is strictly weaker: those figures have readers — income-threshold content file-confirmed, the other three engine-internal.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/defines.lua` L1874-1876 and L1173/1310/1334/1341/1433; `common/church_aspects/02_anglican_aspects.txt` L196, `common/decrees/00_china.txt` L212-221, `common/estates/03_burghers.txt` L167-175)",
+  "evidence": "The file-confirmed half checks out: `trade_income_percentage` is a live threshold trigger in a church aspect (`ai_will_do` L196), a decree (`ai_will_do` L212-221) and a burgher influence modifier (L167-175). The light-ship half checks out too: the five constants are there and nothing ties the build decision to node value. Peace valuation does not belong in the engine-internal group: `defines.lua` L1874-1875 carries `PEACE_TERMS_TRADE_POWER_VALUE_MULT = 0.1` with the shipped comment \"AI desire for transfering trade power is multiplied by this **for each 0.1 trade value in shared nodes**\", plus `PEACE_TERMS_TRADE_POWER_VALUE_MAX = 2.0` — a shipped rule tying AI peace valuation to node trade value."
+ },
+ "Y1232": {
+  "claim": "AI light-ship building, trade-league behaviour and peace valuation are engine-internal readers.",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/defines.lua` L1874-1876, L1173/1310/1334/1341/1433, L55-57)",
+  "evidence": "Two of the three hold: the light-ship defines expose cost, maintenance, build time, sailors and combat width with no value linkage, and the trade-league defines (`TRADE_LEAGUE_MIN_PRESTIGE_OLD_LEADER/-NEW_LEADER`, `TRADE_LEAGUE_BREAK_OPINION`) tie league behaviour to prestige and opinion rather than node value. Peace valuation is not engine-internal: `PEACE_TERMS_TRADE_POWER_VALUE_MULT = 0.1` is a shipped define whose own comment states the rule — \"AI desire for transfering trade power is multiplied by this for each 0.1 trade value in shared nodes\" — capped by `PEACE_TERMS_TRADE_POWER_VALUE_MAX = 2.0`."
+ },
+ "Y483": {
+  "claim": "DLC state is a third input axis: treasure-fleet diversion and caravan power are both DLC-conditional, and caravan modifier values are readable even when inert, so key on the DLC flag rather than on the presence of a value.",
+  "verdict": "UNTESTABLE",
+  "method": "lead recheck: file read (`common/defines.lua` L1220-1222; `common/government_reforms/00_government_reforms.txt`, `common/estate_privileges/05_nomadic_tribe_privileges.txt`; localisation placement of `TREASURE_FLEET_*` and `caravan_power`)",
+  "evidence": "The readable-when-inert half is file-visible: `CARAVAN_FACTOR = 3.0`, `CARAVAN_POWER_MAX = 50` and `CARAVAN_POWER_MIN = 2` sit in `defines.lua` unconditionally, and `caravan_power` is granted in shipped government reforms and estate privileges with no `has_dlc` guard near them. The DLC-conditionality itself is not settleable from these materials: no shipped file gates either mechanic on a DLC flag, and localisation placement does not stand in for one — `TREASURE_FLEET_*` keys appear in `EU4_l_english.yml` as well as `eldorado_l_english.yml`, and `caravan_power` strings are spread across four unrelated expansion files. Settling it needs a DLC-toggle run (disable El Dorado / Cradle of Civilization in `dlc_load.json` and observe whether the treasure fleet and the caravan grant disappear) or a debugger trace of the engine's DLC check."
+ },
+ "Y754": {
+  "claim": "The home-node bonus is voided entirely by placing any collector outside the home node.",
+  "verdict": "UNTESTABLE",
+  "method": "lead recheck: file read (`common/defines.lua` L1141-1142; `eu4.exe` string table; `localisation/tradenodes_l_english.yml` L77, L117)",
+  "evidence": "`TRADE_POWER_HOME_BONUS = 0.1` and `TRADE_POWER_HOME_BONUS_MAX = 1` sit in `defines.lua` with no comment, and the binary's string table carries those two identifiers and nothing else beside them. The shipped strings about the home node say something different — `TRADE_TRANSIT_NODE_CAPITAL` \"Your home node is permanently Collecting from Trade, you can't Transfer Trade Power from it\" and `TRADE_MISSION_OFFICE_DESC` \"Outside your home node, you can only Collect from Trade as long as your Merchant is present\" — neither states an all-or-nothing voiding rule, and a graduated bonus capped at `_MAX = 1` reads against one. Settling it needs a live observation: read home-node trade power, place one collector outside the home node, read it again."
+ }
+}

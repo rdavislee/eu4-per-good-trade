@@ -1,0 +1,6 @@
+Y1034: b-vectors whose graph differs between LP_OPTS(1e-10) and HiGHS default, shipped column order: 0 of 30 []
+
+Y996: total of the antisymmetric term over 8 different feasible optima:
+   values ['-0.197985873622', '-0.197985873622', '-0.197985873622', '-0.197985873622', '-0.197985873622', '-0.197985873622', '-0.197985873622', '-0.197985873622']
+   spread 5.551e-17   |   sum_n w[n]*b_eq[n] = -0.197985873622
+   (predicted constant = -sum_n w[n]*b_eq[n] = -0.197985873622)

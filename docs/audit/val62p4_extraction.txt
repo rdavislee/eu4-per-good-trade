@@ -1,0 +1,144 @@
+=== §2.1 ===
+381| Y427 | §2.1 | The implementation is one program: a runtime-attached DLL that each month reads live game state, solves per … | DESIGN | 889 |
+382| Y428 | §2.1 | It ships with a generated `00_tradenodes.txt` for load time and a companion overlay for what the engine … | DESIGN | 889 |
+383| Y429 | §2.1 | The target platform is Windows/Steam. | DESIGN | 891 |
+384| Y430 | §2.1 | Achievements are off with any mod (`ACHIEVEMENTS_DISABLED_MODIFIED_GAME`). | ENGINE | 891 |
+385| Y431 | §2.1 | The engine will load an ironman save in a modded game — `Loading ironman in modded game` is a shipped code … | ENGINE | 892 |
+386| Y432 | §2.1 | EU4 multiplayer is lockstep with checksums, so every client must reach the same answer; the classical worry … | ENGINE | 896 |
+387| Y434 | §2.1 | DRAIN's exposure is different in kind from v1's dense linear algebra, which was badly exposed to it: v1 … | MODEL | 898 |
+388| Y435 | §2.1 | DRAIN's comparisons are of input-derived quantities (`DEF`, `b`, arc costs) rather than of solver residuals, … | MODEL | 903 |
+389| Y1011 | §2.1 | The multiplayer question is no longer whether the arithmetic agrees to the last bit but whether the build is … | DESIGN | 905 |
+390| Y995 | §2.1 | §2.3's two changes move the desync question from a design problem to a verification one: the largest exposure … | MODEL | 909 |
+391| Y1012 | §2.1 | There is no randomness in the solve: an identical output fingerprint over repeated runs, separate processes … | MEASURED | 916 |
+392| Y1013 | §2.1 | The margin by which the optimum is unique is 3.8e-8 worst per good and 7.5e-6 on the aggregate — 8 to 10 … | MEASURED | 917 |
+393| Y1014 | §2.1 | Orientation under LP column permutation: 0 flips on the aggregate and on all 29 goods, with an objective … | MEASURED | 918 |
+394| Y1015 | §2.1 | The per-good `abs(net)` distribution is bimodal — 2,321 edge-goods at exactly 0 and 2,290 above 1e-6, with … | MEASURED | 920 |
+395| Y1016 | §2.1 | A few units in the last place cannot change any decision this solver makes, so what remains is not … | MODEL | 922 |
+396| Y1017 | §2.1 | Check 1 — one binary per platform and no cross-platform sessions, because a single compiled instruction … | DESIGN | 925 |
+397| Y1018 | §2.1 | The `../v2-drain/` DLL precedent is already Windows- and Steam-only, so the one-binary rule matches practice … | MODEL | 926 |
+398| Y1019 | §2.1 | Check 2 — no runtime CPU dispatch in the LP solver and single-threaded: this is the live risk, because … | DESIGN | 928 |
+399| Y1020 | §2.1 | Check 3 — §2.8's cross-implementation orientation check compares the DLL against the reference implementation … | DESIGN | 932 |
+400| Y1021 | §2.1 | Every trade number EU4 writes to a save is quantised to 1/1000: 495 of 495 sampled values land exactly on … | ENGINE | 936 |
+401| Y1022 | §2.1 | Quantisation of that kind erases any divergence below half a grid step, which is the standard cheap defence. | ENGINE | 938 |
+402| Y1023 | §2.1 | The files cannot settle whether the rounding happens in the simulation or only in the serialiser; that needs … | ENGINE | 939 |
+403| Y1024 | §2.1 | Quantisation would not rescue this solver either way: the orientation margins of 3.8e-8 to 7.5e-6 are three … | MODEL | 941 |
+404| Y436 | §2.1 | Until checks 1–3 are done, ship single-player only. | DESIGN | 945 |
+405| Y1025 | §2.1 | The reason for shipping single-player has changed: it is no longer "vertex selection is machine-dependent" … | MODEL | 945 |
+1173| Y1113 | §2.1 | The determinism fingerprint is one SHA-256 over `Φ_w` and all 29 per-good graphs, including sinks, sources, promotions, fallbacks and the Phase-2 objective. | MODEL | `fingerprint6.py` | 916 |
+1174| Y1114 | §2.1 | The smallest non-zero per-good `\|net\|` magnitude is 6.94e-06. | MEASURED | `round6.py` | 920 |
+=== §2.2 ===
+406| Y437 | §2.2 | Solver item 1 is a parser for `common/tradenodes/00_tradenodes.txt` reading adjacency, `members`, … | DESIGN | 951 |
+407| Y438 | §2.2 | Solver item 2 is a parser for non-ironman saves reading province owner, `base_tax`, `base_production`, trade … | DESIGN | 952 |
+408| Y439 | §2.2 | Solver item 3 is a parser for `common/defines.lua` merged with `common/defines/` overrides in load order. | DESIGN | 953 |
+409| Y440 | §2.2 | `GP_COEFF` is read from `common/static_modifiers/00_static_modifiers.txt` rather than hardcoded. | ENGINE | 959 |
+410| Y131 | §2.2 | World wealth is 10,607.40 annual ducats over 2,472 counted provinces. | MEASURED | 963 |
+411| Y441 | §2.2 | Solver item 5 is DRAIN per good: a min-cost b-flow using network simplex or a simplex LP rather than … | DESIGN | 964 |
+412| Y442 | §2.2 | The Phase-4 evaluator's `unserved` and `stranded` must be equal by conservation, since the sum of `b_g` over … | MODEL | 966 |
+413| Y443 | §2.2 | `Φ_w` is one more DRAIN run with wealth as the good — the 30th solve, same code path. | MODEL | 968 |
+414| Y444 | §2.2 | Solver item 6 is a survival table `S_g[n][H]` for AI scoring, one table serving every country. | DESIGN | 969 |
+415| Y445 | §2.2 | Solver item 7 is a mutual reachability census: 30 goods × 80 BFS producing an 80×80 matrix whose entry counts … | DESIGN | 970 |
+416| Y446 | §2.2 | Solver item 8 is a synthetic-shock harness that edits parsed province data and re-solves. | PROCESS | 971 |
+417| Y447 | §2.2 | Cost per good is one uncapacitated min-cost flow on 80 nodes and 318 arcs plus an O(V+E) sweep. | MODEL | 973 |
+418| Y133 | §2.2 | Repeated 12-run experiments on one machine do not reproduce each other closely enough to support anything … | MEASURED | 976 |
+419| Y134 | §2.2 | v5.0's "0.17–0.21 s for all 29 goods" is not reproducible: across three replicates of twelve runs the number … | MEASURED | 980 |
+420| Y448 | §2.2 | "Milliseconds each" holds already with a generic LP; the all-29 figure is what a native network simplex would … | DESIGN | 982 |
+421| Y449 | §2.2 | There are two implementations of one specification: the reference solver (standalone, run against parsed … | DESIGN | 987 |
+422| Y450 | §2.2 | The two implementations must agree on orientation exactly — a combinatorial comparison with no tolerance band … | DESIGN | 987 |
+423| Y451 | §2.2 | The parsers and the harness stay reference-only, and the DLL never reads a save. | PROCESS | 989 |
+424| Y452 | §2.2 | Inland is derived rather than trusted from the flag: a node with no coastal province among its `members`. | DESIGN | 991 |
+425| Y453 | §2.2 | The derivation and the flag disagree at exactly one node — `siberia` carries `inland=yes` but has two … | ENGINE | 992 |
+900| Y129 | §2.2 | Solver item 4 computes `TAX_COEFF · base_tax · (1 + province-state tax modifiers) + GP_COEFF · base_production · (1 + province-state goods modifiers) … | old: solver wealth formula carries `(1 + province-state tax modifiers)` on the tax term → new: `TAX_COEFF · base_tax + …` — "The tax term takes no modifier at all" | MODEL | unsourced (per §1.3) | 954 |
+901| Y130 | §2.2 | The only modifiers in scope are the five that describe the province's own condition, of which the reference implementation applies four; at 1444 … | old: five modifiers in scope, reference implementation applies four; at 1444 `devastation` live on eleven and `unrest` on twenty-one, not read → new: four modifiers in scope, all four reaching `goods_produced`; at 1444 only `devastation` is live, on eleven; `unrest` defined and not read | MEASURED | per §1.3 (`round6.py` there) | 956 |
+902| Y132 | §2.2 | Measured on the reference implementation (scipy/HiGHS plus the deterministic sweep, one machine): of order 0.1 s for all 29 goods, and single-digit … | old: "single-digit milliseconds per good on average" → new: "milliseconds rather than tens of milliseconds per good on average", with the withdrawal stated: two of the three replicates reach 10.5 and 10.8 ms, so "single-digit" is deliberately not claimed | MEASURED | named observation (the three 12-run replicates) | 975 |
+=== §2.2a ===
+426| Y454 | §2.2a | v2 called the target "map-agnostic" while proving its central properties only for the map it was measured on; … | MODEL | 997 |
+427| Y455 | §2.2a | Premise 1 is that the node graph is connected: reachability is LP feasibility, and the LP is feasible because … | MODEL | 1001 |
+428| Y456 | §2.2a | On a graph with more than one component the global balance is not enough — each component must balance … | MODEL | 1002 |
+429| Y457 | §2.2a | Vanilla 1444 is one component. | MEASURED | 1005 |
+430| Y458 | §2.2a | The solver must compute components once at load; on a single component it proceeds, and on more than one it … | DESIGN | 1007 |
+431| Y459 | §2.2a | The solver must not silently hand an infeasible program to the LP. | DESIGN | 1010 |
+432| Y460 | §2.2a | v1 carried per-component renormalisation and v2 dropped it without replacement; v3 restores the requirement. | PROCESS | 1011 |
+433| Y461 | §2.2a | Premise 2 is that Phase 0 is a no-op, or the map-dependent properties are read as measurements: several §1.1 … | MODEL | 1014 |
+434| Y462 | §2.2a | Where Phase 0 acts, three properties weaken and the spec says so rather than asserting through it. | DESIGN | 1016 |
+435| Y463 | §2.2a | Global DAG is proved on a 2-core map and still proved where Phase 0 acts, because pendant edges are bridges … | MODEL | 1021 |
+436| Y464 | §2.2a | Sink-set equality is measured exact 29/29 on a 2-core map and fails where Phase 0 acts, because a pendant … | MEASURED | 1022 |
+437| Y135 | §2.2a | Where Phase 0 acts, free-edge determinism is unaffected but index-independence is not: the key reads the … | MODEL | 1024 |
+438| Y466 | §2.2a | Two further cases are independent of Phase 0 and both break sink-set equality inside the 2-core: a selected … | MEASURED | 1026 |
+439| Y467 | §2.2a | The stated target is connected maps: on a connected map with minimum degree at least 2 every §1.1 property is … | DESIGN | 1031 |
+440| Y468 | §2.2a | On a connected map with pendants the algorithm still runs and still produces an acyclic, fully-oriented, … | MODEL | 1032 |
+441| Y469 | §2.2a | On a disconnected map the solver must renormalise per component or refuse. | DESIGN | 1034 |
+873| Y465 | §2.2a | Marking order reproduces the DAG on a 2-core map and fails where Phase 0 acts, because pendants have no marking order so `Φ_ord`-style order … | "`Φ_ord`-style order comparison is undefined on pendant edges" → "comparing nodes by marking order is undefined on pendant edges"; operator name dropped, same fact | MODEL | derivation | 1023 |
+=== §2.3 ===
+442| Y470 | §2.3 | Constants are read at runtime and never hardcoded. | DESIGN | 1039 |
+443| Y471 | §2.3 | The nine runtime-read uses map to named defines: `TRADE_PROPAGATE_DIVIDER`, `TRADE_PROPAGATE_THRESHOLD`, … | ENGINE | 1041 |
+444| Y472 | §2.3 | `TRADE_MERCHANT_PRESENT` is a bonus on income, not trade efficiency. | ENGINE | 1048 |
+445| Y136 | §2.3 | The two wealth coefficients are not the same kind of constant: the emitter reads `GP_COEFF` rather than … | DESIGN | 1053 |
+446| Y137 | §2.3 | v3.0 through v5.0 said neither coefficient was in a file, and shipped a whole-install modifier sweep that … | PROCESS | 1059 |
+447| Y473 | §2.3 | `GP_COEFF` is 0.2 goods produced per point of `base_production`, measured on four provinces at four … | ENGINE | 1065 |
+448| Y474 | §2.3 | `TAX_COEFF` is 1.0 ducat per year per point of `base_tax`, measured on two provinces at two development … | ENGINE | 1066 |
+449| Y475 | §2.3 | Both coefficients are read off the tooltips' base lines, which carry no owner term — Garnatah also has … | ENGINE | 1068 |
+450| Y476 | §2.3 | Neither coefficient is read off a province window, because a window figure carries the owner's modifiers and … | ENGINE | 1069 |
+451| Y477 | §2.3 | Prices come from `common/prices/00_prices.txt` at runtime and are never hardcoded. | ENGINE | 1070 |
+452| Y478 | §2.3 | The design constants are the excluded-goods list (defaulting to gold), the α price anchor `P₀ = 2.0`, the … | DESIGN | 1073 |
+453| Y479 | §2.3 | `α_Φ`, `TIE_EPS` and `TIE_EPS2` are hyperparameters whose values are developer taste, the document offers no … | MODEL | 1083 |
+454| Y339 | §2.3 | Changing any of the three hyperparameters is a design decision, and §1.6 records how the field responds … | DESIGN | 1086 |
+455| Y996 | §2.3 | `TIE_EPS` and `TIE_EPS2` together set the Phase-2 objective, `cost(u,v) = 1 + TIE_EPS·(w[u]+w[v])/2 + … | MODEL | 1091 |
+456| Y1026 | §2.3 | The two cost terms do different jobs and only the first means anything: the first-order term is the design … | DESIGN | 1102 |
+457| Y1027 | §2.3 | The second-order term is tie-breaking and nothing else; its form is arbitrary and no reading should be … | DESIGN | 1104 |
+458| Y998 | §2.3 | A single cost vector does not make every solve unique, because uniqueness of an LP optimum depends on `b` as … | MODEL | 1107 |
+459| Y1028 | §2.3 | Measured on zero-reduced-cost arcs outside the support: the aggregate `b_w` goes from 40 under unit costs to … | MEASURED | 1110 |
+460| Y1029 | §2.3 | Adding the second-order term takes the zero-reduced-cost arcs to 1 arc on 1 good. | MEASURED | 1112 |
+461| Y1030 | §2.3 | The solver's optimality tolerance is a correctness requirement rather than a performance knob, and HiGHS … | MODEL | 1125 |
+462| Y1053 | §2.3 | `scipy.optimize.linprog`'s `method="highs"` options document that default as `1e-07`, for both the dual and … | MODEL | 1126 |
+463| Y1031 | §2.3 | The margin by which the tie-break makes the optimum unique runs as low as 3.8e-8 on some per-good solves, so … | MEASURED | 1128 |
+464| Y1032 | §2.3 | Measured: over six permutations of the LP's column order, `copper` and `paper` returned orientations … | MEASURED | 1130 |
+465| Y1054 | §2.3 | The tolerance mechanism is confirmed rather than inferred, by bisecting the tolerance against `copper`. | MODEL | 1135 |
+466| Y1055 | §2.3 | Leaving the tolerance unset and setting it to 1e-7 give the same 8 flips over four permutations, which is … | MEASURED | 1135 |
+467| Y1056 | §2.3 | 1e-8 already gives 0 flips, and 1e-8 is the first value below `copper`'s 3.765e-8 margin. | MEASURED | 1137 |
+468| Y1057 | §2.3 | The flips therefore appear exactly when the tolerance exceeds the margin, which is the claim. | MODEL | 1137 |
+469| Y1033 | §2.3 | `flowop.LP_OPTS` ships 1e-10 — HiGHS's floor for these options, taken for headroom rather than necessity — … | MEASURED | 1139 |
+470| Y1034 | §2.3 | No figure in this document moved when the pinned tolerance went in: the shipped column order was already … | PROCESS | 1140 |
+471| Y1035 | §2.3 | What the second-order term costs: self-coherence with the per-good graphs falls 0.1–0.2 points and nothing … | MEASURED | 1144 |
+472| Y1036 | §2.3 | What the second-order term buys is replacing a tiebreak that was arbitrary and order-dependent — the node … | DESIGN | 1146 |
+473| Y1037 | §2.3 | The normalisation of `w` is load-bearing per good and that is a cost of the second-order term: for the … | MODEL | 1156 |
+474| Y997 | §2.3 | Every DRAIN solve uses this cost, per good as well as aggregate, and since `w` is node wealth the same cost … | MODEL | 1177 |
+475| Y483 | §2.3 | DLC state is a third input axis: treasure-fleet diversion and caravan power are both DLC-conditional, and … | ENGINE | 1182 |
+874| Y1039 | §2.3 | The choice of normalisation is a third arbitrary decision with an observable consequence where before it was free; min-max is what the implementation … | "It is recorded here rather than defended" → "The choice is recorded rather than defended"; same stipulation and same expectation for implementers | DESIGN | unsourced | 1174 |
+903| Y480 | §2.3 | DRAIN's three knobs sit at their defaults: demand-mass quantile `ρ = 1.0`, cluster dilation `r = 0`, and the zero-flow tolerance `1e-11`. | old: DRAIN's three knobs at defaults — `ρ = 1.0`, `r = 0`, zero-flow tolerance 1e-11 → new: two knobs — `r = 0` and the 1e-11 tolerance; `ρ` withdrawn as never shipped | MODEL | unsourced | 1076 |
+904| Y481 | §2.3 | The zero-flow tolerance is not purely numerical: it is an absolute threshold, so it couples to the scale of `b`. | old: the tolerance is "not purely numerical: it is an absolute threshold, so it couples to the scale of `b`. See §1.6's scale-invariance note and §3.13" (open) → new: "an absolute threshold rather than a relative one; §3.13 records why that is settled rather than open" | MODEL | derivation | 1077 |
+905| Y482 | §2.3 | A measured calibration option that moves all three knobs plus α's clamp is recorded in §3.13, and the baseline does not use it. | old: a measured calibration option "moves all three [knobs] plus α's clamp" → new: the option "replaces Phase 1, moves the zero-flow tolerance and removes α's clamp"; still recorded in §3.13, still not used by the baseline | DESIGN | unsourced | 1080 |
+906| Y999 | §2.3 | A structured second term does not do this: `+ TIE_EPS²·abs(w[u] − w[v])` was tried and rejected, because it makes all 159 arc costs distinct where … | old: the structured term makes all 159 arc costs distinct where the shipped cost leaves 3 pairs equal, and leaves 72 of 232 per-good supports moving → new: BOTH costs make all 159 edge costs distinct (the 3-pairs-equal claim gone); the structured term leaves 11 of 29 goods admitting an alternative optimum against the shipped term's 1 (`paper`). "Genericity, not distinctness" retained | MEASURED | `round6.py` | 1116 |
+907| Y1038 | §2.3 | Measured across the three normalisations — maximum, mean and world total — the aggregate `Φ_w` is unchanged, 0 of 159 edges differing, but 5 of the … | old: across the three normalisations the aggregate `Φ_w` is unchanged (0 of 159 edges) and 5 of 29 per-good graphs differ → new: dividing by the world total moves the aggregate by 7 of 159 edges, and 13 of 29 per-good graphs move under at least one candidate | MEASURED | `round6.py` | 1160 |
+1175| Y1115 | §2.3 | `\|w[u] − w[v]\|` telescopes: summed along a path it collapses to a function of the endpoints, so two routings between the same endpoints can still total the same and the term cancels exactly where a tie needs breaking; `frac(lo·hi·7919)` has no such structure, and that is the whole of its job. | MODEL | derivation | 1117 |
+1176| Y1116 | §2.3 | `w/mean` and `N·w/sum` are algebraically the same vector, and on this field min-max and `w/max` are too, so a sweep over five normalisations is a sweep over three. | MODEL | derivation | 1165 |
+1177| Y1117 | §2.3 | `cape_of_good_hope` holds no counted province at all: its 20 members are one sea zone and nineteen land provinces, none of them owned at 1444, and §1.3 counts only owned provinces. | ENGINE | named observation (the map files and the 1444 save, via §1.3's counting rule) | 1167 |
+1178| Y1118 | §2.3 | A re-measuring probe must inherit `flowop.LP_OPTS`: without the pinned tolerance the same sweep undercounts — under `w/mean` it returns 5 goods against the pinned 9, and the 5 are a strict subset of the 9. | MEASURED | `round6.py` | 1169 |
+=== §2.4 ===
+476| Y484 | §2.4 | The tradenodes file is generated once from the campaign start date's `Φ_w` and then owned by the DLL in … | DESIGN | 1186 |
+477| Y485 | §2.4 | The engine performs no topological sort; it validates that the file is one, logging … | ENGINE | 1188 |
+478| Y486 | §2.4 | Measured: a file with all 159 links declared backwards logged exactly 159 such errors and then loaded and … | ENGINE | 1191 |
+479| Y487 | §2.4 | What the engine does not tolerate is a cycle: a hand-authored two-node cycle produced … | ENGINE | 1195 |
+480| Y488 | §2.4 | The crash dump records no per-frame addresses. | ENGINE | 1197 |
+481| Y489 | §2.4 | Acyclicity is therefore a hard correctness requirement of the emitter, established by observation rather than … | DESIGN | 1198 |
+482| Y490 | §2.4 | A reversed link is honoured completely: moving one `outgoing` block from `sevilla` to `valencia` with the … | ENGINE | 1202 |
+483| Y491 | §2.4 | In that test Valencia moved from Sevilla's outgoing side to its incoming side, Sevilla became an end node … | ENGINE | 1204 |
+484| Y492 | §2.4 | Every provincial power figure was unchanged in that test. | ENGINE | 1207 |
+485| Y493 | §2.4 | That test is the mod's core premise verified end to end. | DESIGN | 1208 |
+486| Y494 | §2.4 | Item 1: emit in decreasing `Φ_w` marking order, which is the convention the engine states and the shipped … | ENGINE | 1210 |
+487| Y138 | §2.4 | A canonical node order is still a correctness requirement but is no longer what decides the installed map: … | DESIGN | 1212 |
+488| Y495 | §2.4 | Phase 2's min-cost b-flow is degenerate under unit arc costs: many distinct supports carry the same optimal … | MODEL | 1216 |
+489| Y139 | §2.4 | Measured on that objective, 40 of 40 permutations return a different optimal support. | MEASURED | 1218 |
+490| Y140 | §2.4 | Those permutations reach an objective identical to within a few units in the last place. | MODEL | 1218 |
+491| Y147 | §2.4 | §2.3 now breaks those ties inside the objective. | MODEL | 1219 |
+492| Y141 | §2.4 | On the same LP under the tie-break cost 0 of 40 permutations return a different support, and running the … | MEASURED | 1220 |
+493| Y143 | §2.4 | The tie-break cost is built from good-independent node wealth so it applies to every per-good solve, but it … | MEASURED | 1226 |
+494| Y146 | §2.4 | The counts are HiGHS-specific in their detail but not in kind: any simplex returns a vertex of a degenerate … | MODEL | 1238 |
+495| Y144 | §2.4 | v6.0 quoted a 580-of-580 per-good sweep from `../v5-owner-agnostic/scripts/_audit_b_1444perm.py`; that script … | MEASURED | 1240 |
+496| Y148 | §2.4 | §1.1's priority key ties in more places than §1.1 documents — besides the free-edge sweep it decides Phase … | MEASURED | 1245 |
+497| Y496 | §2.4 | One visible consequence of node order: the node window renders its incoming/outgoing link lists in file … | ENGINE | 1250 |
+498| Y497 | §2.4 | Item 2: `end=yes` on every `Φ_w` sink, stripped from any former end node that gains outgoing links. | DESIGN | 1253 |
+499| Y149 | §2.4 | The end-flag list is a function of the world rather than of the node order: across the 180 relabellings of … | DESIGN | 1253 |
+500| Y150 | §2.4 | 1444 has two end nodes, `genua` and `hangzhou`, against vanilla's three. | MEASURED | 1256 |
+501| Y498 | §2.4 | The end count is not fixed — it follows the wealth field and `α_Φ` — so the emitter reads it from the solve … | DESIGN | 1257 |
+502| Y499 | §2.4 | Item 3: link reversal means moving the `outgoing` block, reversing the `path` province list and reversing the … | DESIGN | 1260 |
+503| Y500 | §2.4 | Item 4: `location`, `members`, `inland=yes`, `ai_will_propagate_through_trade` and unrecognized keys … | DESIGN | 1261 |

@@ -1,0 +1,5 @@
+first-order only             aggregate zero-rc off support: 0    ; goods with alternative optimum 18 of 29  ['chinaware', 'cloth', 'cocoa', 'copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'incense', 'naval_supplies', 'paper', 'salt', 'silk', 'spices', 'tropical_wood', 'wine', 'wool']
+TIE_EPS2 = 1e-7              aggregate zero-rc off support: 0    ; goods with alternative optimum  1 of 29  ['paper']
+TIE_EPS2 = 1e-6 (shipped)    aggregate zero-rc off support: 0    ; goods with alternative optimum  1 of 29  ['paper']
+TIE_EPS2 = 1e-5              aggregate zero-rc off support: 0    ; goods with alternative optimum  1 of 29  ['paper']
+unit cost                    aggregate zero-rc off support: 40   ; goods with alternative optimum 29 of 29  ['chinaware', 'cloth', 'cloves', 'cocoa', 'coffee', 'copper', 'cotton', 'dyes', 'fish', 'fur', 'gems', 'glass', 'grain', 'incense', 'iron', 'ivory', 'livestock', 'naval_supplies', 'paper', 'salt', 'silk', 'slaves', 'spices', 'sugar', 'tea', 'tobacco', 'tropical_wood', 'wine', 'wool']

@@ -1,0 +1,20 @@
+217| Y305 | §1.5 | Gold is excluded by configuration. | MODEL | 457 |
+218| Y306 | §1.5 | Gold-mine income is its own income category in the engine (`INCOMEGOLD`, `gold_income` as a distinct … | ENGINE | 457 |
+219| Y307 | §1.5 | Under owner-agnostic wealth the exclusion is stronger still: `wealth(p)` is built from `base_tax`, … | MODEL | 460 |
+220| Y308 | §1.5 | Gold is inert in vanilla trade value (`base_price = 0`, `goldtype = yes`), so the exclusion costs nothing. | ENGINE | 463 |
+221| Y310 | §1.5 | Any good with zero world production this month has no graph, because `s(n,g)` is undefined when nothing … | MODEL | 469 |
+222| Y311 | §1.5 | A latent good acquires graph, value weight and survival-table entry on the first month any province produces … | MODEL | 471 |
+223| Y312 | §1.5 | Activation is not a local addition: a province produces exactly one trade good at a time, so a latent good … | ENGINE | 473 |
+224| Y313 | §1.5 | In the month of conversion the new good gains a producer and the old good loses one, so both goods' supply … | MODEL | 477 |
+225| Y314 | §1.5 | The converting province is repriced, so `wealth(p)` changes and with it `c(n,g)` for every good in the game, … | MODEL | 479 |
+226| Y315 | §1.5 | `V_g` moves for both goods, reweighting every display, link value and AI score. | MODEL | 482 |
+227| Y316 | §1.5 | `Φ_w` moves on activation, because §1.6 runs DRAIN on that same wealth field. | MODEL | 483 |
+228| Y317 | §1.5 | An activation is a world-state change on the scale of a development change or a conquest, and every graph in … | DESIGN | 485 |
+229| Y076 | §1.5 | Repricing to coal the 45 latent-coal provinces that are owned at 1444 flips 16 of 159 `Φ_w` edges and adds … | MEASURED | 486 |
+230| Y077 | §1.5 | The counterfactual holds every non-repriced input fixed: province 4237 is both latent-coal and one of the … | MEASURED | 488 |
+231| Y318 | §1.5 | Coal's base price of 10.0 is the highest in the shipped price table. | ENGINE | 492 |
+232| Y320 | §1.5 | Coal produces nowhere at the 1444 start. | ENGINE | 500 |
+233| Y321 | §1.5 | Coal's default trigger fires on Enlightenment (the Manufactories branches require special flags), per … | ENGINE | 500 |
+234| Y322 | §1.5 | The 58 latent-coal provinces convert province-by-province over years rather than in a single tick, so the … | ENGINE | 503 |
+868| Y309 | §1.5 | Whether the per-province production-income field nevertheless carries the gold figure before the country-level split is still unknown, and is moot … | "it is also moot" → "it does not matter"; same proposition | MODEL | unsourced | 466 |
+869| Y319 | §1.5 | v2.1 held that a latent good leaves `Φ_w` unaffected because "`Φ_w` reads wealth, not goods"; that was true under v2.0's `Φ_ord`, where `V_g = 0` … | "true under v2.0's `Φ_ord`, where `V_g = 0` gave a latent good zero weight" → "held under v2.0's aggregate, which weighted each good by `V_g` and so gave a latent good none"; the operator name dropped, same mechanism | MODEL | derivation | 495 |

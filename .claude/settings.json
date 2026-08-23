@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\rdavi\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV\\mod\\per-good-trade\\.claude\\hooks\\agent_guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

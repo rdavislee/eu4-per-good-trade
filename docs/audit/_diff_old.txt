@@ -1,0 +1,715 @@
+######## GROUP 1  (v6 lines 3..)
+---------- V5 OLD:
+**Version:** 5.0
+**Status:** Living document
+**Target:** EU4 1.37.5 Inca. Extended-timeline compatible. **Connected maps only** — see §2.2.
+**Lineage:** supersedes v1.3 (`../v1-laplacian/`). v1 oriented each good by a Laplacian
+potential; its sink placement was shown to be topological rather than economic
+(`../v1-laplacian/diagnosis.md`), and after a four-operator bake-off the orientation core was
+replaced by the DRAIN algorithm (`drain-orientation.md`). Every claim-audit correction from
+`../v1-laplacian/validation.md` settleable from files is folded in here. **v2.1** replaces the
+installed aggregate: `Φ_ord` (the value-weighted marking order) gives way to **`Φ_w`**, DRAIN run
+once more with wealth itself as the good (§1.6, §3.9).
+
+**v5.0** keeps the owner-agnostic wealth of v3.0 — a property of the place, not of who holds it:
+no autonomy, no production efficiency, no ideas, no owner modifiers (§1.3, §3.3) — and folds through
+every refuted and partial claim from all four audits to date, including v4.0's own. Its substantive
+change is to §1.3: **the local-modifier classification is applied to the whole install rather than
+to the trade-good tables alone**, which adds sixteen provinces and moves the aggregate graph from
+two 1444 sinks to one (§1.6). Deleted text is quoted in `changes-v5.md`. Every measured number
+carries the script that produced it; **no figure in v5.0 is unverified**, and the one place the
+document declines to project a number says so in place.
+
+######## GROUP 2  (v6 lines 77..)
+---------- V5 OLD:
+**Phase 3 — gated drainage sweep.** Mark nodes Kahn-style: a node is *ready* when every flow
+out-neighbour is already marked and it is a selected sink, has a flow out-arc, or has a free edge
+to a marked node. Among ready nodes, pop by the deterministic priority key
+**(DEF ascending, b ascending, index)**, where `DEF(v)` is total downstream demand on the
+flow-arc subgraph (acyclic and fixed before any free edge, so no circularity). On a stall, promote
+the heaviest flow-terminal demander among the candidates into the sink set — the self-correction
+that supplies the real sink count. If the candidates hold no flow-terminal demander at all, promote
+the **highest-wealth** candidate instead, ties by index: that is the **fallback** branch, and node
+wealth is a good-independent input so it needs no bootstrap. (*Candidates* at a stall are the
+unmarked nodes whose flow out-neighbours are all marked; the flow subgraph is acyclic, so at least
+one always exists and the sweep always advances.) **Where this branch is reachable, and what decides
+there.** A candidate carrying any flow out-arc is already *ready*, and a candidate with inflow is a
+flow-terminal demander, so the fallback fires only when every candidate is support-isolated with
+zero balance — on a connected core, only when `b ≡ 0` across it. That happens for the aggregate
+graph on a uniform-wealth map, and for a per-good graph on a component with no producer and no
+consumer. In those cases the candidates are usually all *zero-wealth*, the wealth key ties, and the
+**index decides** — which is why §2.4 item 1 makes a canonical emitter node order a correctness
+requirement rather than a convention, and why §2.8 asserts containment over a set that includes the
+fallbacks. Free
+edges then orient from later-marked to earlier-marked.
+
+######## GROUP 3  (v6 lines 103..)
+---------- V5 OLD:
+Properties, all stated as checkable claims and **measured where measurement applies**
+(`drain-orientation.md`; regenerated for v5.0 by `v5measure.py`). Where a property is proved for
+any input the proof is named; where it is only measured, it says so and names the premise that
+would be needed; and where it follows from the construction so directly that no measurement could
+confirm or refute it, it carries none and says that too. **The three are never allowed to stand
+for each other** — that discipline is what caught four over-claims between v2.0 and v3.0.
+
+- **Global DAG.** Every arc points from later-marked to earlier-marked, so reversed marking order
+  is a topological order; pendant edges are bridges and cannot close a cycle. Measured: acyclic
+  29/29 goods.
+- **Sink placement is explicit.** Every sink is either a selected demand centre that turned out
+  flow-terminal, a stall-promoted flow-terminal demander, a fallback-promoted highest-wealth node,
+  or a Phase-0 pendant that absorbed a net-importing subtree. On a map where Phase 0 is a no-op and
+  no fallback fires, the last two cases are empty and the sink set is exactly
+  `{selected ∩ flow-terminal} ∪ {promoted}` — measured exact, 29/29 goods on 1444, 1–7 sinks per
+  good, mean 3.6, zero fallbacks. **That equality is not a theorem in general**, and v2 asserted it
+  as one. Three constructed cases break it: a pendant net-importing leaf is a sink outside the set
+  (**T1**); inside the 2-core a selected flow-terminal demander can be handed an out-arc by a free
+  edge to an earlier-marked node and cease to be a sink (**T2**); and a fallback promotion is a sink
+  that is neither selected nor stall-promoted (**T3**). All three are worked in §3.2. A node with no
+  outgoing links for `g` is a **sink** for `g`; sinks differ per good; there is no global end node.
+- **Reachability is a feasibility theorem on a connected map.** The orientation contains a flow
+  serving 100% of every good's demand, because the LP imposes node balance and `Σ_n b_g(n) = 0`
+  identically (both `s` and `c` are world shares). The premise that makes the LP *feasible* is
+  connectedness: on a disconnected map the balance must hold per component, and share
+  normalisation does not deliver that — a two-component graph with cross-component imbalance is
+  infeasible outright. §2.2 states the connectedness requirement and what the solver does when it
+  is violated. Measured on 1444, which is one component: 100.0% of demand reachable from supply,
+  29/29 goods, zero orphan sinks.
+- **Scan-invariance.** Ready-marking is a monotone closure, so the stall sequence and both
+  promotion branches are provably independent of scheduling — each reads only the candidate set,
+  which the closure fixes. Free-edge direction is **deterministic** for the same reason plus the
+  priority key's index tiebreak. That it is a function of the graph and the balances *alone* — that
+  the node indexing never decides — is **measured, not proved**: it holds exactly where the key has
+  no exact ties. Measured: zero orientation changes under scheduler permutations, and zero exact
+  `(DEF, b)` ties on free edges, 29/29 goods.
+- **Efficiency.** Unit costs make the certificate flow a fewest-hop routing in aggregate — the
+  objective *is* `Σ (flow × hops)`, so the optimum minimises total flow-hops. No per-unit
+  shortest-path claim is made, and none holds: a unit may detour when sink assignment demands it.
+  **This one carries no measurement and wants none:** it is true by construction of the LP, and
+  any hop count we produced would be re-deriving the objective rather than testing it. The §3.13
+  calibration deliberately degrades it, which is a change to the program being solved, not
+  evidence about this property.
+
+######## GROUP 4  (v6 lines 170..)
+---------- V5 OLD:
+**Wealth is owner-agnostic.** It is a property of the *place* — what the land is worth per year,
+before anyone's government touches it. No autonomy, no production efficiency, no national ideas,
+no estate or government modifiers, no technology. Two provinces with the same terrain, development
+and trade good have the same wealth whoever owns them, and a province's wealth does not change
+when it is conquered.
+
+```
+goods_produced(p)   = GP_COEFF · base_production(p) · (1 + Σ local goods-produced modifiers)
+                                                             # + local flat goods bonuses
+trade_value(p)      = goods_produced(p) · price(good(p)) · (1 + Σ local trade-value modifiers)
+                                                             # ducats / YEAR
+tax_value(p)        = TAX_COEFF · base_tax(p) · (1 + Σ local tax modifiers)   # ducats / YEAR
+wealth(p)           = tax_value(p) + trade_value(p)          # ducats / YEAR
+
+######## GROUP 5  (v6 lines 201..)
+---------- V5 OLD:
+**The two terms share a time basis and are safe to add.** The engine's own province tooltips give
+both as *annual* quantities divided by twelve for display. The tax tooltip reads
+`Base: X (Yearly 12·X)` — `Base: 0.49 (Yearly 6.00)` at `base_tax` 6, `Base: 0.16 (Yearly 2.00)` at
+`base_tax` 2. The monthly production tooltip's `Trade Value` line is the province window's *annual*
+`Trade Value` over twelve — observed 3.52 → `Trade Value: +0.29`. Both monthly figures are the
+annual value over twelve, so the annual forms add directly with no conversion.
+
+######## GROUP 6  (v6 lines 220..)
+---------- V5 OLD:
+**Modifiers apply after the coefficient, not before.** The engine computes the base from
+development first and then applies a percentage — `Base 0.49` then `Tax Income Efficiency 125.0%`,
+giving 0.6125, which the province window shows as 0.62. Flat goods bonuses are the exception: they
+add into `goods_produced` *before* the price multiply. The goods-produced tooltip's shape is
+**consistent with** that and does not establish it — it carries an additive `Base Goods Produced`
+block (`Base Production: +0.80`) above a separate multiplicative `Goods Produced Efficiency` block.
+Fifteen 1444 provinces do carry a flat bonus in the first block (the table above), so the ordering
+matters in practice and not only in principle.
+
+**Which modifiers are local, and which of those enter wealth.** Two tests, and a modifier must pass
+both. It is **local** iff its value depends only on the province's own attributes — terrain,
+climate, trade good, development, buildings — and on no country's state. It **enters wealth** iff it
+modifies a quantity `wealth` computes: `goods_produced`, `price`, or `tax_value`. The engine's
+trade-good data model is one *instance* of the first test and not the test itself — a good's
+`province = { … }` block is province-scoped and its `modifier = { … }` block is country-scoped, so
+only the first can be local — because modifiers also reach a province from outside the trade-good
+tables, and those are classified by the test rather than by which file they live in.
+
+**The tests are applied to the whole install, not to one file.** v4.0 stated this rule and then
+swept only `common/tradegoods/`, which is the mistake the rule exists to prevent: it concluded
+"exactly two" and missed sixteen provinces. Applied to everything live on a 1444 province with no
+owner input:
+
+| Source | Local? | Enters wealth? |
+|---|---|---|
+| `gems` `local_tax_modifier = 0.15` (43 provinces) | yes, set by the province's good | **yes** — `tax_value` |
+| `incense` `trade_value_modifier = 0.1` (29 provinces) | yes, set by the province's good | **yes** — `trade_value` |
+| **Great-project `province_modifiers`** where `can_use_modifiers_trigger` is empty (6 provinces) | yes, the project is on the province | **yes** — `goods_produced` and `trade_value` |
+| **`add_permanent_province_modifier` in the undated province-history block** (10 provinces) | yes, applied to the place at the start date | **yes** — `goods_produced` |
+| `devastation` −2, `occupied` −0.5 and −0.5, `under_siege` −0.25, `prosperity` +0.25 (static modifiers) | yes, all are province state | **yes** — `goods_produced` and `tax_value`; all are zero at the 1444 start, and §1.2 and §3.3 both depend on them biting later |
+| `glass` `local_production_efficiency = 0.1` | yes, set by the province's good | no — modifies production *income*, which wealth does not compute |
+| `chinaware` `local_autonomy = -0.1` | yes, set by the province's good | no — modifies local autonomy, which wealth does not compute |
+| **Centers of trade** (361 provinces carry one at 1444) | yes, CoT level is province state | no — no CoT level in `common/centers_of_trade/` grants any of the four keys wealth reads. A clean near-miss, recorded so it is not reopened |
+| `production_leader` `trade_goods_size_modifier = 0.10` | **no** — which country leads a good's production is a country's state | — |
+| goods-produced efficiency from nearby merchant republics, trading cities and trade companies (`bonus_from_merchant_republics`, `eu4.exe:0x1cc7128`) | **no** — set by which *neighbouring countries* hold those government forms | — |
+| the owner's `global_trade_goods_size_modifier` (e.g. the `Industrious` ruler personality, +10%) | no — country-scoped | — |
+| Buildings | yes by the test, and empty at 1444 — no province's start state carries a temple, workshop or manufactory | would be, if any existed |
+| `terrain.txt` and the climate static modifiers | yes | no — they grant `allowed_num_of_buildings`, `defence`, `local_defensiveness`, `local_development_cost`, `movement_cost`, `nation_designer_cost_multiplier`, `supply_limit`, colonial growth and hostile attrition, none of which wealth computes |
+
+**Great projects, in scope.** A project contributes the `province_modifiers` accumulated up to its
+`starting_tier` when its `can_use_modifiers_trigger` is empty. Tiers reached after the start date
+are owner spending and are out; so is any project whose trigger tests a country's culture, religion,
+government or flags — 85 of the 130 live at 1444 are gated that way. That leaves six carrying a key
+wealth reads: `falun_copper_mine` (province 8, `trade_goods_size` 3.0), `krakow_cloth_hall` (262,
+`trade_goods_size_modifier` 0.10) and the four Grand Canal provinces (684, 1821, 1822, 2145;
+`trade_goods_size` 0.5 and `trade_value_modifier` 0.1 each). Province 1821 is the richest single
+province in the game. *The tier is the right line and "owner action" is not: development is an owner
+action, so a rule excluding those would exclude `base_production`, which is wealth's primary input.*
+
+**The ten permanent modifiers** are `granary_of_the_mediterranean` (362, 363, 2316, 4316),
+`skanemarket` (6), `icelanding_fisher_sea` (370, 371), `diamond_mines_of_golconda_modifier` (542),
+`jingdezhen_kilns` (2151) and `coffea_arabica_modifier` (387), all flat `trade_goods_size`.
+
+**These figures are conditional on the DLC set.** `province_triggered_modifiers`'
+`stora_kopparberget_modifier` is gated `NOT = { has_dlc = "Leviathan" }` and grants
+`trade_goods_size = 5.0` on province 8 — the same province as `falun_copper_mine`. With Leviathan
+the project applies and gives 3.0; without it the project does not exist and the modifier gives 5.0.
+Every wealth figure in this document was measured with **Leviathan installed**, which is why §2.3
+makes DLC state a third input axis rather than a footnote.
+
+The two rows that are local but do not enter — glass and chinaware — are the whole of the
+rule-versus-vocabulary tension: §1.3 excludes production efficiency and autonomy by name, and the
+second test excludes them again for the same reason, so there is nothing left to decide.
+
+######## GROUP 7  (v6 lines 278..)
+---------- V5 OLD:
+`Core` (+75%) and `City` (+25%) are the two that are **not** excluded, because they are already
+inside `TAX_COEFF`. The engine's tax multiplier is the sum of the itemised percentages — Garnatah's
+`Tax Income Efficiency: 125.0%` is 75 + 25 + 5 + 5 + 15 and multiplies the base by 1.25; Caceres's
+`105.0%` is 75 + 25 + 5 and multiplies by 1.05 — so a cored city province carrying nothing else sums
+to exactly 0.75 + 0.25 = 1.00 and yields `base_tax` ducats a year. That is the reference condition
+`TAX_COEFF = 1.0` was measured at, and it is the same for every province the model counts: all of
+them are cities (`is_city = yes`), and ownership is not modelled, so every one is treated as cored.
+Carrying either term again would double-count it.
+
+Unowned provinces are outside the model: `s` and `c` are computed over provinces with an owner and
+`is_city = yes`, because an unowned province produces nothing the trade system can move.
+
+**What this buys.** Demand stops responding to who rules and starts responding only to what is
+there. A conquest no longer moves the demand vector on the day it happens — only development,
+trade goods and prices do. It also removes the single largest source of hidden owner-dependence
+from the aggregate graph (§1.6), which is built from this same wealth field.
+
+######## GROUP 8  (v6 lines 339..)
+---------- V5 OLD:
+So an activation is a world-state change on the scale of a development change or a conquest, and
+every graph in the model is entitled to move on it. Measured: repricing to coal the **45** of the
+latent-coal provinces that are owned at 1444 — §1.3 counts only owned provinces — flips **29 of
+159 `Φ_w` edges** (`v5measure.py`). Coal's base price of 10.0 is the highest in vanilla, so this is
+near the upper end of what one good's activation can do. *(v2.1 held that a latent good leaves
+`Φ_w` unaffected because "`Φ_w` reads wealth, not goods". `Φ_w` does read wealth — and wealth reads
+the province's trade good and its price, which is exactly what activation changes. The proposition
+was true under v2.0's `Φ_ord`, where `V_g = 0` gave a latent good zero weight, and became false
+with the operator change.)*
+
+######## GROUP 9  (v6 lines 369..)
+---------- V5 OLD:
+**`Φ_w` is the graph installed in the game.** It is the §1.1 operator run once more with wealth
+itself as the good: every node supplies uniformly, rich nodes are net demanders, so all wealth in
+the world pulls edges toward itself — arrows point from wealthy nodes toward the wealthiest — and
+the sinks are wherever the wealth flow terminates. **Their count is set by `α_Φ`; only their
+locations are emergent.** v2.0 through v4.0 said the count "emerges from concentration exactly as
+per-good sink counts do" — it does not: `α_Φ` is a stipulated constant, the count is a step function
+of it (the band table below), and v2.1 chose the value with a target count in view — a calibration
+§2.3 now withdraws, since the ground on which 1.5 is *retained* is the band table and not that
+target. What the world
+state moves is *where* the sinks are and *how the map drains toward them*, which is the property
+§3.1's first goal actually asks for.
+
+**Scale.** In exact arithmetic only the sign pattern and proportions of `b_w` matter: Phase 0
+reads signs, Phase 1's HHI is built from mass *shares*, the LP optimum scales linearly with
+identical net-flow signs, and the priority key is order-isomorphic under positive scaling. The
+implementation adds one premise — the zero-flow tolerance is **absolute** (`1e-11`, §2.3), so
+scaling `b` *down* pushes genuine flow arcs into the free set. Measured: identical orientation at
+×1 and above, 16 edge flips at ×10⁻², and 83 at ×10⁻⁶ — the orientation degrades while the sink
+set happens to survive, so the sink set is not the quantity to watch here.
+Normalising into (−1, 1) scales 1444's `b_w` *up* (its largest magnitude is 0.0227) and is safe;
+scaling down is not. Either scale `b` up, or scale the tolerance with it.
+
+Measured on 1444 data at α_Φ = 1.5 (`v5measure.py`): **one sink, `hangzhou`** — rank 1 in the
+α_Φ-weighted wealth field `c_w`, and rank 10 in raw node wealth, where `english_channel` is 1st.
+*(v2 through v4 reported two sinks. That result was measured on a wealth field missing the sixteen
+provinces §1.3 now carries; correcting the field removes it. v2 also wrote "wealth ranks" without
+saying which, and the plain reading was wrong then too.)* Phase 1 selects `hangzhou` directly, so
+there are **0 promotions and 0 fallbacks** — the self-correction never fires on this input. **Seven
+sources** — `kongo`, `patagonia`, `james_bay`, `mississippi_river`, `chengdu`, `australia`, `tunis`
+— all in the bottom half of the wealth field (`c_w` ranks 52–79, mean degree 3.0 against the map's
+4.0; v2 called them "cul-de-sacs", which their degrees do not support). Every node drains to the
+sink; acyclic, 159/159 oriented; **0 edge flips and 0 sink-set changes under ±1% wealth noise across
+5 seeds**. Its marking order is a per-node scalar whose descending comparison reproduces the DAG
+(0 violations), so every consumer needing a potential still gets one.
+
+Agreement with the per-good graphs is **52.5%** of edge-goods (51.5% value-weighted) against the
+superseded `Φ_ord`'s **60.3%** — a gap of 7.8 points. v2's 62.7% was measured under the *old
+scan-order sweep* and was never regenerated after §3.6 adopted the deterministic one. That trade is
+recorded in §3.9.
+
+**The sink count is a step function of `α_Φ`.** Measured across α_Φ = 1.00…3.00 at 0.01:
+
+| sinks | α_Φ band | width |
+|---|---|---|
+| 1 — `hangzhou` | **[1.43, 1.93]** | **0.50** — the widest band on this field, and the one α_Φ = 1.5 sits in |
+| 3 — `doab`, `genua`, `hangzhou` | [2.26, 2.71] | 0.45 |
+| 2 — `genua`, `hangzhou` | [1.94, 2.25] | 0.31 |
+| 2 — `english_channel`, `hangzhou` | [1.41, 1.42] | 0.01 |
+
+The last row is v4.0's result and it is **not a band**. Refined to 0.001 it spans [1.406, 1.424] —
+**0.018 wide**, against the one-sink band's 0.506 — and under ±1% wealth noise across 8 seeds its
+edges move by up to 0.02 while its width ranges **0.00 to 0.03**: the window is the same size as the
+noise that perturbs it, and on some seeds it collapses to a single sampled α. The three wide bands
+over those same seeds keep widths of 0.28–0.51 with edges moving ≤0.03. A constant cannot honestly
+be placed inside a window narrower than the uncertainty in its own edges. *(An earlier draft of this
+paragraph said the window "moves or disappears entirely" under noise. At 8 seeds it disappears on
+none of them — it shrinks. The weaker claim is the true one and it is sufficient.)* `α_Φ` is **retained at 1.5** because it sits inside the widest band and
+nothing now selects a different value — not because it was derived (§2.3). Sampled at the six values
+v2 used, the count is non-monotone: **5 → 1 → 2 → 4 → 3 → 1** across α_Φ ∈ {1, 1.5, 2, 3, 4, 8}.
+
+**One sink at 1444 is a snapshot, not a fixed feature, and the map says so under load.** Holding
+α_Φ = 1.5 and moving nothing else (`europe.py`):
+
+- **A 1–2% European development edge produces a European sink.** At ×1.02 across Europe's 823
+  counted provinces the sinks are `{doab, english_channel, hangzhou, wien}`; `english_channel` is a
+  sink at every larger factor tested. At ×1.56 the sinks are `{english_channel, rheinland}` and Asia
+  holds none. **What the model claims here is the threshold, not the size of the historical edge**:
+  2% is enough, and the project measures nothing about how much development Europe actually gained.
+  What the files do settle (`common/institutions/00_Core.txt`) is that all three institutions the
+  period is named for begin **in Europe, inside this window** — Renaissance `1450.1.1` at Florence
+  (province 116), Colonialism `1500.1.1` at Sevilla (224), Printing Press `1550.1.1` at Frankfurt
+  (1876) — and that the Renaissance's embracement bonus is `development_cost = -0.05`, a standing
+  5% discount on every subsequent development point. Those bonuses are **country-scoped and so are
+  excluded from wealth by §1.3**; they reach the map only by changing how fast a province's
+  development grows, which is the input `europe.py` scales directly.
+- **The Lowlands alone suffice.** Developing only the nine Lowland provinces in `english_channel`
+  (Holland, Zeeland, Vlaanderen, Brabant, Antwerpen, Utrecht, Gelre, Friesland, Breda) by ×1.20
+  makes `english_channel` a sink beside `hangzhou`, and it stays one through ×10.
+- **Robust to noise, responsive to growth.** ±2% *random* wealth noise leaves the 1444 sink set
+  unchanged on three seeds; **+2% applied systematically to Europe alone changes it**. The map does
+  not twitch, and it does move.
+
+**And the 1444 map draws the pre-Columbian trade geography unprompted.** The route from Europe to
+the sink is the Silk Road: `genua → alexandria → aleppo → persia → lahore → doab → ganges_delta →
+burma → gulf_of_siam → canton → hangzhou`. From the north it is the Volga:
+`north_sea → white_sea → novgorod → kazan → astrakhan → persia → …`. From the Channel it is the
+Hansa and the Danube: `english_channel → lubeck → saxony → wien → venice → ragusa →
+constantinople → aleppo → …`. Nothing routes through the Cape, which is what a 1444 map should
+say. *(The Cape is not idle — in the per-good graphs it already carries Asian spices to Europe:
+`malacca → cape_of_good_hope → zanzibar → gulf_of_aden → alexandria → genua`. `Φ_w` models power,
+not cargo; §3.9.)*
+
+Other dynamics, measured: scaling **the 22 European nodes'** wealth ×2 makes `genua` the sole sink;
+between **×3 and ×3.75** the Cape of Good Hope **reverses** — 1444's Atlantic→Cape→Indian-Ocean
+drainage becomes malacca/comorin_cape/zanzibar→Cape→ivory_coast — and outside that window it does
+not, so the reversal is a band and not a threshold. *The 22 are the 18 western and central European
+nodes —* `english_channel`, `north_sea`, `baltic_sea`, `white_sea`, `novgorod`, `lubeck`,
+`rheinland`, `saxony`, `wien`, `krakow`, `pest`, `venice`, `ragusa`, `genua`, `champagne`,
+`bordeaux`, `valencia`, `sevilla` *— plus* `constantinople`, `crimea`, `kiev` *and* `kazan`; under
+the 18-node set alone sole-`genua` needs ×2.5. Dev-stacking `hangzhou`'s top province keeps it the
+sole sink at ×20, ×30 and ×50, with a transient split into three at ×10 — extra sinks at
+intermediate boosts are expected behaviour, not noise.
+
+######## GROUP 10  (v6 lines 588..)
+---------- V5 OLD:
+The banding is the reverse of what v1 recorded: **Improve Inland Routes is the one unconditionally
+banded mechanic**, every other listed threshold is single-valued, and Propagate Religion is banded
+only on its flag ladder. So almost nothing absorbs threshold chatter — a power share oscillating
+across any single-valued limit flickers the mechanic, and that includes Propagate Religion for the
+flagless countries its default and terminal branches cover. The flicker-risk set is "every country
+at a single-valued limit, plus flagless countries at Propagate Religion's 50/50 or 35/35", not
+"every country". Casus belli availability is the most visible symptom, since it can appear and
+vanish month to month.
+
+**Caravan power is in this group but is not a threshold mechanic.** It is **not a function of raw trade power at all**: it is total country development ÷ `CARAVAN_FACTOR` plus policy and idea modifiers, clamped to [`CARAVAN_POWER_MIN`, `CARAVAN_POWER_MAX`], switched on by a merchant condition — a gated, development-scaled bonus rather than a step on power (§3.11). When it applies it is worth up to the cap for any major power — enough to move a node's power shares by itself, and therefore to push *other* countries across the thresholds above. Measured on the 1444 start: the cap of 50 is **8.6% to 32.0% of an inland node's total trade power** (median 17.9% over the **flag's** 26 inland nodes, whose totals run 106.4 at `xian` to 532.0 at
+`champagne` — §2.2 derives inland from `members` instead and gets 25, dropping `siberia`; on that
+basis the range, the largest-holder span and the count below are all identical and only the median
+moves, to 17.5%), against a largest single incumbent holder of **23.6 to 143.2** — so a country at the cap outweighs the largest incumbent in **7 of the 26** inland nodes and is outweighed in the other 19. *(v4.0 read the save's per-node `highest_power` field as the largest incumbent's power. It is not: parsing each node's country sub-blocks at their own brace depth and comparing, `highest_power` differs from the largest single country's `val` on **79 of 79** nodes — at `venice` it is 53.2 against Venice's own 106.2 — and it matches no share of `total`, `max`, `p_pow` or `collector_power` either. What it does hold was not determined and the model does not read it; the figures above come from the country sub-blocks. The conclusion v4.0 drew from it inverted.)* *v1 and v2 both described it as "a step function on raw power", which contradicted their own §3.11.*
+
+######## GROUP 11  (v6 lines 667..)
+---------- V5 OLD:
+1. Parser for `common/tradenodes/00_tradenodes.txt` — adjacency, `members`, `path`/`control` render data, `end`/`inland`/AI flags.
+2. Parser for non-ironman saves — province owner, `base_tax`, `base_production`, trade good, goods produced, development.
+3. Parser for `common/defines.lua`, merged with `common/defines/` overrides in load order (§2.3).
+4. Per-province `wealth` — **owner-agnostic** per §1.3:
+   `TAX_COEFF · base_tax · (1 + local tax modifiers) + (GP_COEFF · base_production + local flat
+   goods bonuses) · (1 + local goods-produced modifiers) · price · (1 + local trade-value
+   modifiers)`, and no autonomy, efficiency, ideas or owner terms. The solver reads the local
+   modifiers from §1.3's classification, applied to the whole install: in vanilla at 1444 that is
+   `gems` (+15% tax, 43 provinces), `incense` (+10% trade value, 29 provinces), six great projects
+   and ten permanent province modifiers — 16 provinces beyond the two trade goods. World wealth is
+   **10,677.50** annual ducats over 2,452 counted provinces. Then per-node `trade_value`, `s`, `c`
+   with per-province α, and the per-good balance `b = s − c`.
+5. DRAIN per good: min-cost b-flow — **network simplex or a simplex LP, not interior-point without
+   crossover**, because §1.1's spanning-tree-basis property requires a basic optimum — the
+   deterministic drainage sweep, and the Phase-4 evaluator (`unserved` / `stranded`, which must be
+   equal by conservation, since `Σ_n b_g(n) = 0` identically).
+   Then `Φ_w`: one more DRAIN run with wealth as the good (§1.6) — the 30th solve, same code path.
+6. Survival table `S_g[n][H]` for AI scoring — one table serving every country.
+7. Mutual reachability census: 30 goods × 80 BFS, producing an 80×80 matrix whose entry counts goods with a directed path `n → … → m`.
+8. Synthetic-shock harness: edit parsed province data and re-solve.
+
+Cost per good is one uncapacitated min-cost flow on 80 nodes / 318 arcs plus an O(V+E) sweep.
+Measured on the reference implementation (scipy/HiGHS plus the deterministic sweep, one machine):
+**0.17–0.21 s for all 29 goods, a mean of 5.7–7.3 ms per good across runs** — individual goods
+range 5.4–24 ms, so 7.3 is an average and not a maximum. "Milliseconds each" therefore holds
+already,
+with a generic LP; the all-29 figure is what a native network simplex would have to improve on, and
+no measurement in this project supports a specific projection, and none is offered.
+
+######## GROUP 12  (v6 lines 730..)
+---------- V5 OLD:
+| Property | On a 2-core map | Where Phase 0 acts |
+|---|---|---|
+| Global DAG (§1.1) | proved | **still proved** — pendant edges are bridges and cannot close a cycle |
+| Sink-set equality (§1.1, §3.2) | measured exact 29/29 | **fails** — a pendant net-importer is a sink outside the set |
+| Marking order reproduces the DAG (§1.6) | proved | **fails** — pendants have no marking order, so `Φ_ord`-style order comparison is undefined on pendant edges |
+| Free-edge determinism (§1.1) | proved as determinism; **measured** as independence from the node indexing (zero exact `(DEF, b)` ties, 29/29 goods) | same in both halves — peeling does not touch the priority key |
+
+######## GROUP 13  (v6 lines 779..)
+---------- V5 OLD:
+Design constants: the excluded-goods list (defaults to gold), the α price anchor `P₀ = 2.0`,
+the aggregate-graph exponent `α_Φ = 1.5` (a constant like `P₀`; world-responsiveness flows through
+wealth, never through this knob). **Its stated calibration is withdrawn.** v2.1 through v4.0 said
+1.5 was "calibrated so the 1444 start yields the two-sink hangzhou/english_channel map"; on the
+corrected wealth field of §1.3 it does not yield that map, and the α_Φ window that does yield it is
+narrower than the uncertainty in its own edges under ±1% wealth noise (§1.6). 1.5 is retained because it sits inside the widest sink-count band
+and nothing now selects a different value — not because it was derived. Any future change to it is
+a design decision about how many ends the installed graph should have, and should be recorded as
+one, and DRAIN's three knobs at their defaults — demand-mass
+quantile `ρ = 1.0`, cluster dilation `r = 0`, and the zero-flow tolerance `1e-11`. That tolerance
+is **not** purely numerical: it is an absolute threshold, so it couples to the scale of `b`. See
+§1.6's scale-invariance note and §3.13. A measured calibration option
+that moves all three plus α's clamp is recorded in §3.13; the baseline does not use it.
+
+######## GROUP 14  (v6 lines 821..)
+---------- V5 OLD:
+1. **Declaration order** — emit in decreasing `Φ_w` marking order. This is the convention the
+   engine states and the shipped vanilla file follows (0 of 159 links violate it), and violating
+   it is non-fatal but logs one error per link. **The node order itself is a correctness
+   requirement, not a convention**: §1.1's priority key breaks exact ties by node index, and on the
+   fallback branch (§3.2, T3) the wealth key ties and the index alone decides the orientation. The
+   emitter must therefore fix one canonical node order and keep it stable across rebuilds, or the
+   same world can produce two different maps. One visible consequence: the node window renders
+   its incoming/outgoing link lists **in file declaration order**, so reordering nodes reorders
+   what the player sees — another reason to emit in a stable order.
+2. **End flags** — `end=yes` on every `Φ_w` sink (1444: **one** end node, `hangzhou`, against
+   vanilla's three); stripped from any former end node that gains outgoing links. The count is not
+   fixed — it follows the wealth field and `α_Φ` (§1.6), so the emitter reads it from the solve
+   rather than assuming a number.
+3. **Link reversal** — move the `outgoing` block, reverse the `path` province list, reverse the `control` pairs. Verify one hand-flipped link before writing generator code.
+4. **Preservation** — `location`, `members`, `inland=yes`, `ai_will_propagate_through_trade`, and unrecognized keys round-trip byte-faithfully.
+
+######## GROUP 15  (v6 lines 899..)
+---------- V5 OLD:
+- **13 (cyclic node file) — settled, and it reverses the hedge.** The engine does not tolerate a
+  cycle: `EXCEPTION_STACK_OVERFLOW`, 1002 frames at one address, twice. §2.4 and §3.6 updated.
+- **14 (incoming-link button) — settled, spec confirmed.** The entry only navigates; clicking
+  `Safi` in Sevilla's window switched the window to Safi and dispatched nothing. §1.7 stands.
+- **15 (propagation source qualifier) — settled, and it reverses the spec's caution.** The
+  tooltip's "where it already has power" is *not* a precondition. France holds zero provinces and
+  zero merchants in Sevilla and still receives 3.3 power there, itemised by the engine as
+  `Transfers from traders downstream: +3.1`. §1.9's "every immediately upstream node" is correct
+  as written and gains no qualifier. §3.16's cautionary case closes.
+- **The §2.4 item 3 link-reversal check — done and passed.** A hand-flipped link loaded with zero
+  errors and rebuilt the economy around the new direction (§2.4).
+
+######## GROUP 16  (v6 lines 931..)
+---------- V5 OLD:
+| Case | Expected |
+|---|---|
+| Spice and cloves, 1444 | Source in Indonesia. Baseline DRAIN measured: spices sink at Genoa (demand rank 1) plus branch-end termini (Australia, Brazil); cloves at Venice, Kongo, Deccan, Australia, Brazil. **No Chinese node holds a spices sink in either configuration** — under the §3.13 α-calibration `spices` sinks at Genoa alone, and it is **cloves** that moves to Deccan. The v1 expectation of simultaneous China+Europe spice sinks is not the baseline behaviour and is not recovered by the calibration either. *(v2 said "China holds a spice sink only under the calibration", which its own parenthetical contradicted.)* |
+| Most goods, 1444 | Sinks are `{selected ∩ flow-terminal} ∪ promoted` (§1.1) — 1 to 7 per good; high-demand nodes are sinks at 14.5% in the top demand decile vs 6.9% in the bottom (a barbell: LP branch ends land in poor pockets) |
+| Malacca ↔ Cape, post-1500 | Spice routes Malacca → … → Cape → … → Europe |
+| Malacca ↔ Cape, pre-1500 | Corridor withheld by range and the power-at-both-ends gate, not by direction |
+| 1000 AD start | Sinks in the Muslim world and Song China, no era data |
+| Razed China | Zeroing `hangzhou`-node development relocates the sink in one solve — measured: the `Φ_w` sinks move from `{hangzhou}` to `{doab, english_channel, gulf_of_siam, sevilla}`, 22 of 159 edges flipping. `hangzhou`, not `beijing`, is China's wealth pole under §1.3: `c_w` rank 1 against `beijing`'s 31, node wealth 245.0 against 143.8, and it holds the richest single province in the game. Zeroing `beijing` **also** moves the map — 17 flips, sinks `{doab, english_channel, hangzhou, sevilla}` — because deleting 1.3% of world wealth renormalises `c_w` everywhere; what separates the two is that `hangzhou` **survives as a sink** when `beijing` is zeroed and does not when `hangzhou` is. *(v2 through v4.0 said zeroing `beijing` "moves nothing". It does. The rank gap is what carries this row, not a null result.)* |
+| Ming loses the Mandate | **Nothing moves on the day it happens.** The Mandate is an owner property and §1.3 reads none, so the demand vector is unchanged; the pull collapses only as the consequences reach `base_tax` and `base_production`. This row is the owner-agnosticism check, not a responsiveness check |
+| Major war in China | Corridors shift for the duration, revert as devastation heals |
+| Many poor provinces vs. few rich | Luxury demand goes to the rich-province node; bulk to the many-province node |
+| Price crash | α falls below 1; regional sinks reappear |
+| Caribbean, 1650 | Sugar production income makes it a sink for cloth, tools, wine |
+| Kilwa, 1000 | Ivory income makes it a sink for Indian textiles |
+| Consuming leaf | Terminates the DAG of every good it consumes but does not produce |
+| Inert merchant | Its goods take the even split as if the node were empty; node-wide bonuses still apply |
+| Node sinking spice but not cloth | Spice fully collected; cloth collected at the ratio with its remainder pushed |
+| Near-balanced link | May flip monthly; carries near-zero either way; assignments survive |
+| Two-way Atlantic corridor | Merchants at both ends, disjoint good sets, neither blocking the other |
+| Economy tab vs. overlay | Every displayed trade figure matches the per-good economy to the ducat. **This is a self-consistency check, not a comparison against stock EU4** — stock trade values are not reproducible run to run: two identical vanilla 1444 Castile starts differ on 49 of 80 nodes by up to 8.96%, over the five node fields `current`, `local_value`, `outgoing`, `total` and `retention` (AI merchant placement is randomised at start, and it is the three power-dependent fields that inherit it: `retention` is identical on 80 of 80 nodes and `total` on 78 of 79, the exception — `zambezi` —
+drifting 0.012%). Any comparison against unmodded numbers needs a tolerance and a null run |
+| Reachability | 100% of every good's demand reachable from its supply, asserted every tick; zero orphan sinks (an LP feasibility theorem — its failure means the implementation broke, not the world) |
+| Conservation | Phase-4 `Σ unserved == Σ stranded` to machine precision, every good, every tick |
+| Determinism | Re-running a tick reproduces the orientation bit-for-bit; promotions and fallbacks are scheduler-invariant (monotone closure) |
+| Acyclicity | Asserted on every per-good graph, on `Φ_w`, and on the emitted file's declaration order |
+| Sink set, 2-core | Two checks, not one. **Containment is a hard assertion, every tick, unconditionally:** every sink inside the 2-core lies in `{selected} ∪ {promoted} ∪ {fallbacks}` — the set the sweep actually maintains — because every other core node is handed an out-arc by the sweep (§3.2). A violation is an implementation bug. Asserting containment in `{selected} ∪ {promoted}` alone would halt on **T3** (§3.2), which is correct behaviour, so the fallback set is part of the assertion and not an escape clause on it. **Equality — `{selected ∩ flow-terminal} ∪ {promoted}` exactly — is monitored, not asserted:** it is measured exact on 1444 (29/29 goods, zero fallbacks) but is not a theorem, and **T2** and **T3** (§3.2) are the two ways it can fail while the algorithm is behaving correctly — a free edge handing a selected flow-terminal demander an out-arc to an earlier-marked node, and a fallback promotion. Report an equality miss with the node and the good; halt only on a containment miss |
+| Sink set, pendants | Where Phase 0 acts, the equality above **does not apply and is not asserted**. The check on a peeled edge is the Phase-4 orientation rule: the edge is oriented by the sign of its absorbed subtree balance, and the un-peel reproduces it. **A net-importing pendant leaf that ends a sink is expected behaviour, not a violation** — that is **T1** (§3.2), and treating it as a fault is how a weakened single assertion would hide it |
+| Colonization | Observer run to 1600: New World colonization proceeds at roughly vanilla pace |
+| AI convergence | Greedy assignment settles with damping rather than oscillating |
+| Latent good | While latent: no graph, no value weight, no survival-table entry; acquires all three the month production begins. **`Φ_w` is unaffected only while the good stays latent.** On activation the whole field moves — the province is repriced, so both goods' supply shares, every good's `c`, both value weights and `Φ_w` all change (§1.5). Measured: repricing the 45 owned latent-coal provinces flips 29 of 159 `Φ_w` edges (§1.5) |
+| Cross-implementation | The DLL and the reference implementation agree on **orientation exactly** for every save in the historical set — the primary end-to-end check, replacing v1's α = 1 identity |
+
+######## GROUP 17  (v6 lines 965..)
+---------- V5 OLD:
+- **Φ_w-vs-realized sign disagreement**, weighted by trade value, not link count. The static
+  baseline is known — `Φ_w` agrees with the per-good graphs on **51.5%** of edge-goods *weighted by
+  trade value*, and on 52.5% unweighted (§1.6) —
+  so the realized number has a floor to be compared against. Predicted to cluster at nodes with 3+ outgoing links and partial merchant coverage, thinning as coverage densifies.
+- **Flip behaviour** per decade in peace versus war, and whether flips revert as occupation lifts.
+- **Propagated-share change per node** on each flip, alongside the trade-power/in-degree covariance. This is what catches the §1.10 threshold mechanics flickering — a share crossing a single-valued limit is the failure mode, and casus belli availability the visible one. Total propagated power is not the quantity to watch: reorientation cannot change edge count, so `Σ indeg = |E|` is invariant and only the covariance moves.
+- **Income balance, two metrics.** Total world collected income, and its distribution across historical great powers. Distribution is the gating one.
+
+######## GROUP 18  (v6 lines 1013..)
+---------- V5 OLD:
+**A global potential solve puts sinks in the wrong place.** v1 oriented by the Laplacian potential
+`L φ = s − c`. Its sink rule turns out to be exactly
+`(c − s)/deg > mean(neighbour φ) − min(neighbour φ)` — verified on every (good, node) pair — and
+because supply is *sparse* where demand is dense, the right-hand side is set by supply geography:
+spices are produced in 18 of 80 nodes and cloves in one, while every node with an owned province
+carries demand, so the neighbour spread that sets the threshold is a supply pattern almost
+everywhere. Sinks landed where the field was locally flat, not
+where demand was: the highest-demand node in the game was never a spices sink, a node with
+literally zero demand outranked Genoa and Beijing, and deleting demand variation entirely left the
+sink unmoved (`../v1-laplacian/diagnosis.md`). (v1 and v2 quantified the asymmetry as "supply
+contrast 10⁷ against demand contrast 10²–10³". That ratio was `max(s)` over the **ε floor** of v1's
+regularizer, which §1.2 removes; with no regularizer the spices supply ratio over *producing* nodes
+is 36 against a demand ratio of 482.2, which points the other way. Sparsity is the asymmetry that
+survives the regularizer's deletion, and the diagnosis rests on it.) No parameter fixes it: α strong enough to matter
+destroys §1.4's regime split, and better wealth inputs plausibly deliver about 1.7× (measured:
+`genua` becomes a co-sink at ×1.720) — enough to make Genoa a *co-*sink, not enough to make demand
+the determinant of placement: a spice sink at any of **the four Chinese trade nodes —
+`beijing`, `xian`, `canton`, `hangzhou`** — needs **3.6–4.9×**, i.e. **9.3–21.4%** of all world
+spice demand at one node (`beijing` 3.60× / 9.3%, `hangzhou` 3.83× / 21.4%, `xian` 4.59× / 12.3%,
+`canton` 4.86× / 17.8%; the four China-region nodes outside that set — `girin`, `yumen`, `chengdu`,
+`lhasa` — need 4.0× to 10.8×).
+(v2 wrote "1.7× where 4–5× is needed", which compressed two different thresholds into one
+comparison and understated what inputs could buy.)
+
+######## GROUP 19  (v6 lines 1049..)
+---------- V5 OLD:
+1. **Sink placement:** on a map where Phase 0 is a no-op and no fallback fires, final sinks =
+   `{selected ∩ flow-terminal} ∪ {stall-promoted flow-terminal demanders}` — measured exact,
+   29/29 goods. **This is a measurement, not a theorem**, and v2 asserted it as a theorem. Three
+   constructed inputs break it, all run through a faithful implementation of §1.1 (`toys.py`):
+   - **T1 — pendant importer.** Triangle A(+5), B(−3), D(0) with a leaf C(−2) on B. Phase 0 peels C,
+     Phase 4 restores the edge B→C, and the actual sinks are `{C}` while the formula set is `{B}`.
+     The pendant is a sink outside the set **and** it strips the selected sink of its sinkhood.
+   - **T2 — free-edge race, inside the 2-core.** Five-cycle S1(+3)–u1(−3)–w(0)–u2(−2)–S2(+2)–S1 with a
+     chord w–S1. Both u1 and u2 are selected flow-terminal demanders. Under the adopted
+     DEF-ascending key u2 pops first, the conduit w becomes ready via its free edge to u2 and pops
+     before u1, so the free edge orients u1→w and u1 is no longer a sink. Actual `{u2}`, formula
+     `{u1, u2}`.
+   - **T3 — the fallback branch, inside the 2-core.** Triangle A, B, C with `b = 0` at all three and
+     node wealth 3, 2, 1. No node is a demander, so Phase 1 selects nothing; there is no flow, so
+     every edge is free; no node is ready, so the sweep stalls with no flow-terminal demander and
+     the fallback promotes A. Free edges then orient B→A, C→A, C→B. Actual sinks `{A}`, formula set
+     empty — and A is in neither `{selected}` nor `{promoted}`.
+
+   What survives unconditionally is the ⊆-direction *within the 2-core*, over the set the sweep
+   actually maintains: every core node that is neither selected, promoted **nor fallback-promoted**
+   is given an out-arc by the sweep, either a flow arc or a free edge to an earlier-marked node.
+   Pendant net-importers are the only sinks outside that set. §2.8 therefore carries **two** runtime
+   checks rather than one weakened one: containment inside the 2-core is asserted unconditionally
+   every tick against `{selected} ∪ {promoted} ∪ {fallbacks}`, and the equality is *monitored* every
+   tick with **T2 and T3** named as its legitimate failures. On pendant edges the Phase-4
+   orientation rule is the check and T1 is expected output. Written as a single assertion with an
+   escape clause, all three counterexamples would disappear into the clause — and written against
+   the narrower containment set, T3 would halt the solver on correct behaviour.
+2. **Free-edge direction:** marking order under the (DEF asc, b asc, index) priority. This is
+   **deterministic** by construction; that it is a function of the graph and the balances *alone* —
+   that the node indexing never decides — is **measured, not proved**, and holds where the key has
+   no exact ties: zero exact `(DEF, b)` ties on free edges, 29/29 goods on 1444. The one place the
+   indexing is load-bearing is the fallback branch (T3 above), where the candidates are typically
+   all zero-wealth and tied; §2.4 item 1 makes a canonical node order a correctness requirement for
+   that reason.
+3. **Reachability:** the orientation contains the LP certificate, so every unit of demand is
+   servable; measured 100.0%, 29/29 goods, zero orphan sinks.
+4. **Aggregate acyclicity:** `Φ_w` is itself a DRAIN orientation, so it is acyclic by the same
+   marking-order argument as every per-good graph; the flow support by the cycle-cancelling
+   argument. (Its marking order is a per-node scalar reproducing the DAG, for any consumer that
+   needs a potential.)
+
+######## GROUP 20  (v6 lines 1136..)
+---------- V5 OLD:
+This is also why the aggregate uses **trade value** rather than production income. The two are different quantities: a province's trade value is unaffected by production efficiency or local autonomy, and production income is defined by them. Substituting production income would make `V_g` — and with it the aggregate's weighting — depend
+on owners' idea groups and autonomy, importing exactly the incoherence the previous paragraph
+rejects. (In v1 the same substitution also broke the α = 1 identity, measured as orientation
+agreement collapsing from 159/159 to 68/159; the identity is gone in v2 but the reason to refuse
+the substitution is unchanged.)
+
+######## GROUP 21  (v6 lines 1146..)
+---------- V5 OLD:
+**α < 1 is a crash-reachable state, not a starting condition.** At vanilla base prices **nothing**
+sits below the 2.0 anchor: the minimum tradeable base price is exactly 2.0 (fur, naval supplies,
+slaves, tea, tropical wood, livestock sit on the anchor at α = 1 exactly; grain is 2.5, not the
+1.25 v1 recorded — both of v1's figures were price/P₀ misread as prices). The sublinear regime is
+entered only when a price event pushes a good beneath the anchor, and the shipped data answers
+how often that can happen: **13 of 30 goods** can be pushed strictly below 2.0 by a single vanilla
+`change_price` event (grain and wine reach 0.625), two more — `gems` and `silk` — land *exactly on*
+2.0 and so reach α = 1 but not the sublinear regime, four have a negative event that does not reach
+2.0, and **11 goods have no negative price event at all** and can never go sublinear in vanilla.
+(All **161** `change_price` blocks were parsed — 93 in `events/`, 14 in `missions/`, 1 in `common/`
+and **53 in `history/`, of which 13 are negative**, all in `history/countries/HAB - Austria.txt`.
+v4.0 said 154 and 7: its parser silently recovered nothing from five mission files, which a bare
+`except` hid, so the scan is now guarded by a per-file count assertion. The seven recovered blocks
+are all positive and the partition is unchanged.
+The history route matters: `wool`'s largest single negative is that file's `NEW_DRAPERIES` at
+−0.25 for 2.5 → **1.875**, against the −0.20 the same key carries in `events/PriceChanges.txt`, and
+`change_price` entries are keyed, so 1.875 is the figure a campaign reaching 1540 holds. v2's 13
+was right; v3.0 reached 12 by parsing four of the five trees.) That is the point of having the regime: without it a
+crash could only fail to concentrate a market, never actively spread it. Whether it engages often
+enough to earn its keep is now a bounded question (§3.13) rather than an open one.
+
+######## GROUP 22  (v6 lines 1247..)
+---------- V5 OLD:
+**Scopes read `Φ_w` rather than any-good reachability.** A gate is a boolean; a scope is a set or a path, and answering a scope question with any-good reachability is an enormous buff. `Φ_w` is the graph the engine already walks, so those call sites are left alone — which collapses the shared-predicate risk. It is legible: one map predicts where fleets sail. And it is balanced: area-effect mechanics scoped by any-good reachability would cover most of the map — measured, **92.2%** (5825 of 6320) of ordered node pairs are connected by at least one good on 1444 data under DRAIN. (v2 quoted 98.8%; that is v1's *Laplacian* figure, 6245/6320, carried across the operator change without being re-measured. The argument is unaffected — 92.2% is still most of the map — but the number was not v2's own.)
+
+######## GROUP 23  (v6 lines 1251..)
+---------- V5 OLD:
+The installed graph exists for the engine's direction-dependent systems — propagation, fleet
+routes, upstream/downstream scopes — and those systems model *power*, not commodity logistics.
+What vanilla's authored arrows encode is empires pointing at the biggest cities and richest
+areas, with three authored ends (`genua`, `venice`, `english_channel`). `Φ_w` computes that
+intent from the world state instead of authoring it: all wealth pulls (a rich non-sink node —
+`genua`, `gulf_of_siam` and `sevilla` rank 3rd, 2nd and 7th by node wealth on the corrected field
+— 296.0, 299.2 and 266.5 against `english_channel`'s 316.6 — and none of them is a sink — draws more edges in than it sends out as a net demander even though flow passes through),
+the wealthiest places win, and the ends emerge and move when the wealth moves —
+a razed `hangzhou`, a dev-stacked capital, a colonizing Europe that flips the Cape (§1.6). It reuses
+the §1.1 operator unchanged: one implementation, one set of guarantees (LP feasibility,
+acyclicity, determinism, scan-invariance), and the correctness check stays a single combinatorial
+comparison.
+
+######## GROUP 24  (v6 lines 1266..)
+---------- V5 OLD:
+- The value-weighted **net flow** `Σ_g V_g·net_g` is a flow, flows circulate, and it measurably
+  contains directed cycles — it cannot be installed.
+- The value-weighted **marking order** `Φ_ord = Σ_g V_g·order_g` (v2.0's choice) is acyclic for
+  free and remains the most self-coherent aggregate measured: **60.3%** edge-good agreement with
+  the per-good graphs against `Φ_w`'s 52.5% (51.5% value-weighted). It was superseded on design
+  grounds: its ends are artifacts of sweep scheduling rather than places — of its 13 end nodes at
+  1444, 8 terminate no good at all and none of the demand capitals is among them — and its end
+  count **never concentrates**: 11–17 ends measured across cloves-α 2…64, never approaching
+  vanilla's three. (v2 called this "α-invariant … 9–17 ends", which is neither the right word for
+  a quantity that ranges 11–17 nor a band containing its own baseline of 13.) Self-coherence was
+  traded for legible, wealth-anchored, world-responsive ends.
+- `Φ_w`, adopted: **one operator, one set of guarantees, and ends that move with the world.** It
+  reuses §1.1 unchanged, so LP feasibility, acyclicity, determinism and scan-invariance come for
+  free and the correctness check stays a single combinatorial comparison; and its ends are places
+  the wealth actually is, so they move when the wealth moves (§1.6's institution result). *v2.1
+  through v4.0 justified the adoption by "two vanilla-like ends at 1444" — the reason it was
+  accepted despite losing self-coherence. On the corrected wealth field there is one end, in China,
+  matching none of vanilla's three, so that premise is withdrawn. The trade is now stated as what it
+  is: 7.8 points of self-coherence given up for one operator and world-responsive ends, and the
+  1444 count is whatever the field gives.*
+
+######## GROUP 25  (v6 lines 1305..)
+---------- V5 OLD:
+This is an **identity, not a measurement**: `powershare_C(n)` carries no `g`, so it factors out of the sum, and by §1.1's vocabulary the property is true by construction and carries no measurement. Every term that feeds a collector's power at a node is node-wide — the merchant bonus, the off-home penalty, propagation off the one installed graph, the caravan grant — so none of them can reintroduce a `g`. What a run can show is only that the implementation does the algebra in doubles: across Sevilla, Genoa, Champagne, Malacca and the Gulf of Siam, using each node's real 1444 country table, the two forms agree to a worst relative disagreement of **0 to 3.7e-16** — at most one unit in the last place. So one scalar per node reproduces every country's income exactly, and the engine's own math does the rest. *(v1 through v4.0 quoted "agreement to 5.7e-14" here, and 1.4e-14 below. Both are floating-point residuals of an exact identity, produced by constructions none of those documents states — a theorem decorated with an experiment, which is the confusion §1.1 exists to prevent.)*
+
+**This is also why propagation cannot be made per good.** Reading the one installed graph leaves the propagated term good-independent, so the identity survives it untouched — same construction, worst relative disagreement 0 to 3.7e-16. Per-good propagation destroys it, because §1.9 reads a node's *downstream neighbours* and those differ per good. The driver is **not** how many distinct downstream sets a node has, but whether its collectors hold **differing power across the nodes those sets differ on**: `gulf_of_siam` has eight distinct downstream sets and still shows a 0.003% effect, because its collectors hold almost nothing in `burma`, `canton` or `malacca` and every propagation term is near zero. Where the collectors do hold differing power downstream, a country's power at the node stops being one number and `powershare_C` stops factoring out. Measured with each node's real 1444 country table and `collect_pool` built per good throughout: the error is **redistributive and single-digit percent, with the sign varying by collector** — Sevilla −0.82%, −0.87%, **+7.44%**; Champagne −1.69%, +1.69%, +1.53%; Genoa −0.23%, −0.22%, +0.70%. It is not a bias in one direction and it is not rounding: it is thirteen orders of magnitude above the float residual and it moves income between countries. Its size depends on which countries are collecting, which is a stated choice of the construction and not a property of the node, so no single percentage is quoted as one. Keeping propagation on a single graph is load-bearing for Goal 7, not merely convenient. *(v1 through v4.0 quoted "off by 5.96 ducats on a node paying ~250"; no node in the model has local trade value near 250 — the largest is 112.6 — and v4.0's own replacement figure, 0.41%, was an artifact of freezing one term at the alphabetically first commodity.)*
+
+######## GROUP 26  (v6 lines 1367..)
+---------- V5 OLD:
+**Open in the v5.0 wealth model.** One question, and it is a question rather than a number — §1.3
+carries no value for it. Two others that v3.0 listed here are settled and have moved into §1.3.
+
+- **What else multiplies `goods_produced`, and which side of the owner line does each source fall
+  on?** §1.3's classification handles the sources observed so far — the owner's
+  `global_trade_goods_size_modifier` (out, country-scoped) and `bonus_from_merchant_republics`
+  (out, its value set by neighbouring countries' government forms) — and §1.3's whole-install sweep
+  settles the additive block too: **fifteen** 1444 provinces carry a flat `trade_goods_size`, five
+  from great projects and ten from permanent province modifiers. What is unenumerated is the
+  rest of the surface: `trade_goods_size` and `trade_goods_size_modifier` appear in buildings,
+  estate privileges, government reforms, church aspects, fervor, ages and event modifiers, and
+  each source needs the §1.3 locality test applied to it before a modded or late-game province can
+  be priced. Settling work: enumerate every source of both keys and classify each; the model needs
+  the answer only for sources that can be live with no owner input.
+
+######## GROUP 27  (v6 lines 1390..)
+---------- V5 OLD:
+- `k`, `α_min`, `α_max`. The test is whether they produce the intended three-regime split, not whether they differentiate same-geography goods, which they are not meant to do.
+- **The zero-flow tolerance is scale-coupled.** §2.3 now records it as absolute rather than purely numerical — v2.1 filed it as numerical-only — and being absolute is what makes it interact with the magnitude of `b` (§1.6). Either normalise `b` to a fixed scale before the solve or make the tolerance relative. Undecided.
+- Does `α_min` ever bite? Bounded from files now (§3.5): the sublinear regime is reachable through
+  vanilla price events for 13 of 30 goods, unreachable for 11, and exactly on the boundary for 2.
+  Whether those events fire often enough in a real campaign remains the open half.
+- **The sink-count-span option.** A measured calibration exists that makes sink counts track price
+  — span exactly 1..5, spearman(price, sinks) = −0.20: α unclamped at exponent 2 (cloves α = 16),
+  demand-mass quantile ρ = 0.5, twig tolerance 3e-4 (`drain-orientation.md` §5–6). Its costs are
+  real and recorded: unclamped α² is a *demand-model* decision (luxuries become court goods —
+  Deccan, **demand rank 2** under α = 16 with the rank-1 demander `hangzhou` acting as a transit
+  node, becomes the cloves sink; v2 said Beijing "holds the richest single province", which it
+  does not — that is `hangzhou`, at 30.4 against Beijing's 19.5, and under this calibration Beijing
+  is only demand rank 3), the tolerance re-routes arcs
+  individually carrying <0.03% of world supply — up to about **0.18%** of a good's mass in total,
+  not <0.03% — and drops **cloves** to 99.97% reach, and it is one-snapshot
+  tuning. The baseline does not adopt it; adopting it is a §1.4 decision, not a solver knob.
+- LP determinism across machines: the min-cost-flow solve must pivot identically on identical
+  input (replaces v1's ε-magnitude question; see §2.1 and §3.6).
+- AI merchant reassignment cadence (§3.14).
+
+######## GROUP 28  (v6 lines 1430..)
+---------- V5 OLD:
+**The v1 Laplacian potential as the orientation core.** Its sink placement is topological:
+sinks land where the field is locally flat, demand enters only as `(c−s)/deg` against the local
+spread, and the supply signal is **sparse** rather than large — most nodes produce nothing at all
+of a given good, so `(c−s)/deg` is dominated by where supply *exists*, not by how big it is.
+*(v1 and v2 gave the asymmetry as "supply contrast 10⁷ against demand contrast 10²–10³", and v3.0
+through v4.0 repeated it here while §3.2 was withdrawing it. §3.2 is right: that ratio was `max(s)`
+over v1's ε floor, and with the floor removed the contrasts run **4–97 on supply against
+211–20,400 on demand** across the 29 goods — the demand side is the wider one. Sparsity is what
+survives the floor's deletion, and it is what the diagnosis rests on.)* Diagnosed, measured, and
+replaced (`../v1-laplacian/diagnosis.md`, `drain-orientation.md`). What it did guarantee —
+100% reachability via conservation, exact conduit behaviour — DRAIN keeps by construction.
+
+######## GROUP 29  (v6 lines 1447..)
+---------- V5 OLD:
+**Ranked orientation (`score = s − c`, harmonic extension on empty nodes).** Wins every
+sink–demand *alignment* statistic (ρ_val +0.281 against DRAIN's +0.054; 43.8% of top-decile nodes
+are sinks against 14.5%) and fails on delivery: it is monotone (§3.2), so demand must rise along
+every route — 83.0% of demand reachable, 31 orphan sinks, Genoa a cloves sink that cloves cannot
+reach. It also posts **8 net-producer sinks** where DRAIN, LAP and FLOW all post zero, and 10–16
+sinks per good against DRAIN's 1–7. *v2 said it "wins every sink statistic"; it does not — it wins
+the alignment ones and loses the rest.*
+
+**Seeded basin growth (multi-source Dijkstra with balance feedback).** Flow converges to the
+chosen seeds and starves everything off a supply→seed path; 88.4% reach at its best tuning. Its
+useful ideas — HHI-adaptive sink count, stall self-correction — survive inside DRAIN's Phases 1
+and 3.
+
+######## GROUP 30  (v6 lines 1489..)
+---------- V5 OLD:
+**`Φ_ord = Σ_g V_g·order_g` as the installed graph.** *(v2.0 entry, superseded in v2.1.)* The
+most self-coherent aggregate measured (**60.3%** vs `Φ_w`'s 52.5%) and still acyclic for free —
+but its ends are sweep-scheduling artifacts, not places (§3.9), and no parameter steers their
+count. Retained as the measured coherence ceiling any future aggregate should be compared against.
+The ceiling is 60.3%, not the 62.7% v2.0 and v2.1 both quoted: that figure predates the
+deterministic sweep of §3.6 and was never regenerated after it.
+
+**Pinned-count wealth fields (top-k seeding, gravity kernels).** Tested en route to `Φ_w`: a
+3-mass gravity field `Φ(n) = max_m c_α(m)·γ^dist(n,m)` over the top-3 pairwise-unconnected
+demanders hits any chosen end count exactly for γ ≤ 0.7 and any count up to six — at γ = 0.9 the
+four-, five- and six-mass fields all collapse to three ends — with **61%** vanilla-arrow agreement
+at its best (γ = 0.90–0.95, 97 of 159 arrows; γ = 0.97 gives 93, and every larger γ is worse).
+*v2.1 through v4.0 put the best agreement at γ = 0.97 and said the five- and six-mass fields give
+four ends at γ = 0.9; on the corrected wealth field neither holds.* (v2.0 and v2.1 both quoted 69% = 110 of 159, which is not reached at
+any γ; the count-follows-seeds behaviour reproduced, that figure did not.) Rejected: it pins
+the end count by fiat (a world conquest could never merge the world into one basin), needs a
+second operator with its own reach knob γ, and a pure `wealth^α` edge comparison without a reach
+term can never concentrate ends at all — a local wealth maximum survives every positive α
+(measured: ≥10 ends at α up to 16). The emergent-count wealth good replaced it.
+
+######## GROUP 31  (v6 lines 1547..)
+---------- V5 OLD:
+1. **File values remembered from an older patch.** The 75% overseas autonomy floor is
+   pre-Common-Sense; 1.37 has regime floors of 90/50/20/0.
+2. **File values transformed and then reported as raw.** v1's grain (1.25) and livestock (1.00)
+   base prices are exactly `price / P₀` — the ratio was computed and then written down as the
+   price.
+3. **The spec's own algebra instantiated without checking the instantiation.** ε provably
+   preserved the α = 1 identity only if applied to `φ₀`'s supply as well; implemented as written,
+   the identity failed at 1e-5 and would have been diagnosed as a solver bug.

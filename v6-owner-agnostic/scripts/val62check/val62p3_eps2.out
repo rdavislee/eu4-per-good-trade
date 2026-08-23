@@ -1,0 +1,40 @@
+eps=0 reproduces the shipped map: ('genua', 'hangzhou')
+eps          n    sinks
+1e-12        1    hangzhou
+3e-12        1    hangzhou
+1e-11        1    hangzhou
+3e-11        1    hangzhou
+1e-10        1    hangzhou
+3e-10        1    hangzhou
+1e-09        2    genua, hangzhou
+3e-09        2    genua, hangzhou
+1e-08        2    genua, hangzhou
+3e-08        2    genua, hangzhou
+1e-07        2    genua, hangzhou
+3e-07        2    genua, hangzhou
+1e-06        2    genua, hangzhou
+3e-06        2    genua, hangzhou
+1e-05        2    genua, hangzhou
+3e-05        2    genua, hangzhou
+0.0001       2    genua, hangzhou
+0.0003       2    genua, hangzhou
+0.001        2    genua, hangzhou
+0.003        2    genua, hangzhou
+0.01         2    genua, hangzhou
+0.03         2    genua, hangzhou
+0.1          2    genua, hangzhou
+0.3          2    genua, hangzhou
+1            2    genua, hangzhou
+3            2    genua, hangzhou
+10           2    genua, hangzhou
+30           2    genua, hangzhou
+100          2    genua, hangzhou
+300          2    genua, hangzhou
+1000         2    genua, hangzhou
+3000         2    genua, hangzhou
+10000        2    genua, hangzhou
+
+boundaries of the band that matches the shipped sink set, bisected
+  lower edge between 8.988e-10 and 8.995e-10
+  upper edge between 9.991e+04 and 1e+05
+EXIT=0

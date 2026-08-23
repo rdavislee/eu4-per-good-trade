@@ -1,0 +1,7 @@
+shipped (min-max) Phi_w sinks: ('genua', 'hangzhou')
+max    vs min-max: aggregate edges differing 0/159, sinks same | per-good graphs differing 0: []
+mean   vs min-max: aggregate edges differing 0/159, sinks same | per-good graphs differing 9: ['copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'paper', 'wine', 'wool']
+total  vs min-max: aggregate edges differing 7/159, sinks same | per-good graphs differing 10: ['cloves', 'cocoa', 'copper', 'cotton', 'gems', 'grain', 'naval_supplies', 'paper', 'salt', 'wool']
+pairwise aggregate differences among max/mean/total: [('max', 'mean', 0), ('max', 'total', 7), ('mean', 'total', 7)]
+per-good graphs differing among the three normalisations alone: 13 ['cloves', 'cocoa', 'copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'naval_supplies', 'paper', 'salt', 'wine', 'wool']
+per-good graphs differing across all four (incl. min-max): 13 ['cloves', 'cocoa', 'copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'naval_supplies', 'paper', 'salt', 'wine', 'wool']

@@ -1,0 +1,13 @@
+314| Y366 | §1.8 | Trade power and collect/transfer intent are node-wide; what varies per good is what they produce. | MODEL | 750 |
+315| Y367 | §1.8 | `collected_share(n,g) = 1` if n is a sink for g, else `P_collect / (P_collect + P_transfer(g))`. | MODEL | 755 |
+316| Y368 | §1.8 | Transfer eligibility is per good: a country's power counts toward `P_transfer(g)` only if it has a merchant … | MODEL | 759 |
+317| Y369 | §1.8 | The remainder moves per good by the vanilla two-case rule. | MODEL | 761 |
+318| Y370 | §1.8 | If any country steers `g` at `n`, the outgoing value of `g` is divided across outgoing links in proportion to … | ENGINE | 763 |
+319| Y371 | §1.8 | An outgoing link with no steerer receives nothing, even when other links are steered. | ENGINE | 763 |
+320| Y372 | §1.8 | A single steerer takes all of `g`'s outgoing value down its link, however little power it holds. | ENGINE | 763 |
+321| Y373 | §1.8 | If no country steers `g` at `n`, the outgoing value splits evenly across `g`'s outgoing links. | ENGINE | 765 |
+322| Y374 | §1.8 | At `g`'s sink there is no remainder: 100% is collected and divided among collectors by trade power. | MODEL | 767 |
+323| Y375 | §1.8 | Vanilla gates still apply: trade range, and the rule that there is no transfer into a node where nobody holds … | ENGINE | 769 |
+324| Y376 | §1.8 | What trade range gates is reach, not flow: every string, define and modifier that mentions it is about where … | ENGINE | 770 |
+325| Y377 | §1.8 | No string, define or modifier ties range to link flow — which is a statement about the files rather than a … | ENGINE | 775 |
+326| Y378 | §1.8 | There is no trade "supply range" in the engine; the only supply-range constructs are naval. | ENGINE | 778 |

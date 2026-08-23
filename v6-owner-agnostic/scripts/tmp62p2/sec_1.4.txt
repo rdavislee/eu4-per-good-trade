@@ -1,0 +1,5 @@
+212| Y300 | §1.4 | `α(g) = clamp((price(g)/P₀)^k, α_min, α_max)` with `P₀ = 2.0` ducats. | MODEL | 446 |
+213| Y301 | §1.4 | α > 1 makes demand superlinear in provincial wealth, so luxuries concentrate on individually rich provinces. | MODEL | 449 |
+214| Y302 | §1.4 | α = 1 makes demand proportional to economic size. | MODEL | 450 |
+215| Y303 | §1.4 | α < 1 makes demand sublinear, so bulk goods spread toward populous regions. | MODEL | 451 |
+216| Y304 | §1.4 | α moves with vanilla price events in both directions, with no smoothing. | MODEL | 453 |

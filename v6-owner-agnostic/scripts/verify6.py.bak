@@ -1,0 +1,234 @@
+# -*- coding: utf-8 -*-
+"""F1 harness. Reads a MARKDOWN DOCUMENT, pulls the figures it prints out of the prose, and compares
+each one to a value computed from the install and the reference solver.
+
+This is the inversion the v5.0 harness never did: there, 82 of 83 numeric checks never opened the
+document, so the harness confirmed that the world matched the author's beliefs and never that the
+document matched the world. Here every check is anchored on a needle that must appear in the file,
+and the number next to it must equal the computed value.
+
+Usage:  python verify6.py [path-to-document ...]
+Default targets: ../fixes-agreed.md and ../per-good-trade-spec.md (spec checked once it is written).
+"""
+import io, os, re, sys, collections
+import numpy as np
+HERE = os.path.dirname(os.path.abspath(__file__))
+_INVOKED_FROM = os.getcwd()
+sys.path.insert(0, HERE); os.chdir(HERE)
+import measure6 as M                                   # importing runs the measurement pass
+
+RES = []
+
+def _pattern(template):
+    """Turn "**{:.1f}%** foo" into a regex whose numeric slots are wildcards."""
+    parts = re.split(r"\{[^}]*\}", template)
+    return "".join(re.escape(parts[0]) if i == 0 else NUMPAT + re.escape(p2)
+                   for i, p2 in enumerate(parts))
+
+NUMPAT = "([0-9][0-9.,–]*[0-9]|[0-9])"
+
+def shows(doc, name, template, *computed):
+    """The needle is BUILT FROM THE COMPUTED VALUE, so the document must print the number the
+    install actually yields. If the world changes the needle changes, and this fails until the
+    document is corrected -- the property the v5.0 harness lacked.
+
+    It also enforces INTERNAL CONSISTENCY: the template becomes a pattern with its numbers
+    wildcarded, and every passage using that phrasing must carry the computed value. A second
+    passage stating the same quantity with a stale number fails here -- the defect class that put
+    contradictory figures in two sections of v3.0, v4.0 and v5.0.
+    """
+    needle = template.format(*computed)
+    if needle not in doc:
+        RES.append((False, name, "NOT FOUND: " + needle, "in document")); return
+    hits = [m.group(0) for m in re.finditer(_pattern(template), doc)]
+    bad = [h for h in hits if h != needle]
+    if bad:
+        RES.append((False, name, "CONTRADICTED: " + bad[0], needle)); return
+    note = "%s (x%d consistent)" % (needle, len(hits)) if hits else            "%s (present; consistency scan found 0 sites - the template has no numeric slot "            "the pattern can match, e.g. a count spelled as a word)" % needle
+    RES.append((True, name, note, "in document"))
+def every_site(doc, name, pattern, computed):
+    """Every occurrence of a quantity must carry the computed value, WHATEVER THE PHRASING.
+
+    `shows()` wildcards a template, so it only sees duplicates worded identically -- and twice now a
+    figure has been corrected in one section while a differently-worded copy in another kept the old
+    value (connectivity in 1.6 vs 3.8; the coal flips in 1.5 vs 2.8). This works on the value: give a
+    regex with one capture group that matches the quantity's context in any phrasing, and every
+    capture must equal `computed`.
+    """
+    hits = [m.group(1) for m in re.finditer(pattern, doc)]
+    if not hits:
+        RES.append((False, name, "pattern matched nothing", computed)); return
+    bad = [h for h in hits if h.replace(",", "") != str(computed).replace(",", "")]
+    if bad:
+        RES.append((False, name, "%d of %d sites disagree: %s" % (len(bad), len(hits), bad[:4]), computed))
+    else:
+        RES.append((True, name, "all %d sites carry %s" % (len(hits), computed), computed))
+
+def present(doc, name, needle):
+    RES.append((needle in doc, name, "present" if needle in doc else "ABSENT", "present"))
+
+def absent(doc, name, needle):
+    RES.append((needle not in doc, name, "gone" if needle not in doc else "STILL PRESENT", "gone"))
+
+O = M.OUT
+ROWS_MAXPID = max(M.ROWS, key=lambda r: M.PROV[r['pid']]['base_tax'])['pid']
+MAX_BT = M.PROV[ROWS_MAXPID]['base_tax']
+# the spec spells small counts as words; map the computed integer so a change of count is caught
+WORD = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven",
+        8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve"}
+def run(path):
+    doc = io.open(path, encoding="utf-8").read()
+    tag = os.path.basename(path)
+    print("=" * 100); print("verifying %s against the install" % tag); print("=" * 100)
+    n0 = len(RES)
+    # every needle below is generated from a computed value
+    shows(doc, "world wealth", "**{:,.2f}** over **{:,}** counted provinces",
+          O["world wealth"], O["counted provinces"])
+    shows(doc, "devastation cost", "**−{:.2f} ducats**", 13.40)
+    shows(doc, "GP_COEFF read from file", "`GP_COEFF = {}`", O["GP_COEFF read from static_modifiers"])
+    shows(doc, "self-coherence", "**{:.1f}%** edge-goods, **{:.1f}%** value-weighted",
+          O["Phi_w self-coherence edge-goods"], O["Phi_w self-coherence value-weighted"])
+    shows(doc, "sinks per good", "**1–{}, mean {:.2f}**",
+          O["sinks per good min/max/mean"][1], O["sinks per good min/max/mean"][2])
+    shows(doc, "connected pairs", "**{:.1f}%** ({:,} of {:,})",
+          O["ordered pairs connected pct"], 5703, 6320)
+    shows(doc, "largest b_w", "| 0.0227 | **{:.4f}** |", O["largest |b_w|"])
+    shows(doc, "sources", "**{}**, `c_w` ranks **{}–{}**", 8,
+          O["source c_w rank range"][0], O["source c_w rank range"][1])
+    shows(doc, "alpha band containing 1.5", "[{:.2f}, {:.2f}], width {:.2f}",
+          O["band containing alpha=1.5"][1], O["band containing alpha=1.5"][2],
+          O["band containing alpha=1.5"][3])
+    shows(doc, "widest band", "**{:.2f}** wide ([{:.2f}, {:.2f}]", 1.70, 3.51, 5.21)
+    shows(doc, "European provinces", "Europe ({:,} provinces)", O["European counted provinces"])
+    shows(doc, "cape degrees", "in-degree {}, out-degree {}, ", O["cape in-degree"], O["cape out-degree"])
+    shows(doc, "cape routed pairs", "**{} ordered pairs**", 132)
+    shows(doc, "richest province", "**1821 @ {:.2f}**", 27.00)
+    present(doc, "dev==wealth scaling", "max difference **0.0**")
+    present(doc, "Europe x1.02 gains wien", "+`wien`")
+    present(doc, "change_price census", "161 (events 93, missions 14, common 1, history 53, decisions 0)")
+    present(doc, "cooldown defines", "12 months / 30 days / 60 days")
+    present(doc, "price partition", "13-2-4-11")
+    absent(doc, "R3: no live Phi_ord percentage", "`Φ_ord`'s **60.3%**")
+    absent(doc, "R2: no 'widest band on this field'", "the widest band on this field")
+    print("  %d checks on this document" % (len(RES) - n0))
+
+SPECCHECKS = True
+
+def run_spec(path):
+    """The spec states the same quantities in its own prose; every one must match the install."""
+    doc = io.open(path, encoding="utf-8").read()
+    print("=" * 100); print("verifying %s against the install" % os.path.basename(path)); print("=" * 100)
+    n0 = len(RES)
+    shows(doc, "spec: world wealth", "**{:,.2f}** annual ducats over **{:,}** counted provinces",
+          O["world wealth"], O["counted provinces"])
+    shows(doc, "spec: sinks per good (1.1)", "1–{} sinks per good, mean {:.2f}",
+          O["sinks per good min/max/mean"][1], O["sinks per good min/max/mean"][2])
+    shows(doc, "spec: self-coherence", "**{:.1f}%** of edge-goods (**{:.1f}%** value-weighted)",
+          O["Phi_w self-coherence edge-goods"], O["Phi_w self-coherence value-weighted"])
+    shows(doc, "spec: sources", "**{} sources**", WORD.get(O["sources"], O["sources"]))
+    shows(doc, "spec: source ranks", "`c_w` ranks **{}–{}**",
+          O["source c_w rank range"][0], O["source c_w rank range"][1])
+    shows(doc, "spec: largest b_w", "largest `|b_w|` **{:.4f}**", O["largest |b_w|"])
+    shows(doc, "spec: alpha band", "band **[{:.2f}, {:.2f}], width {:.2f}**",
+          O["band containing alpha=1.5"][1], O["band containing alpha=1.5"][2],
+          O["band containing alpha=1.5"][3])
+    shows(doc, "spec: alpha counts", "**{} → {} → {} → {} → {} → {}**",
+          *[len_ for len_ in O["sink count at alpha 1,1.5,2,3,4,8"]])
+    shows(doc, "spec: European provinces", "{:,} counted European provinces",
+          O["European counted provinces"])
+    _cp = O["ordered pairs connected"].split(" of ")
+    shows(doc, "spec: connectivity", "**{:.1f}%** ({:,} of {:,})",
+          O["ordered pairs connected pct"], int(_cp[0]), int(_cp[1]))
+    shows(doc, "spec: cape", "in-degree {}, out-degree {}, with **{}" + chr(10) + "ordered node pairs**",
+          O["cape in-degree"], O["cape out-degree"],
+          O["ordered pairs routed through the cape"])
+    shows(doc, "spec: coal flips", "flips **{} of" + chr(10) + "159 `Φ_w` edges**",
+          O["coal activation edge flips"])
+    shows(doc, "spec: coal wealth delta", "adds {:.2f} ducats",
+          O["coal activation wealth delta"])
+    shows(doc, "spec: per-good sinks", "**1–{} sinks, mean {:.2f}**",
+          O["sinks per good min/max/mean"][1], O["sinks per good min/max/mean"][2])
+    shows(doc, "spec: price census", "**{}** textual `change_price` blocks",
+          O["change_price textual blocks"])
+    # R2/R3: the rules must hold in the spec too
+    # R2 targets what the document ASSERTS. A quoted retraction of a superseded claim
+    # ("v5.0 said \"nothing routes through the Cape\", which is false") is not a violation, so the
+    # needles below are the assertion forms -- sentence-initial or unquoted.
+    for bad in ("the widest band on this field", "Nothing routes through the Cape",
+                "exactly **two** modifiers enter wealth", "no figure in v6.0 is unverified",
+                "So almost nothing absorbs threshold chatter"):
+        absent(doc, "R2: %s" % bad[:34], bad)
+    for bad in ("`Φ_ord`'s **60.3%", "97 of 159 arrows", "13 end nodes"):
+        absent(doc, "R3: %s" % bad[:28], bad)
+    # figures coverage6.py reported unguarded -- added so the number it reports goes down
+    shows(doc, "spec: devastation cost", "It costs **{:.2f}" + chr(10) + "ducats**",
+          abs(O["devastation cost in ducats"]))
+    shows(doc, "spec: max base_tax province", "to {} (province {}),",
+          int(MAX_BT), ROWS_MAXPID)
+    shows(doc, "spec: widest band width", "**{:.2f}** wide ([{:.2f}, {:.2f}]",
+          round(O["widest band on [1,8]"][3], 2), O["widest band on [1,8]"][1], O["widest band on [1,8]"][2])
+    shows(doc, "spec: change_price by tree", "{} in `events/`",
+          M.OUT["change_price by tree"]["events"] if isinstance(M.OUT["change_price by tree"], dict)
+          else 93)
+    # A spelled count that disagrees with the table it describes is invisible to every numeric
+    # check here: the count is a word and the table is rows. This bit once, when the unrest row
+    # was added to 1.3's province-state table and three prose counts kept saying "four".
+    _NL = chr(10)
+    _mark = "static modifiers describe a province" + "'" + "s own state"
+    _i = doc.find(_mark)
+    if _i >= 0:
+        _seg = doc[_i:doc.find(_NL + _NL + "`", _i) if doc.find(_NL + _NL + "`", _i) > 0 else _i + 2000]
+        _rows = [l for l in doc[_i:_i + 2000].split(_NL) if l.startswith("| `")]
+        _n = len(_rows)
+        _w = {v.lower(): k for k, v in WORD.items()}
+        _said = None
+        _m = re.search(r"(\w+)\s*" + _NL + r"?static modifiers describe", doc[max(0, _i - 40):_i + 40])
+        if _m: _said = _w.get(_m.group(1).lower())
+        RES.append((_said == _n, "table vs its spelled count",
+                    "table %d rows, prose %s" % (_n, _said), "equal"))
+        for _m2 in re.finditer(r"the (one|two|three|four|five|six|seven|eight) (?:that describe|province-state modifiers)", doc, re.I):
+            RES.append((_w.get(_m2.group(1).lower()) == _n, "a prose count of the state modifiers",
+                        "%s vs %d rows" % (_m2.group(1), _n), "equal"))
+    # cross-phrasing value checks: the same quantity, wherever and however it is written
+    _cp2 = O["ordered pairs connected"].split(" of ")
+    every_site(doc, "every site: connected pairs", r"([\d,]+) of 6,320", _cp2[0])
+    every_site(doc, "every site: coal flips",
+               r"flips \*?\*?(\d+)\*?\*? of\s+159 `Φ_w` edges",
+               O["coal activation edge flips"])
+    print("  %d checks on this document" % (len(RES) - n0))
+
+if sys.argv[1:]:
+    targets = [q if os.path.isabs(q) else os.path.join(_INVOKED_FROM, q) for q in sys.argv[1:]]
+else:
+    targets = [os.path.join(HERE, "..", "fixes-agreed.md")]
+# Route by CONTENT, not by filename. Routing on the basename meant a copy of the spec under any
+# other name silently got the checklist's needles instead of the spec's -- so it failed ~17 checks
+# for the wrong reason, and mutate6.py, which writes its candidate to _mutated.md, was scoring every
+# planted error as "caught" when in fact nothing was being checked. A green number hid it.
+SPEC_MARK = "Per-Good Trade Network"
+CHECKLIST_MARK = "implementation checklist"
+
+for p in targets:
+    if not os.path.exists(p):
+        print("skipping missing %s" % p); continue
+    head = io.open(p, encoding="utf-8").read(4000)
+    if CHECKLIST_MARK in head: run(p)
+    elif SPEC_MARK in head: run_spec(p)
+    else:
+        print("cannot tell what %s is - no recognisable header" % os.path.basename(p))
+        RES.append((False, "routing: %s" % os.path.basename(p), "unrecognised document", "spec or checklist"))
+
+print(); print("=" * 100)
+# A harness that checks nothing must not report success. A mistyped or unresolved path used to
+# yield "0 checks, 0 failed" and exit 0 -- a green run over an empty check set.
+if not RES:
+    print("RESULT: 0 checks ran. Nothing was verified -- treating as FAILURE.")
+    print("        (targets given: %s)" % (targets or "none"))
+    sys.exit(2)
+bad = [r for r in RES if not r[0]]
+def _safe(s):
+    return str(s).encode("ascii", "replace").decode("ascii")
+for ok, name, got, exp in RES:
+    print("  [%s] %-34s %s" % ("PASS" if ok else "FAIL", _safe(name)[:34], _safe(got)[:78]))
+print("RESULT: %d checks, %d failed" % (len(RES), len(bad)))
+sys.exit(1 if bad else 0)

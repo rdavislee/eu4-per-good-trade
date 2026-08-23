@@ -1,0 +1,333 @@
+# -*- coding: utf-8 -*-
+"""DRAIN: peel -> HHI-adaptive sink selection -> min-cost b-flow -> gated drainage
+sweep (orients ALL free edges) -> un-peel.
+
+Implemented to spec. Deviations flagged:
+  * Phase 1's optional dilation (merge clusters within graph distance r) defaults to r=0 and is
+    reachable via run_drain(b, dilate_r=...); 'not applied' means not on by default, not absent;
+    the spec marks it optional. Reported separately.
+  * Phase 3 stall lemma: "the unmarked set contains a flow-terminal demander". A gate-true
+    unmarked node that is support-isolated with beta==0 is not covered by the lemma. A
+    documented fallback promotes the gate-true unmarked node with the most negative beta
+    (ties -> lowest index); the report records whether it ever fires.
+  * beta(v)==0 is outside the spirit of the input spec but occurs at exactly one node
+    (cape_of_good_hope) for all 29 goods.
+"""
+import numpy as np, collections, sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from flowop import mincost_flow, net_per_edge, ZERO_TOL, TIE_COST
+from solver import N, ORDER, NIDX, UND, EDGES_UND
+
+# spec v4.0 §1.1 Phase 3: the fallback branch promotes the highest-wealth candidate.
+# Node wealth is good-independent and is an input, so this is deterministic and needs no bootstrap.
+import numpy as _np
+from solver import ROWS as _ROWS
+NODEW = _np.zeros(N)
+for _r in _ROWS:
+    NODEW[NIDX[_r["node"]]] += _r["tax"] + _r["prod_income"]
+
+
+
+# ================================================================ PHASE 0 =====
+def phase0(b):
+    beta = np.asarray(b, dtype=float).copy()
+    alive = np.ones(N, dtype=bool)
+    deg = np.array([len(UND[i]) for i in range(N)])
+    Plog = []
+    changed = True
+    while changed:
+        changed = False
+        for v in range(N):
+            if alive[v] and deg[v] == 1:
+                u = next(x for x in UND[v] if alive[x])
+                Plog.append((v, u, beta[v]))
+                beta[u] += beta[v]
+                alive[v] = False; deg[u] -= 1; deg[v] = 0
+                changed = True
+    core = [v for v in range(N) if alive[v]]
+    return core, beta, Plog
+
+
+# ================================================================ PHASE 1 =====
+def phase1(core, beta, dilate_r=0):
+    coreset = set(core)
+    Dset = [v for v in core if beta[v] < 0]
+    if not Dset:
+        return set(), dict(k=0, HHI=float("nan"), nclusters=0, D=0.0)
+    D = sum(-beta[v] for v in Dset)
+    ds = set(Dset)
+    # connected components of H[Dset]  (optional dilation: link demanders within r hops)
+    comps, seen = [], set()
+    for v in Dset:
+        if v in seen:
+            continue
+        comp = {v}; stack = [v]; seen.add(v)
+        while stack:
+            x = stack.pop()
+            for y in UND[x]:
+                if y in ds and y not in comp:
+                    comp.add(y); seen.add(y); stack.append(y)
+        comps.append(sorted(comp))
+    if dilate_r > 0:                       # optional merge within graph distance r
+        parent = {v: v for v in range(len(comps))}
+        def find(a):
+            while parent[a] != a: parent[a] = parent[parent[a]]; a = parent[a]
+            return a
+        idx = {}
+        for ci, comp in enumerate(comps):
+            for v in comp: idx[v] = ci
+        for ci, comp in enumerate(comps):
+            frontier = {v: 0 for v in comp}
+            q = collections.deque(comp)
+            while q:
+                x = q.popleft()
+                if frontier[x] >= dilate_r: continue
+                for y in UND[x]:
+                    if y in coreset and y not in frontier:
+                        frontier[y] = frontier[x] + 1; q.append(y)
+                        if y in idx and find(idx[y]) != find(ci):
+                            parent[find(idx[y])] = find(ci)
+        merged = collections.defaultdict(list)
+        for ci, comp in enumerate(comps): merged[find(ci)].extend(comp)
+        comps = [sorted(c) for c in merged.values()]
+    M = [sum(-beta[v] for v in comp) for comp in comps]
+    q = [m / D for m in M]
+    HHI = sum(x * x for x in q)
+    k = int(min(max(round(1.0 / HHI), 1), len(comps)))
+    top = sorted(range(len(comps)), key=lambda j: -M[j])[:k]
+    S = set()
+    for j in top:
+        S.add(min(comps[j], key=lambda v: (beta[v], v)))   # heaviest demander
+    return S, dict(k=k, HHI=HHI, nclusters=len(comps), D=D,
+                   cluster_sizes=sorted((len(c) for c in comps), reverse=True)[:6])
+
+
+# ================================================================ PHASE 2 =====
+def phase2(core, beta):
+    coreset = set(core)
+    b = np.zeros(N)
+    for v in core: b[v] = beta[v]
+    # flowop.mincost_flow(s, c) imposes  inflow - outflow = c - s.
+    # Here beta > 0 means net supply, so we need  inflow - outflow = -beta,
+    # i.e. pass s = beta, c = 0.
+    f, duals, res = mincost_flow(b, np.zeros(N), cost=TIE_COST)
+    net = net_per_edge(f)
+    flow_arc = {}
+    free = []
+    for ei, (u, v) in enumerate(EDGES_UND):
+        if u not in coreset or v not in coreset:
+            continue
+        phi = net[ei]
+        if phi > ZERO_TOL:   flow_arc[ei] = (u, v)
+        elif phi < -ZERO_TOL: flow_arc[ei] = (v, u)
+        else:                 free.append(ei)
+    return flow_arc, free, net, res.fun
+
+
+# ================================================================ PHASE 3 =====
+def phase3(core, beta, flow_arc, free, net):
+    coreset = set(core)
+    outs = collections.defaultdict(list); ins = collections.defaultdict(list)
+    for ei, (u, v) in flow_arc.items():
+        outs[u].append(v); ins[v].append(u)
+    freeadj = collections.defaultdict(list)
+    for ei in free:
+        u, v = EDGES_UND[ei]
+        freeadj[u].append(v); freeadj[v].append(u)
+    inflow = collections.defaultdict(float)
+    for ei, (u, v) in flow_arc.items():
+        inflow[v] += abs(net[ei])
+    return outs, ins, freeadj, inflow
+
+
+def sweep(core, beta, S, flow_arc, free, net, prio=None):
+    coreset = set(core)
+    outs, ins, freeadj, inflow = phase3(core, beta, flow_arc, free, net)
+    cnt = {u: len(outs[u]) for u in core}
+    marked = set(); order = {}
+    t = 0
+    Sset = set(S)
+    promotions = []
+    fallbacks = []
+    scan = sorted(core, key=(lambda v: prio[v]) if prio is not None else (lambda v: v))
+    while len(marked) < len(core):
+        cand = None
+        for u in scan:
+            if u in marked or cnt[u] != 0:
+                continue
+            if (u in Sset) or (len(outs[u]) > 0) or any(w in marked for w in freeadj[u]):
+                cand = u; break
+        if cand is not None:
+            marked.add(cand); order[cand] = t; t += 1
+            for x in ins[cand]:
+                cnt[x] -= 1
+            continue
+        # STALL
+        gated = [u for u in core if u not in marked and cnt[u] == 0]
+        terminals = [u for u in gated if len(outs[u]) == 0 and inflow[u] > ZERO_TOL]
+        if terminals:
+            s_star = min(terminals, key=lambda v: (beta[v], v))
+            promotions.append(s_star)
+        else:
+            if not gated:
+                raise RuntimeError("no gated unmarked node: flow support has a cycle")
+            s_star = max(gated, key=lambda v: (NODEW[v], -v))   # v4.0 fallback: highest wealth
+            fallbacks.append(s_star)
+        Sset.add(s_star)
+    return order, Sset, promotions, fallbacks
+
+
+# ====================================================== DETERMINISTIC SWEEP ===
+def flow_def(core, beta, flow_arc):
+    """Downstream demand DEF(v) on the FLOW-ARC subgraph only. The flow subgraph is
+    acyclic and fixed before any free edge is oriented, so using DEF to schedule the
+    sweep introduces no circularity."""
+    outs = collections.defaultdict(list); indeg = collections.Counter()
+    for ei, (u, v) in flow_arc.items():
+        outs[u].append(v); indeg[v] += 1
+    ind = dict(indeg); topo = []
+    q = collections.deque([v for v in core if ind.get(v, 0) == 0])
+    while q:
+        x = q.popleft(); topo.append(x)
+        for y in outs[x]:
+            ind[y] -= 1
+            if ind[y] == 0: q.append(y)
+    DEF = {}
+    for v in reversed(topo):
+        DEF[v] = max(0.0, -beta[v]) + sum(DEF[u] for u in outs[v])
+    for v in core:
+        DEF.setdefault(v, max(0.0, -beta[v]))
+    return DEF
+
+
+def sweep_priority(core, beta, S, flow_arc, free, net, key_mode="def_beta", pid=None):
+    """Kahn-style sweep with a PRIORITY ready-queue instead of scan order.
+    key_mode: 'def_beta'  -> (-DEF, beta, id)      largest downstream demand first,
+                                                   then most net-consuming (toward scarcity)
+              'def_absb'  -> (-DEF, -|beta|, id)   the literal proposal (activity magnitude)
+    pid: optional node->int map replacing the final id key (for stubbornness tests)."""
+    import heapq
+    outs, ins, freeadj, inflow = phase3(core, beta, flow_arc, free, net)
+    DEF = flow_def(core, beta, flow_arc)
+    if pid is None:
+        pid = {v: v for v in core}
+    if key_mode == "def_beta":
+        keyfn = lambda v: (-DEF[v], beta[v], pid[v])
+    elif key_mode == "defasc_beta":                     # control: DEF ascending
+        keyfn = lambda v: (DEF[v], beta[v], pid[v])
+    else:
+        keyfn = lambda v: (-DEF[v], -abs(beta[v]), pid[v])
+    cnt = {u: len(outs[u]) for u in core}
+    marked = set(); order = {}
+    t = 0
+    Sset = set(S); promotions = []; fallbacks = []
+    heap = []
+
+    def ready(u):
+        return (u not in marked and cnt[u] == 0 and
+                ((u in Sset) or (len(outs[u]) > 0) or any(w in marked for w in freeadj[u])))
+
+    for u in core:
+        if ready(u):
+            heapq.heappush(heap, (keyfn(u), u))
+    while len(marked) < len(core):
+        found = None
+        while heap:
+            k, u = heapq.heappop(heap)
+            if ready(u):
+                found = u; break
+        if found is None:
+            gated = [u for u in core if u not in marked and cnt[u] == 0]
+            terminals = [u for u in gated if len(outs[u]) == 0 and inflow[u] > ZERO_TOL]
+            if terminals:
+                s_star = min(terminals, key=lambda v: (beta[v], v)); promotions.append(s_star)
+            else:
+                s_star = max(gated, key=lambda v: (NODEW[v], -v)); fallbacks.append(s_star)
+            Sset.add(s_star)
+            if ready(s_star):
+                heapq.heappush(heap, (keyfn(s_star), s_star))
+            continue
+        u = found
+        marked.add(u); order[u] = t; t += 1
+        for x in ins[u]:
+            cnt[x] -= 1
+            if ready(x):
+                heapq.heappush(heap, (keyfn(x), x))
+        for w in freeadj[u]:
+            if ready(w):
+                heapq.heappush(heap, (keyfn(w), w))
+    return order, Sset, promotions, fallbacks
+
+
+# ================================================================ PHASE 4 =====
+def compile_dirs(core, order, flow_arc, free, Plog, beta_final):
+    coreset = set(core)
+    directed = []
+    for ei, (u, v) in flow_arc.items():
+        directed.append((u, v))
+    for ei in free:
+        u, v = EDGES_UND[ei]
+        directed.append((u, v) if order[u] > order[v] else (v, u))
+    for (v, u, bv) in reversed(Plog):
+        directed.append((v, u) if bv >= 0 else (u, v))
+    return directed
+
+
+def run_drain(b, dilate_r=0, prio=None, deterministic=True):
+    """deterministic=True (default): priority ready-queue keyed (DEF asc, beta asc, index),
+    with DEF computed on the flow-arc subgraph. Free-edge orientation is then a function of
+    the graph and the balances only. prio is honoured only when deterministic=False."""
+    core, beta, Plog = phase0(b)
+    if len(core) <= 1:
+        directed = []
+        for (v, u, bv) in reversed(Plog):
+            directed.append((v, u) if bv >= 0 else (u, v))
+        return dict(directed=directed, S=set(), core=core, tree=True, info={}, cost=0.0,
+                    promotions=[], fallbacks=[], free=[], flow_arc={})
+    S, info = phase1(core, beta, dilate_r)
+    flow_arc, free, net, cost = phase2(core, beta)
+    if deterministic:
+        order, Sset, promotions, fallbacks = sweep_priority(core, beta, S, flow_arc, free,
+                                                            net, "defasc_beta")
+    else:
+        order, Sset, promotions, fallbacks = sweep(core, beta, S, flow_arc, free, net, prio)
+    directed = compile_dirs(core, order, flow_arc, free, Plog, beta)
+    return dict(directed=directed, S=Sset, S0=S, core=core, tree=False, info=info,
+                cost=cost, promotions=promotions, fallbacks=fallbacks, order=order,
+                free=free, flow_arc=flow_arc, net=net, beta=beta)
+
+
+def sinks_of(directed):
+    od = collections.Counter(u for u, _ in directed)
+    return [i for i in range(N) if od[i] == 0], od
+
+
+def has_cycle(directed):
+    a = collections.defaultdict(list)
+    for u, v in directed: a[u].append(v)
+    col = [0]*N; path=[]; found=[]
+    def dfs(u):
+        col[u]=1; path.append(u)
+        for w in a[u]:
+            if col[w]==1: found.append(path[path.index(w):]+[w]); return True
+            if col[w]==0 and dfs(w): return True
+        path.pop(); col[u]=2; return False
+    for i in range(N):
+        if col[i]==0 and dfs(i): return found[0]
+    return None
+
+
+if __name__ == "__main__":
+    from solver import GOODS, PRICES, build_sc
+    ALPHA = lambda g: max(0.2, min(3.0, (PRICES[g]/2.0)**1.0))
+    S0m, C0m, V, LIVE, GP, W = build_sc(ALPHA, eps=0.0)
+    for g in ("spices", "cloves", "grain"):
+        gi = GOODS.index(g); b = S0m[gi] - C0m[gi]
+        r = run_drain(b)
+        sk, od = sinks_of(r["directed"])
+        print("%-8s core=%d edges oriented=%d/%d | HHI=%.4f k=%d clusters=%d | S0=%d promo=%d fb=%d | sinks=%d acyclic=%s"
+              % (g, len(r["core"]), len(r["directed"]), len(EDGES_UND),
+                 r["info"]["HHI"], r["info"]["k"], r["info"]["nclusters"],
+                 len(r["S0"]), len(r["promotions"]), len(r["fallbacks"]),
+                 len(sk), has_cycle(r["directed"]) is None))
+        print("         sinks: %s" % [ORDER[i] for i in sk])

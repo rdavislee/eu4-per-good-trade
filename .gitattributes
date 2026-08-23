@@ -1,0 +1,3 @@
+# Byte fidelity is load-bearing: the spec, frozen baselines and round*.diff files are
+# MD5-pinned and the diff chain reconstructs byte-exactly. Never convert line endings.
+* -text

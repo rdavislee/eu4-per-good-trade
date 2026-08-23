@@ -1,0 +1,7 @@
+SUPPORT under LP COLUMN permutation, 8 per good (232 runs), 3 seeds
+  first    tol=default  moved/232 (goods) by seed: [(101, 18), (96, 18), (99, 18)]
+  first    tol=1e-10    moved/232 (goods) by seed: [(104, 18), (98, 18), (101, 18)]
+  full     tol=default  moved/232 (goods) by seed: [(4, 2), (10, 2), (8, 2)]
+  full     tol=1e-10    moved/232 (goods) by seed: [(0, 0), (0, 0), (0, 0)]
+  absdiff  tol=default  moved/232 (goods) by seed: [(82, 16), (78, 15), (83, 16)]
+  absdiff  tol=1e-10    moved/232 (goods) by seed: [(61, 11), (57, 11), (57, 11)]

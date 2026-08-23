@@ -1,0 +1,52 @@
+==========================================================================================
+per-good uniqueness margin under the shipped cost (min positive reduced cost)
+==========================================================================================
+  chinaware          margin 5.801e-07   zero-rc arcs off support: 0
+  cloth              margin 4.6e-07   zero-rc arcs off support: 0
+  cloves             margin 1.358e-06   zero-rc arcs off support: 0
+  cocoa              margin 2.19e-07   zero-rc arcs off support: 0
+  coffee             margin 1.358e-06   zero-rc arcs off support: 0
+  copper             margin 3.765e-08   zero-rc arcs off support: 0
+  cotton             margin 1.177e-07   zero-rc arcs off support: 0
+  dyes               margin 3.308e-06   zero-rc arcs off support: 0
+  fish               margin 6.11e-07   zero-rc arcs off support: 0
+  fur                margin 3.308e-06   zero-rc arcs off support: 0
+  gems               margin 5.801e-07   zero-rc arcs off support: 0
+  glass              margin 1.442e-07   zero-rc arcs off support: 0
+  grain              margin 1.179e-07   zero-rc arcs off support: 0
+  incense            margin 1.358e-06   zero-rc arcs off support: 0
+  iron               margin 5.679e-05   zero-rc arcs off support: 0
+  ivory              margin 1.358e-06   zero-rc arcs off support: 0
+  livestock          margin 3.329e-05   zero-rc arcs off support: 0
+  naval_supplies     margin 3.209e-07   zero-rc arcs off support: 0
+  paper              margin 8.915e-08   zero-rc arcs off support: 1
+  salt               margin 1.891e-07   zero-rc arcs off support: 0
+  silk               margin 2.018e-07   zero-rc arcs off support: 0
+  slaves             margin 1.358e-06   zero-rc arcs off support: 0
+  spices             margin 1.442e-07   zero-rc arcs off support: 0
+  sugar              margin 3.677e-05   zero-rc arcs off support: 0
+  tea                margin 1.454e-05   zero-rc arcs off support: 0
+  tobacco            margin 4.98e-06   zero-rc arcs off support: 0
+  tropical_wood      margin 6.974e-07   zero-rc arcs off support: 0
+  wine               margin 5.801e-07   zero-rc arcs off support: 0
+  wool               margin 1.891e-07   zero-rc arcs off support: 0
+  AGGREGATE          margin 7.527e-06   zero-rc arcs off support: 0
+  worst per good: copper at 3.7648e-08
+
+==========================================================================================
+tolerance sweep: flips over 4 and 6 permutations, 3 seeds
+==========================================================================================
+  copper (margin 3.7648e-08)
+    tol unset     (sum over 4 perms, sum over 6) by seed: [(2, 4), (8, 10), (6, 8)]
+    tol 1e-06     (sum over 4 perms, sum over 6) by seed: [(24, 38), (18, 28), (22, 30)]
+    tol 1e-07     (sum over 4 perms, sum over 6) by seed: [(2, 4), (8, 10), (6, 8)]
+    tol 1e-08     (sum over 4 perms, sum over 6) by seed: [(0, 0), (0, 0), (0, 0)]
+    tol 1e-09     (sum over 4 perms, sum over 6) by seed: [(0, 0), (0, 0), (0, 0)]
+    tol 1e-10     (sum over 4 perms, sum over 6) by seed: [(0, 0), (0, 0), (0, 0)]
+  paper (margin 8.9152e-08)
+    tol unset     (sum over 4 perms, sum over 6) by seed: [(6, 8), (2, 6), (0, 4)]
+    tol 1e-06     (sum over 4 perms, sum over 6) by seed: [(22, 36), (14, 24), (24, 30)]
+    tol 1e-07     (sum over 4 perms, sum over 6) by seed: [(6, 8), (2, 6), (0, 4)]
+    tol 1e-08     (sum over 4 perms, sum over 6) by seed: [(0, 0), (0, 0), (0, 0)]
+    tol 1e-09     (sum over 4 perms, sum over 6) by seed: [(0, 0), (0, 0), (0, 0)]
+    tol 1e-10     (sum over 4 perms, sum over 6) by seed: [(0, 0), (0, 0), (0, 0)]

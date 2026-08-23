@@ -1,0 +1,36 @@
+owner-level ratio consistency over the 245 singleton cells:
+tag   n    distinct ratios (rounded 4dp) mean aut
+  MNG   n=16  ratios=[0.7, 1.0]  mean_aut=26.4
+  ARA   n=7   ratios=[1.0, 1.0967]  mean_aut=14.8
+  MOS   n=5   ratios=[1.0, 1.2383, 1.275]  mean_aut=0.4
+  VIJ   n=5   ratios=[1.0675, 1.0683, 1.0687]  mean_aut=27.4
+  TIM   n=5   ratios=[0.9, 1.0, 1.22, 1.2217]  mean_aut=4.4
+  TUR   n=4   ratios=[1.0562, 1.057, 1.14]  mean_aut=4.8
+  GEO   n=4   ratios=[1.1333, 1.1338]  mean_aut=25.8
+  HUN   n=3   ratios=[0.9, 1.0]  mean_aut=2.3
+  HAB   n=3   ratios=[1.0, 1.255]  mean_aut=3.5
+  BOH   n=3   ratios=[1.6667]  mean_aut=0.0
+  TRS   n=3   ratios=[1.0]  mean_aut=6.7
+  KAS   n=3   ratios=[1.0]  mean_aut=0.0
+  CAS   n=3   ratios=[1.0]  mean_aut=0.8
+  NOG   n=3   ratios=[1.0]  mean_aut=2.0
+
+MNG: n=16  ratios=[0.7, 1.0]
+GEO: n=4  ratios=[1.1333, 1.1338]
+     ('crimea', 'cloth')  pid 422   aut  51.0 ratio 1.1333
+     ('crimea', 'fish')   pid 2196  aut  52.0 ratio 1.1333
+     ('crimea', 'dyes')   pid 423   aut   0.0 ratio 1.1338
+     ('crimea', 'silk')   pid 4301  aut   0.0 ratio 1.1338
+SRH: n=1  ratios=[1.1]
+     ('lahore', 'salt')   pid 4511  aut  64.0 ratio 1.1000
+ARA: n=7  ratios=[1.0, 1.0967]
+     ('valencia', 'iron') pid 2990  aut   2.5 ratio 1.0000
+     ('valencia', 'salt') pid 1750  aut   1.0 ratio 1.0000
+     ('valencia', 'glass') pid 213   aut  91.0 ratio 1.0000
+     ('valencia', 'grain') pid 4550  aut   1.0 ratio 1.0000
+     ('valencia', 'paper') pid 4549  aut   1.0 ratio 1.0000
+     ('valencia', 'sugar') pid 333   aut   1.0 ratio 1.0000
+     ('genua', 'copper')  pid 2986  aut   6.0 ratio 1.0967
+
+owners whose singleton cells ALL share one ratio: 152 of 165 owners with >=1 cell
+owners with >=3 cells: 18 ; of those all-one-ratio: 9

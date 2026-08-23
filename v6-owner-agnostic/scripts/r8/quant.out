@@ -1,0 +1,4 @@
+VANILLA_start.eu4 trade-block fields: {'total': (744, 0), 'val': (1187, 0), 'p_pow': (79, 0), 'retention': (80, 0), 'collector_power': (77, 0), 'max_pow': (1187, 0)} TOTAL 3354 off-grid 0
+Castile1444_12_22.eu4 trade-block fields: {'total': (772, 0), 'val': (1401, 0), 'p_pow': (79, 0), 'retention': (80, 0), 'collector_power': (77, 0), 'max_pow': (1401, 0)} TOTAL 3810 off-grid 0
+province 223 local_autonomy: 2.500
+223 header context: Garnatah

@@ -1,0 +1,168 @@
+=== Y338 (MEASURED) line 617 ===
+`Φ_w`'s marking order is a per-node scalar whose descending comparison reproduces the DAG (0 violations), so …
+
+=== Y097 (MEASURED) line 620 ===
+Per good on the same field: 2–8 sinks, mean 3.69, 29/29 acyclic, 0 fallbacks fired, and 90.6% of ordered node …
+
+=== Y098 (MEASURED) line 623 ===
+Agreement with the per-good graphs is 55.1% of edge-goods and 54.8% value-weighted.
+
+=== Y1094 (DESIGN) line 623 ===
+The agreement figure is a description of how often one power map coincides with twenty-nine commodity maps, not a qual …
+
+=== Y100 (DESIGN) line 628 ===
+`α_Φ = 2.0`, `TIE_EPS = 1e-3` and `TIE_EPS2 = 1e-6` are hyperparameters; the choice is developer taste and …
+
+=== Y102 (DESIGN) line 630 ===
+No derivation is claimed, none is implied, and none should be reconstructed from the figures below: they …
+
+=== Y103 (MEASURED) line 634 ===
+Across `α_Φ` = 1.00…8.00 at 0.01 the sink set is a step function, and `α_Φ = 2.0` sits in the band [1.63, …
+
+=== Y104 (MEASURED) line 636 ===
+Sampled at six values the sink count is non-monotone: 3 → 1 → 2 → 2 → 1 → 1 across `α_Φ` in {1, 1.5, 2, 3, 4, …
+
+=== Y992 (MEASURED) line 637 ===
+The sink set is unchanged at every `TIE_EPS` value tried from 1e-13 to 1e+12 — 24 grid points.
+
+=== Y1151 (MEASURED) line 638 ===
+`epsilon6.py` validates by reproducing the shipped map 159/159 at eps = `TIE_EPS`.
+
+=== Y1152 (MODEL) line 639 ===
+For the sinks, `TIE_EPS` is a switch with nothing to tune anywhere in reach.
+
+=== Y1153 (MEASURED) line 640 ===
+What moves at the `TIE_EPS` extremes is edge orientation: up to 16 edges below 1e-4 and up to 25 above 3.
+
+=== Y1154 (PROCESS) line 641 ===
+An earlier printing bounded the `TIE_EPS` band at about 1e-6 and about 1 and supplied each edge with a mechanism; both edges are withdrawn, because no sink transition exists at either.
+
+=== Y1010 (MEASURED) line 644 ===
+`TIE_EPS2` behaves the same way as `TIE_EPS` and was measured at 1e-7, 1e-6 and 1e-5, all three leaving the …
+
+=== Y105 (DESIGN) line 648 ===
+A written warning against reintroducing the withdrawn justifications for `α_Φ` — resemblance to vanilla's …
+
+=== Y106 (DESIGN) line 653 ===
+"Europe becomes the centre of trade as it develops" is the design claim, and it is what §3.1's first goal …
+
+=== Y107 (MEASURED) line 654 ===
+At 1444 the map ends in Genoa and in Hangzhou, and as European development compounds Europe gains ends and …
+
+=== Y108 (MODEL) line 655 ===
+The mechanism carrying that is that wealth is linear in development, so developing a region moves its `c_w` …
+
+=== Y109 (MEASURED) line 659 ===
+the table is withdrawn ("A table of interval boundaries was published here and is withdrawn"); the sweep is re-reporte …
+
+=== Y1095 (MEASURED) line 660 ===
+The European sweep samples uniformly on a 0.001 grid from ×1.000 to ×2.600.
+
+=== Y110 (DESIGN) line 662 ===
+The table is to be read as a direction rather than a trajectory: it scales all 824 counted European provinces by one f …
+
+=== Y1096 (MEASURED) line 663 ===
+The widest interval carrying three European ends and none in Asia runs ×1.973 to ×2.456, with `english_channel`, `genu …
+
+=== Y111 (MEASURED) line 666 ===
+The European-scaling path is not monotone: `hangzhou` leaves, returns and leaves again, `gulf_of_siam` holds an end over one stretch and nowhere else, and of the three intervals narrower than ×0.01, one — ×1.702–×1.709 — carries a set that appears nowhere else in the sweep.
+
+=== Y1097 (PROCESS) line 670 ===
+A table of interval boundaries was published here and is withdrawn: its rows came from bisection and disagree with a u …
+
+=== Y1098 (MODEL) line 671 ===
+The effect of a boundary that sits between samples is a row that looks like a fact and is an artifact of the sampling.
+
+=== Y1099 (PROCESS) line 672 ===
+The direction and the widest interval survive the bisection-versus-grid difference; the row boundaries did not, and qu …
+
+=== Y340 (DESIGN) line 681 ===
+These are properties of this snapshot rather than constants of the model — what one field yielded under one scaling, w …
+
+=== Y112 (MEASURED) line 682 ===
+Because §1.3's wealth is linear in development, scaling development and scaling wealth are the same operation here — m …
+
+=== Y341 (ENGINE) line 686 ===
+All three institutions the period is named for begin in Europe between 1450 and 1550: Renaissance `1450.1.1` …
+
+=== Y342 (ENGINE) line 689 ===
+The Renaissance's embracement bonus is `development_cost = -0.05`, a standing discount on every subsequent …
+
+=== Y343 (MODEL) line 690 ===
+Those institution bonuses are country-scoped, so §1.3 excludes them from wealth directly; they reach the map …
+
+=== Y344 (MEASURED) line 694 ===
+"draws A RECOGNISABLE pre-Columbian trade geography" — the definite claim and "unprompted" both softened
+
+=== Y345 (MEASURED) line 695 ===
+From the north the route to the Asian end is the Volga and the steppe: `white_sea → novgorod → kazan → …
+
+=== Y113 (MODEL) line 697 ===
+From Iberia the route is the African coast and the Red Sea: `sevilla → safi → timbuktu → katsina → ethiopia → …
+
+=== Y114 (MEASURED) line 699 ===
+No route leaves `genua` at all — it is a sink, out-degree 0 against in-degree 5, and the western Mediterranean, the Adriatic, the Rhône corridor and Alexandria carry power into it.
+CHANGE: old: "so **the western Mediterranean, the Adriatic and the Rhône** carry power *into* it" → new: "**the western Mediterranean, the Adriatic, the Rhône corridor and Alexandria** carry power *into* it", with the five in-arcs named alongside; the carrier list gains Alexandria and the Rhône becomes the Rhône corridor. The sink and the 0-against-5 degrees are unchanged
+PROV: numerical test
+
+=== Y1244 (MEASURED) line 700 ===
+`genua`’s five in-arcs are `valencia`, `tunis`, `ragusa`, `champagne` and `alexandria`.
+PROV: numerical test
+
+=== Y994 (MODEL) line 700 ===
+`english_channel` is not an end at this α: it drains to `genua` in two hops through `champagne`, and reaches …
+
+=== Y115 (MEASURED) line 705 ===
+No Europe→sink route passes the Cape of Good Hope, checked exhaustively rather than sampled: of the 23 …
+
+=== Y346 (DESIGN) line 706 ===
+"asserted as a universal because the whole set was enumerated rather than sampled — which is the only ground on which …
+
+=== Y116 (MEASURED) line 711 ===
+The Cape is a live conduit rather than an idle one: in-degree 2, out-degree 2, with 81 ordered node pairs for …
+
+=== Y117 (MEASURED) line 715 ===
+The Cape’s 81 is a count of pairs `(a, b)` where `a` reaches the Cape, the Cape reaches `b`, and `a` reaches `b` — not pairs where some shortest path transits it, which gives 71.
+
+=== Y1155 (MEASURED) line 716 ===
+Requiring *every* shortest path to transit the Cape gives 60 pairs on the same field.
+
+=== Y1156 (MEASURED) line 717 ===
+Requiring a *unique* shortest path through the Cape gives 43 pairs on the same field.
+
+=== Y118 (MODEL) line 718 ===
+In the per-good graphs the Cape also carries Asian spices to Europe; `Φ_w` models power, not cargo.
+
+=== Y119 (MEASURED) line 722 ===
+sole sink from ×1.52, continuous to the top of the swept range; all-22 gives no sole sink below ×25, the set settling …
+
+=== Y1100 (MEASURED) line 724 ===
+Swept from ×2.50 to ×25.00 on the all-22 scaling, none of the eastern four holds an end at any multiple, and both surv …
+
+=== Y1101 (PROCESS) line 726 ===
+The earlier draft's clause attributing the no-sole-sink behaviour to "the eastern four pulling ends of their own" was …
+
+=== Y120 (MEASURED) line 727 ===
+The Cape reverses under the same growth — 1444's `ivory_coast`/`zanzibar`→Cape→`comorin_cape`/`malacca` …
+
+=== Y347 (MODEL) line 732 ===
+The 22 European nodes are the 18 western and central ones (`english_channel`, `north_sea`, `baltic_sea`, …
+
+=== Y121 (MODEL) line 736 ===
+Dev-stacking a single node's top province concentrates the map on that node, and extra sinks at intermediate …
+
+=== Y1102 (MODEL) line 739 ===
+This section's figures are measured under the shipped sweep key (DEF ascending, β ascending, index), which is a design …
+
+=== Y1103 (MEASURED) line 741 ===
+Measured against DEF-descending on the same field: of the 19 aggregate-graph facts `round6.py` checks, 6 move and 13 d …
+
+=== Y1104 (MEASURED) line 742 ===
+The thirteen that hold: the sink set and its count, the promotion count, the fallback count, acyclicity, the number of …
+
+=== Y1105 (MEASURED) line 745 ===
+The six that move: the source count (5 against 10), the sources' `c_w` rank range, their mean degree, the Cape's order …
+
+=== Y1106 (MEASURED) line 747 ===
+Under the descending key `sevilla` reaches neither `ganges_delta` nor the Asian end, so the Iberian route ceases to ex …
+

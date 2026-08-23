@@ -1,0 +1,54 @@
+goods in 00_tradegoods.txt : 32  -> ['grain', 'wine', 'wool'] ... ['cloves', 'unknown']
+change_price slot order    : 33 entries, slot0='nogoods' slot1='grain' last='unknown'
+slot order == ['nogoods']+GOODS ? True
+
+node blocks                : 80
+nodes with a top-level local_value : 79
+nodes with NO local_value anywhere : ['cape_of_good_hope']
+nodes with NO top-level local_value: ['cape_of_good_hope']
+multi local_value at top level     : []
+trade_goods_size slot counts       : {33: 80}
+
+=== comparison over the 79 nodes carrying the field ===
+decimals in the save's local_value strings: {3: 79}
+  truncate both to 2dp, equal        : 59 of 79
+  truncate both to 3dp, equal        : 57 of 79
+  DIGIT-FOR-DIGIT (recon truncated to the save's own decimals) : 57 of 79
+
+  nodes NOT matching digit-for-digit (22):
+    chesapeake_bay           recon/12=1.858        engine=4.819         raw recon/12=1.858333
+    st_lawrence              recon/12=0.866        engine=3.103         raw recon/12=0.866667
+    ohio                     recon/12=2.976        engine=5.204         raw recon/12=2.976667
+    mississippi_river        recon/12=1.750        engine=3.015         raw recon/12=1.750000
+    rio_grande               recon/12=1.166        engine=1.845         raw recon/12=1.166667
+    james_bay                recon/12=0.583        engine=1.170         raw recon/12=0.583333
+    california               recon/12=0.765        engine=1.241         raw recon/12=0.765000
+    hangzhou                 recon/12=8.350        engine=8.665         raw recon/12=8.350000
+    australia                recon/12=1.916        engine=2.100         raw recon/12=1.916667
+    mexico                   recon/12=8.616        engine=8.745         raw recon/12=8.616667
+    gulf_of_aden             recon/12=4.882        engine=4.987         raw recon/12=4.882167
+    canton                   recon/12=4.730        engine=4.813         raw recon/12=4.730000
+    gulf_of_siam             recon/12=8.351        engine=8.406         raw recon/12=8.351667
+    alexandria               recon/12=6.398        engine=6.435         raw recon/12=6.398333
+    malacca                  recon/12=9.656        engine=9.679         raw recon/12=9.656333
+    lhasa                    recon/12=1.375        engine=1.395         raw recon/12=1.375000
+    persia                   recon/12=6.295        engine=6.304         raw recon/12=6.295833
+    comorin_cape             recon/12=8.414        engine=8.422         raw recon/12=8.414000
+    ethiopia                 recon/12=2.528        engine=2.532         raw recon/12=2.528333
+    philippines              recon/12=3.010        engine=3.009         raw recon/12=3.010000
+    crimea                   recon/12=4.626        engine=4.625         raw recon/12=4.626042
+    the_moluccas             recon/12=6.703        engine=6.702         raw recon/12=6.703125
+
+=== sensitivity: what count does each rule give? ===
+  |recon/12 - engine| <= 0        -> 8 of 79
+  |recon/12 - engine| <= 1e-09    -> 13 of 79
+  |recon/12 - engine| <= 1e-06    -> 13 of 79
+  |recon/12 - engine| <= 0.0001   -> 14 of 79
+  |recon/12 - engine| <= 0.001    -> 57 of 79
+  |recon/12 - engine| <= 0.005    -> 61 of 79
+  |recon/12 - engine| <= 0.01     -> 63 of 79
+  round(annual/engine,2)==12.00        -> 57 of 79
+  round(recon/12,2)==round(engine,2)   -> 59 of 79
+
+aggregate recon/12 = 326.4253   engine sum = 337.7970   shortfall = -3.366%
+cape_of_good_hope block: has trade_goods_size sum = [0.0]

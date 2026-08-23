@@ -1,0 +1,350 @@
+{
+ "Y1142": {
+  "claim": "Folded claim-audit corrections spot-verified in the round-7 audit, whose record samples 6 of 60, none missing",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`scripts/r7/out/S01.md` L5 row Y214; `../v1-laplacian/validation.md` status table)",
+  "evidence": "The r7 record's row Y214 reads \"spot-check: sampled 6 of the 60 REFUTED/PARTIAL corrections\" and closes \"All 6 sampled corrections are reflected\". Denominator re-derived independently: `../v1-laplacian/validation.md` counts-by-status table gives REFUTED 23 + PARTIAL 37 = 60. Both the 6 and the 60 and the none-missing are the record's own words."
+ },
+ "Y1185": {
+  "claim": "The round-7 spot-verification's sample is C407, C101, C037/C038 and C128/C130/C131/C132",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`scripts/r7/out/S01.md` L5)",
+  "evidence": "Row Y214's evidence cell names exactly \"C407 (node size 4x not 10x)... C101 (no engine supply range)... C037/C038 (autonomy floor)... C128/C130/C131/C132 (Improve Inland Routes/Propagate Religion bands)\" — six sampled groups, matching the document's list item for item. C049 is not in it."
+ },
+ "Y1237": {
+  "claim": "The round-7 audit's record of that spot-verification is `scripts/r7/out/S01.md`, row Y214",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read",
+  "evidence": "`scripts/r7/out/S01.md` line 5 is the row whose ID cell is `Y214`; it carries the spot-check. No other file in `scripts/r7/out/` carries a Y214 row."
+ },
+ "Y1081": {
+  "claim": "`props6.py` copied and extended from `val5_pergood.py`; permutation loop written for this citation; figure computed in-tree only at width 2 until this loop widened it to 145",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement + file read (`difflib` opcode diff of the two scripts; `final.py` L162-177; fresh `props6.py` run)",
+  "evidence": "difflib gives one `insert` opcode at 129->129/158: 29 lines added, 0 deleted, so props6.py is val5_pergood.py verbatim plus the loop. `final.py` L162 `# V035: permute the index tie-break key`, L171/175 call `sweep_priority(..., pid=pid)` (sweep-only re-keying) inside `for perm in range(2)` (two permutations per good). Fresh `props6.py`: \"scheduler permutations: 0 orientation changes over 145 trials (29 goods x 5)\"."
+ },
+ "Y1243": {
+  "claim": "Before this loop the permutation figure was computed in-tree only by `final.py`'s V035 — sweep-only re-keying, two permutations per good",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`scripts/final.py` L162-177)",
+  "evidence": "L162 `# V035: permute the index tie-break key, count orientation changes + exact key ties`; L171 and L175 pass `pid=pid` to `sweep_priority` only — Phase 1 and Phase 2 above are called on the true index — and the permutation loop is `for perm in range(2)`. Two permutations per good, sweep-only re-keying, exactly as stated."
+ },
+ "Y1195": {
+  "claim": "`val5_pergood.py` still on disk; `diff` shows `props6.py` is that file verbatim, zero deletions, plus 27 added lines carrying the permutation loop",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: measurement (`diff val5_pergood.py props6.py`; `difflib.SequenceMatcher` opcodes; `wc -l`; comparison against `scripts/r8/props6.py` and `scripts/r7/props6.py`)",
+  "evidence": "On disk and verbatim-with-zero-deletions both hold: the only opcode is `insert 129 129 129 158`, 0 deleted. The count does not: `diff` prints `129a130,158` — **29** added lines, not 27 (129 -> 158 lines). The figure was correct until this round: `scripts/r7/props6.py` and `scripts/r8/props6.py` are both 156 lines with **27** added, and round 9's edit to the C5 comment above the loop (3 comment lines -> 5) grew it to 29 without updating §1.1's count."
+ },
+ "Y114": {
+  "claim": "No route leaves `genua`; sink, out-degree 0 against in-degree 5; western Med, Adriatic, Rhone corridor and Alexandria carry power in",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (own probe `scripts/r9/lead/L_genua.py` — DRAIN at alpha_Phi=2.0 on the shipped field, degrees and arc endpoints read off `run_drain`'s directed set)",
+  "evidence": "genua out-degree 0, in-degree 5; in-arcs `alexandria`, `champagne`, `ragusa`, `tunis`, `valencia`; out-arcs none; sinks `['genua','hangzhou']`. valencia+tunis = western Mediterranean, ragusa = Adriatic, champagne = Rhone corridor, alexandria named. Also reproduced by the fresh `measure6.py` run (`Phi_w sinks ['genua','hangzhou']`)."
+ },
+ "Y1244": {
+  "claim": "`genua`'s five in-arcs are `valencia`, `tunis`, `ragusa`, `champagne` and `alexandria`",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (`scripts/r9/lead/L_genua.py`)",
+  "evidence": "in-arcs sorted: ['alexandria', 'champagne', 'ragusa', 'tunis', 'valencia'] — the five named, no more and no fewer."
+ },
+ "Y384": {
+  "claim": "Ship trade power propagates only where the country has a ship-propagation modifier, at a compounded rate the model reads as share x modifier",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/defines.lua` L1205; `common/static_modifiers/00_static_modifiers.txt` L1511 and the other `ship_power_propagation` sites; `localisation/` sweep) + document read (L827)",
+  "evidence": "The re-scoping is accurately carried: L827 now reads \"at **a compounded rate the model reads as** the propagation share multiplied by that modifier\" and adds \"their composition is stated by no file, string or observation, so the product is the model's derived reading rather than an engine fact\" — and both ingredients are indeed file-stated (`TRADE_PROPAGATE_DIVIDER = 5`, `ship_power_propagation` in eight shipped files). What is not settleable from these materials is the leading half, asserted flat as engine behaviour: **no shipped file or string states that ship propagation is gated on the country holding the modifier**, and the census gives the row provenance `stipulated`. A live probe (grant/withhold `ship_power_propagation` and read the upstream node's power itemisation) would settle it."
+ },
+ "Y1245": {
+  "claim": "The ship-propagation modifier and the propagation share are each file-stated",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/defines.lua`; `common/static_modifiers/00_static_modifiers.txt`; `common/ideas/`, `common/ages/`, `common/government_reforms/`, `common/custom_ideas/`, `common/event_modifiers/`)",
+  "evidence": "Share: `common/defines.lua:1205 TRADE_PROPAGATE_DIVIDER = 5,` (with `TRADE_PROPAGATE_THRESHOLD = 2` at 1206). Modifier: `ship_power_propagation` is a shipped modifier token — `common/static_modifiers/00_static_modifiers.txt:1511 ship_power_propagation = 0.1`, `common/ideas/00_basic_ideas.txt:1163 = 0.25`, `common/ages/00_default.txt:439 = 0.2`, `common/government_reforms/02_government_reforms_republics.txt:3122 = 0.25`, plus mission/custom-idea sites; localised `MODIFIER_SHIP_POWER_PROPAGATION:0 \"Ship Tradepower Propagation\"`."
+ },
+ "Y1246": {
+  "claim": "The composition of those two is stated by no file, string or observation",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (exhaustive grep of `common/` and all `localisation/*l_english*.yml` for any statement relating `ship_power_propagation` to `TRADE_PROPAGATE_DIVIDER`)",
+  "evidence": "`TRADE_PROPAGATE_DIVIDER`'s only localised string is `EU4_l_english.yml:3369 TRADE_PROPAGATE_DIVIDER:0 \"Trade propagation reduction: SR-$VAL$SW%\"` — a display of the constant, not a rule. The only `ship_power_propagation` strings are the name `MODIFIER_SHIP_POWER_PROPAGATION` and flavour descriptions (`custom_ship_power_propagation_desc`). No define comment, no tooltip and no shipped file relates the two, and the spec cites no observation for the product. Scoped to the searched install, the negative holds."
+ },
+ "Y1012": {
+  "claim": "No randomness in the solve: identical fingerprint over repeated runs, separate processes and six PYTHONHASHSEED values (0, 1, 2, 42, 12345, random)",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (`for s in 0 1 2 42 12345 random; do PYTHONHASHSEED=$s python fingerprint6.py; done` in `scripts/r9/lead/`, six separate processes; output kept at `scripts/r9/fp_sweep.out`)",
+  "evidence": "All six print the same digest: `8b13dddb9a345aa6d1990cac70d64e0b649b01f8cab1a9ec41cf9c87faa1012c` at PYTHONHASHSEED=0, 1, 2, 42, 12345 and random; a seventh run with the variable unset gives the same digest. Six values, enumerated exactly as the document lists them."
+ },
+ "Y1021": {
+  "claim": "Every trade number EU4 writes to a save is on a 1/1000 grid: full sweep of six fields finds 3,354 in VANILLA_start.eu4 and 3,810 in Castile1444_12_22.eu4, 0 off-grid in both",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (re-ran `scripts/val62p4_quant.py`, which unzips each save's `gamestate`, brace-matches the `trade={...}` block and counts values with more than three decimals)",
+  "evidence": "Fresh run reproduces the recorded figures exactly: VANILLA_start.eu4 total 744, val 1187, p_pow 79, retention 80, collector_power 77, max_pow 1187 = **3354**, off-grid **0**; Castile1444_12_22.eu4 772/1401/79/80/77/1401 = **3810**, off-grid **0**. Kept at `scripts/r9/quant_rerun.out`."
+ },
+ "Y1247": {
+  "claim": "The quantisation census was run by `val62p4_quant.py`, output recorded at `scripts/r8/quant.out`",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read plus re-run",
+  "evidence": "`scripts/val62p4_quant.py` exists and its header comment names Y1021; `scripts/r8/quant.out` line 1-2 carry exactly the two totals (3354 / 3810, off-grid 0) and my re-run of the script reproduces those two lines byte-for-byte."
+ },
+ "Y134": {
+  "claim": "v5.0's \"0.17-0.21 s for all 29 goods\" is not reproducible: the count of twelve runs inside that interval has run from 0 to 12 across recorded replicates",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read of both recorded outputs plus a fresh measurement (`python p3_time.py` in `scripts/r9/lead/`, kept at `scripts/r9/p3_time_r9.out`)",
+  "evidence": "`scripts/r8/p3_time.out` records 4, 0, 0 of 12; `scripts/val62check/p3_time_p4.out` records 3, 12, 7 of 12 — floor 0 and ceiling 12 both present. My own fresh batch records 7, 1, 2 of 12. Five distinct counts across three batches on one machine; the interval is not reproducible."
+ },
+ "Y1248": {
+  "claim": "A count of 0 is recorded in `scripts/r8/p3_time.out` among others, and a count of 12 in `scripts/val62check/p3_time_p4.out`",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read",
+  "evidence": "`scripts/r8/p3_time.out` replicates 1 and 2 both read \"runs inside v5.0's [0.17, 0.21] s : 0 of 12\"; `scripts/val62check/p3_time_p4.out` replicate 1 reads \"12 of 12\". A tree-wide grep of recorded `runs inside` lines gives {0 (x2), 3, 4, 7, 12} — 0 does occur \"among others\"."
+ },
+ "Y1249": {
+  "claim": "0 and 12 are the floor and the ceiling of a count out of twelve, so no endpoint is left to outrun",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: arithmetic check",
+  "evidence": "A count of how many of twelve runs fall in an interval is an integer in [0, 12]; 0 and 12 are its extreme values, both observed (above). No replicate can produce a count outside them, so neither endpoint of the stated range can be outrun by a later batch — which is the property the parenthetical claims."
+ },
+ "Y1250": {
+  "claim": "No interior set is enumerated, because successive audit passes keep recording interior values a prior pass had not collected",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (fresh `p3_time.py` batch) plus file read of the two recorded batches",
+  "evidence": "Interior values on disk before this round: {3, 4, 7}. My fresh batch this round produced 7, **1**, **2** — two interior values no prior pass had collected, on the same machine and the same script. The claimed pattern reproduced on the first attempt, so an enumerated interior set would already be stale."
+ },
+ "Y1212": {
+  "claim": "Build `835bfdf8`, the hash constant across `eu4_rev.txt` and all three crash dumps, whose metadata stamps it `2024-10-03 10:50:26 +0200`",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`eu4_rev.txt`; `crashes/eu4_20260820_134250/meta.yml`, `.../134617/meta.yml`, `.../165621/meta.yml`)",
+  "evidence": "`eu4_rev.txt` contains `835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18` and nothing else. All three crash dumps carry `SCMCommit: 835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18` and `SCMTimeStamp: \"2024-10-03 10:50:26 +0200\"` — the timestamp is crash-dump metadata, at exactly the precision the document now quotes, and appears in none of `eu4_rev.txt`."
+ },
+ "Y503": {
+  "claim": "The binary is frozen at build `835bfdf8`, so offsets found stay found for that binary, and a patch is a new binary",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`eu4_rev.txt`, three `meta.yml`) plus document read (L1338)",
+  "evidence": "The build identity is one constant hash across all four sources (above), so \"frozen at build 835bfdf8\" is accurate; \"offsets found stay found for that binary\" is a property of a fixed image, and \"a patch is a new binary\" is §2.3's re-measure-on-patch rule restated, which L1338 cites. The v6.4 rewrite left \"frozen at build `835bfdf8`\", \"offsets found stay found for that binary\" and the §2.3 clause word-for-word; only the parenthetical moved, and that clause is carried on Y1212."
+ },
+ "Y1251": {
+  "claim": "`eu4_rev.txt` carries the hash alone",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read",
+  "evidence": "`eu4_rev.txt` is 40 bytes: `835bfdf8ca24c291a1b3f1b5bc72d47e7df1ae18`, with no trailing newline and no other field — no version string, no branch, no timestamp. The date the document quotes therefore cannot come from this file, which is exactly what the v6.4 rewrite now says."
+ },
+ "Y515": {
+  "claim": "Items 1-10 are the v1 probe set, to be settled with a debugger on a vanilla install in one session, though several are observable without one",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L1366-1368)",
+  "evidence": "L1366-1368 now reads \"Items 1-10 are the v1 probe set, **to be settled** with a debugger on a vanilla install in one session - though the claim audit found several are observable without one\". The result tense is gone; the prospective form and the observable-without-one clause are both present as the row states."
+ },
+ "Y1252": {
+  "claim": "None of probe items 1-10 has been run, and §2.9 counts them open",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L1368 and L1487)",
+  "evidence": "L1368: \"none of the ten has been run (§2.9 counts them open)\". §2.9's Memory track at L1487 reads \"the fourteen items still open there (1-11 and 16-18) on one trace\" — 11 + 3 = 14, and the range 1-11 contains all ten. The two sections agree."
+ },
+ "Y549": {
+  "claim": "Caribbean 1650: sugar production income makes it a sink for cloth, iron and wine",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L1445) plus file read (`common/tradegoods/00_tradegoods.txt`)",
+  "evidence": "L1445 now reads \"a sink for cloth, iron, wine\". The replacement is correct on the file: the shipped trade-good list has 31 goods plus `unknown` and contains `cloth` (L275) and `iron` (L802); `tools` does not appear as a trade good anywhere in the file (0 matches)."
+ },
+ "Y618": {
+  "claim": "Wealth captures return flows for free: a sugar island becomes a genuine consumer of cloth and iron",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L1618) plus file read (`common/tradegoods/00_tradegoods.txt`)",
+  "evidence": "L1618 now reads \"a genuine consumer of cloth and iron\", and both are shipped trade goods (L275, L802) while `tools` is not. The mechanism half — the production term carried by the trade good rather than by development — is §1.3's `prod_income = GP_COEFF x goods_produced x price` construction, unchanged this round."
+ },
+ "Y173": {
+  "claim": "`verify6.py` checks the census total and its `events/` component against computed values, the rest as a literal-string presence check; `measure6.py`'s walker swallows failures with `except Exception: pass`",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`scripts/verify6.py` L47-59, L92-93, L153, L254-255, L292-294; `scripts/measure6.py` L228-236)",
+  "evidence": "`shows()` (L47) builds the needle from the computed value; it is used for the total at L254 (`\"**{}** textual change_price blocks\"` fed `O[\"change_price textual blocks\"]`) and for the `events/` component at L292 (`\"{} in `events/`\"` fed `M.OUT[\"change_price by tree\"][\"events\"]`). The rest of the breakdown goes through `present()` (L92: `RES.append((needle in doc, ...))`) at L153 with the literal string `\"161 (events 93, missions 14, common 1, history 53, decisions 0)\"`. `measure6.py` L235-236: `try: walk(pdx.load(fp), tree)` / `except Exception: pass`."
+ },
+ "Y1232": {
+  "claim": "AI light-ship building and trade-league behaviour are engine-internal readers",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/defines.lua`, full grep for LIGHT_SHIP and TRADE_LEAGUE)",
+  "evidence": "The light-ship defines are exactly the five the document says are exposed and no more: `LIGHT_SHIP_MAINT_FACTOR` (1173), `LIGHT_SHIP_SAILORS_COST` (1310), `LIGHT_SHIP_COST` (1334), `LIGHT_SHIP_TIME` (1341), `LIGHT_SHIP_COMBAT_WIDTH` (1433) — cost, maintenance, time, sailors, combat width — none of them relating the build decision to node value. The trade-league defines are prestige and opinion thresholds (55-57), a CB rule (1604) and a charter penalty (2117); none reads node value. Peace valuation is correctly moved off this list — see Y1253/Y1254."
+ },
+ "Y1234": {
+  "claim": "No §2.7 probe enumerates node-value readers — item 10 enumerates direction-gate call sites — so the enumeration that would settle those two is named here as missing",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (§2.7 items 1-11 and 16-18, L1390-1430; §3.10 L1843)",
+  "evidence": "Item 10 (L1409) is \"**Caller enumeration.** Disassemble and list every call site of \\\"is X downstream of Y\\\"\" — a direction-gate enumeration. Reading all of items 1-11 and 16-18, none asks for an enumeration of readers of node *value*. The count \"those two\" now matches the two engine-internal readers left on the list after peace valuation moved to the file-confirmed side."
+ },
+ "Y1253": {
+  "claim": "Peace valuation reads node value through shipped defines",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/defines.lua` L1874-1876)",
+  "evidence": "L1874 `PEACE_TERMS_TRADE_POWER_VALUE_MULT = 0.1, -- AI desire for transfering trade power is multiplied by this for each 0.1 trade value in shared nodes` — the define's own comment states the AI reads shared-node trade value, so the reader is file-exposed rather than engine-internal."
+ },
+ "Y1254": {
+  "claim": "`PEACE_TERMS_TRADE_POWER_VALUE_MULT = 0.1`, its comment stating the rule",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/defines.lua` L1874)",
+  "evidence": "L1874 verbatim: `PEACE_TERMS_TRADE_POWER_VALUE_MULT = 0.1, -- AI desire for transfering trade power is multiplied by this for each 0.1 trade value in shared nodes`. The document quotes the comment word for word, misspelling and all."
+ },
+ "Y1255": {
+  "claim": "`PEACE_TERMS_TRADE_POWER_VALUE_MAX = 2.0` and `PEACE_TERMS_TRADE_POWER_NO_TRADE_INTEREST_MULT = 0` sit alongside it",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/defines.lua` L1875-1876)",
+  "evidence": "L1875 `PEACE_TERMS_TRADE_POWER_VALUE_MAX = 2.0, -- Max AI desire for transfering trade power from shared node value`; L1876 `PEACE_TERMS_TRADE_POWER_NO_TRADE_INTEREST_MULT = 0, -- AI desire ... if they are not a merchant republic`. Both are the two lines immediately following L1874."
+ },
+ "Y749": {
+  "claim": "v1 and v2's 0.75 MB is the single-precision figure; 29 goods x 80 x 80 at 8 bytes is 1,484,800 bytes, so the natural implementation is twice what v1 and v2 recorded",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: arithmetic check plus document read (L1994; grep for the withdrawn residual)",
+  "evidence": "29 x 80 x 80 = 185,600 entries; x 8 bytes = **1,484,800** bytes, the figure quoted, and \"about 1.5 MB at double precision\" at L1994. At 4 bytes the same table is 742,400 bytes = 0.74 MB, i.e. the 0.75 MB v1 and v2 recorded, and 1,484,800 / 742,400 = 2 exactly. The withdrawn clause is gone: `1e-16` no longer occurs anywhere in the document."
+ },
+ "Y790": {
+  "claim": "Mechanism 1, file values remembered from an older patch: the 75% overseas autonomy floor is pre-Common-Sense, and 1.37's regime floors are file-exposed",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/defines.lua` L1147; `common/static_modifiers/00_static_modifiers.txt` L313-315, 344-350, 353-359, 362-365; grep of all of `common/` for an overseas autonomy floor) plus a search of the install for any version history",
+  "evidence": "The v6.4 reversal is correct and fully file-verified: `common/defines.lua:1147 COLONY_MIN_AUTONOMY = 50, -- Colonial cores always have at least this much autonomy`, and `min_local_autonomy` at L315 (`pasha_state`, 20), L349 (`colonial_core`, 50), L358 (`territory_core`, 90), L364 (`territory_non_core`, 90) — the four and only four occurrences in that file. What cannot be settled from these materials is the dating clause: no autonomy floor keyed on `overseas` exists anywhere in 1.37.5 (`defines.lua`'s only OVERSEAS_* entries are client states, culture-change cost, coring cost and overextension), and the install ships no version history, so *that the 75% figure came from a pre-Common-Sense build* would need an EU4 install older than patch 1.12 to confirm. The install settles only that the floor is absent now."
+ },
+ "Y1256": {
+  "claim": "1.37's regime floors in the static-modifier file are `min_local_autonomy = 20` (pasha_state), 50 (colonial_core) and 90 (territory_core, territory_non_core)",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/static_modifiers/00_static_modifiers.txt`)",
+  "evidence": "L313 `pasha_state = {` ... L315 `min_local_autonomy = 20`; L344 `colonial_core = {` ... L349 `min_local_autonomy = 50`; L353 `territory_core = {` ... L358 `min_local_autonomy = 90`; L362 `territory_non_core = {` ... L364 `min_local_autonomy = 90`. Block names and values match the document item for item; those four are the only `min_local_autonomy` lines in the file."
+ },
+ "Y1257": {
+  "claim": "That is the same file the model reads for `GP_COEFF` and the four province-state modifiers",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L1110, L364-366) plus file read (`scripts/solver.py` L56-64; `common/static_modifiers/00_static_modifiers.txt`)",
+  "evidence": "L1110: \"`GP_COEFF` is a shipped file value, in `common/static_modifiers/00_static_modifiers.txt` as `provincial_production_size = { trade_goods_size = 0.2 ... }`\", and `solver.py` L56 comments that GP_COEFF is read from `common/static_modifiers`, raising if `provincial_production_size` is not found. L364-366: \"Four static modifiers are applied, all four defined in `common/static_modifiers/00_static_modifiers.txt`\" (`devastation`, `prosperity`, `under_siege`, `occupied`). Same file in both cases."
+ },
+ "Y1258": {
+  "claim": "0 is the no-floor case, a value in no file",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (grep of all of `common/` for `min_local_autonomy` and for `min_local_autonomy = 0`)",
+  "evidence": "`min_local_autonomy = 0` occurs nowhere in `common/`. Every shipped occurrence is non-zero: 20/50/90/90 in the static-modifier file, -5/-10/-15/10/15/20/25/33/50 in buildings, event modifiers, mission modifiers and trade-company investments. The no-floor case is therefore the absence of the token, not a written value — exactly as the item says."
+ },
+ "Y1259": {
+  "claim": "The item said until v6.3 that the 90/20/0 floors were \"not in `defines.lua` or any file that has been searched\" — the failure mode the item describes, committed by the item",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read of the frozen prior text (`per-good-trade-spec-v6.3-round9-frozen.md` L2110-2111) plus `round9.diff` hunk 19",
+  "evidence": "The frozen v6.3 file (MD5 `88da3fe76244ab4f43ef41edf3e50768`) reads at L2111: \"and the 90/20/0 floors are not in `defines.lua` or any file that has been searched.\" — quoted exactly. It is self-describing: mechanism 1 is \"file values remembered from an older patch\", and the values had been sitting in `00_static_modifiers.txt`, the very file §1.3 and §2.3 already read for `GP_COEFF` and the four condition modifiers."
+ },
+ "Y805": {
+  "claim": "That a localisation string describes intent rather than behaviour is demonstrated by one string and adopted as the rule of evidence, not asserted of every string",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L2174-2178) plus `round9.diff` hunk 20",
+  "evidence": "The universal is gone. v6.3 read \"A localisation string describes intent, not behaviour.\"; L2176 now reads \"That a localisation string describes intent rather than behaviour is **demonstrated here by one string and adopted as the rule of evidence, not asserted as a property of every string**\", and the following clause adds the rule it feeds (\"an engine fact sourced to a *string* is settled only when something observes the behaviour the string describes\"). The one string is the §1.9 propagation tooltip, whose falsity §1.9 records."
+ },
+ "Y1238": {
+  "claim": "v6.4 changes no computation",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (`patch` the frozen v6.3 file with `round9.diff` and MD5 the result) plus reading all 20 hunks",
+  "evidence": "The diff applies to `per-good-trade-spec-v6.3-round9-frozen.md` (MD5 `88da3fe76244ab4f43ef41edf3e50768`) and yields MD5 `0989f4dc54d31514123eed24f0aae5c5`, the document under test, byte-for-byte. Reading all 20 hunks: every change is to prose, a citation, a scoping clause or a figure re-derived from an existing instrument. No constant, no formula, no eligibility rule and no `alpha` moved; `measure6.py` on the current tree still gives world wealth 10,607.4, sinks `['genua','hangzhou']`, 159/159 edges oriented, 29 live goods."
+ },
+ "Y1239": {
+  "claim": "v6.4 corrects one false file claim: §3.16's autonomy floors sit in the static-modifier file after all",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: document read (L77-78) plus file read (`00_static_modifiers.txt`) plus `round9.diff` hunk 19",
+  "evidence": "The correction is real and it is the only file-claim reversal in the diff: hunk 19 replaces \"the 90/20/0 floors are not in `defines.lua` or any file that has been searched\" with the located values, and the file does carry them at L315/349/358/364 (Y1256). No other hunk reverses a file claim."
+ },
+ "Y1240": {
+  "claim": "v6.4 re-scopes six figures to their instruments and sources — quantisation census, hashseed sweep, timing inside-count, genua's in-arcs, build stamp, permutation-measurement history",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: read all 20 hunks of `round9.diff` against the document",
+  "evidence": "Exactly six figure hunks, one per named item: §2.1 L986 quantisation (495-of-495 sample -> full census with the two saves and `val62p4_quant.py`/`scripts/r8/quant.out` named); §2.1 L962 and §2.8 L1455 hashseed (five \"including random\" -> six enumerated); §2.2 L1033 timing (0-to-11 -> 0-to-12 with both output files named); §1.6 L699 genua's in-arcs (three carriers -> five named arcs); §2.5 L1338 build stamp (bare SCM date -> crash-dump metadata at full precision); §1.1 L240 permutation history (nothing-in-the-tree -> `final.py` V035 at width 2). Sections cited in the row (§1.1, §1.6, §2.1, §2.2, §2.5) are exactly the sections those hunks fall in."
+ },
+ "Y1241": {
+  "claim": "v6.4 marks three readings at their evidence class: peace valuation's define, ship propagation's composition, the localisation-string rule",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: read `round9.diff` hunks 6, 18 and 20 against the document",
+  "evidence": "Three and only three hunks re-class a reading: §3.10 L1843 moves peace valuation from the engine-internal set to a file-read with the define and its comment quoted (Y1253-Y1255); §1.9 L827 marks the share x modifier product as \"the model's derived reading rather than an engine fact\" (Y384); §3.16 L2176 withdraws the universal over localisation strings for a one-case demonstration (Y805). The sections named in the row (§1.9, §3.10, §3.16) are exactly those three."
+ },
+ "Y1242": {
+  "claim": "v6.4 retires a dangling residual citation (§3.14), a non-existent trade good (`tools`) and §2.7's result-tense preamble",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: read `round9.diff` plus grep of the current document",
+  "evidence": "§3.14: the clause \"and its residuals sit at 1e-16, one ULP of a double (§3.10)\" is deleted and `1e-16` now occurs nowhere in the document (Y749). `tools`: replaced by `iron` at both sites, §2.8 L1445 and §3.3 L1618, and `tools` is not a shipped trade good (Y549, Y618). §2.7: \"Items 1-10 are the v1 probe set, settled with a debugger\" becomes \"to be settled\" (Y515). Three retirements, exactly as listed."
+ },
+ "Y375": {
+  "claim": "Vanilla gates still apply: trade range, and no transfer into a node where nobody holds power at both ends",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`localisation/EU4_l_english.yml` L1353, L2847; `localisation/hints_l_english.yml` L230; grep of `common/defines.lua` and all English localisation for a both-ends rule) plus document read (L809-811)",
+  "evidence": "The trade-range half is file-sourced: `HINT_TRADERANGE_TEXT:0 \"Trade Range determines how far away you may send a Merchant...\"`, `TRADE_RANGE_IRO:0 \"Our merchants can reach trade nodes within this range...\"`, `TRADE_NODES_OUT_OF_RANGE`. The both-ends half is not: no define, no string and no shipped file states it, which the document itself records in the same sentence — \"*(the both-ends rule is stated from the trade interface's behaviour; no define, string or searched file names it — a probe-class fact under §3.16's own rule, recorded as such)*\". So the document does not overstate its evidence, but half the claim cannot be reproduced from these materials; a live session reading the trade interface on a node where one side holds no power would settle it."
+ },
+ "Y1144": {
+  "claim": "The one shipped sweep script is v4.0's `audit_modifiers.py`",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read of `../v4-owner-agnostic/scripts/` (all `audit_*.py`, grepped for `os.listdir`/`os.walk` over `common/event_modifiers` and `common/static_modifiers`)",
+  "evidence": "`audit_modifiers.py` exists, is v4.0's, and is the only script whose stated purpose is the modifier sweep (docstring: \"Enumerates, from the install, every province-scoped source live at 1444.11.11...\"). But \"the one\" is not exact: three further scripts in the same shipped tree walk the same two directories — `audit_alpha.py:16` and `audit_bands.py:15` (`for sub in (\"event_modifiers\", \"static_modifiers\")`) and `audit_seventh.py:125` (direct `pdx.load` of `00_static_modifiers.txt`). The count is wrong; the attribution to v4.0 and the conclusion are not. Same defect as Y137."
+ },
+ "Y137": {
+  "claim": "v3.0-v5.0 said neither wealth coefficient was in a file; v4.0's tree ships the one sweep script, `audit_modifiers.py`, which walked past the block holding one of them",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`../v4-owner-agnostic/scripts/audit_modifiers.py` L20-32; `audit_alpha.py` L16; `audit_bands.py` L15; `audit_seventh.py` L125)",
+  "evidence": "The walked-past half holds exactly: `audit_modifiers.py` L21-28 loads every block of `common/static_modifiers` into `defs`, then filters on `WEALTH_KEYS = (\"trade_goods_size\", \"trade_goods_size_modifier\", \"local_tax_modifier\", \"trade_value_modifier\")` applied to provinces through `history/provinces` — it never inspects `provincial_production_size` as a coefficient (0 occurrences of the token in the file), so it read past the block carrying GP_COEFF. What fails is \"the one sweep script\": v4.0's tree ships at least three more that sweep the same two directories (`audit_alpha.py:16`, `audit_bands.py:15`, `audit_seventh.py:125`)."
+ },
+ "Y1115": {
+  "claim": "`\\|w[u] - w[v]\\|` telescopes: summed along a path it collapses to a function of the endpoints",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: derivation check (constructed counterexample) plus measurement (`scripts/r9/round6.out`)",
+  "evidence": "The telescoping step is stated without its qualifier and is false as written. It holds only on paths monotone in `w`: for node weights w = 0, 10, 0 the summed term is 10 + 10 = **20** while the endpoint difference is **0**, so the sum is not a function of the endpoints. The conclusion the step supports is nevertheless measured and correct — `round6.py` gives \"shipped: goods with an alternative optimum 1 of 29 (paper); structured: 11 of 29\". The argument needs \"along a monotone path\", or a cancellation argument that does not assume telescoping."
+ },
+ "Y483": {
+  "claim": "DLC state is a third input axis: treasure-fleet diversion and caravan power are both DLC-conditional, and caravan modifier values are readable even when inert",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/defines.lua` L1220-1222; `common/static_modifiers/00_static_modifiers.txt` L659; grep of all of `common/`, `decisions/`, `events/` for `has_dlc` near treasure-fleet or caravan)",
+  "evidence": "The readable-when-inert half is confirmed: `CARAVAN_FACTOR = 3.0`, `CARAVAN_POWER_MAX = 50`, `CARAVAN_POWER_MIN = 2` sit in `defines.lua` unguarded, and `caravan_power = 0.05` sits in `00_static_modifiers.txt:659`. The DLC-conditionality half is not settleable from these files: no `has_dlc` gate anywhere in `common/`, `decisions/` or `events/` attaches to treasure-fleet diversion or to caravan power — all 11 `has_dlc = \"El Dorado\"` sites are in `common/achievements.txt`. A session with the DLC disabled would settle it."
+ },
+ "Y486": {
+  "claim": "A file with all 159 links declared backwards logged exactly 159 errors and loaded and played normally, with node `total` and `retention` unchanged",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`../v2-drain/game-session.md` L184-185, the session's own comparison table)",
+  "evidence": "`retention` is literally unchanged — the table records `0/80 differ` in both columns. `total` is not: L184 records \"`total` \\| **1/79 differ, max 0.012%** \\| **1/79 differ, max 0.012%**\", the same one-node drift in the permuted-vs-vanilla test and in the vanilla-vs-vanilla noise control. The drift is therefore noise rather than effect, but `total` is listed among the unchanged fields and is not unchanged. §2.8 L1453 states the same measurement correctly (\"`retention` is identical on 80 of 80 nodes and `total` on 78 of 79, the exception - `zambezi` - drifting 0.012%\"), so the two sections disagree."
+ },
+ "Y591": {
+  "claim": "Monotonicity killed the RANK strawman: 17.1% of world demand unreachable (unweighted per-good mean; 7.7% value-weighted), Genoa crowned an unreachable cloves sink",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: measurement (own probes `scripts/r9/lead/L_rank.py` and `L_rank2.py` running the shipped `rankop.py` on the current field, computing both aggregations; plus a rerun of `scripts/verify.py`)",
+  "evidence": "The qualitative half reproduces exactly: under RANK, `cloves`'s only source is `the_moluccas`, `genua` is a cloves sink (out-degree 0), and `genua` is not reachable from `the_moluccas`. The figures do not. Measured on the current field: unweighted per-good mean unreachable demand **16.6664%** against the document's 17.1%, and value-weighted **7.5944%** against 7.7%. Corroborated by the shipped v1-era harness: `verify.py`'s cached `ranked :: mean reach` expects 83.29 and a live rerun gives **83.33** (= 16.67% unreachable) — one of 16 cached checks in that script that now fail against the current wealth field."
+ },
+ "Y683": {
+  "claim": "Vanilla's authored arrows encode empires pointing at the biggest cities and richest areas, with three authored ends (`genua`, `venice`, `english_channel`)",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`common/tradenodes/00_tradenodes.txt`, node blocks lacking an `outgoing` key) plus measurement (node wealth from `solver.py`'s `ROWS`, `tax + prod_income` summed per node)",
+  "evidence": "The countable half is exact: exactly three of the 80 node blocks carry no `outgoing` key — `genua`, `venice`, `english_channel`. The characterisation is not true of all three on the project's own wealth measure: `english_channel` is node-wealth rank **1** of 80 (316.6) and `genua` rank **4** (296.0), but `venice` is rank **21** (180.6), behind `mexico` (300.4), `gulf_of_siam` (297.9), `malacca` (295.2) and seventeen others. \"Richest areas\" is asserted of the set and fails on a third of it."
+ },
+ "Y652": {
+  "claim": "The dumps show an unbounded same-module recursion on the tested cycle",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read of all three crash dumps (`crashes/eu4_20260820_{134250,134617,165621}/exception.txt`)",
+  "evidence": "What the dumps show: `Unhandled Exception C00000FD (EXCEPTION_STACK_OVERFLOW) at address 0x00007FF6DDE6A8B4`, identical in all three, above exactly **1002** stack frames, every one of them the same placeholder line `eu4.exe (function-name not available) (+ 0)` — 1 distinct frame line across all 1002. Same-module is shown. *Recursion* and *unbounded* are not: with no function names and no per-frame addresses — which §2.4 L1264 itself states, \"the dump records no per-frame addresses\" — the trace cannot distinguish recursion from any other deep call chain, and 1002 reads as a dump cap rather than a measured depth. §3.6's neighbouring sentence (Y653) states the properly scoped version; this one outruns it."
+ },
+ "Y1099": {
+  "claim": "The direction and the widest interval survive the bisection-versus-grid difference; the row boundaries did not",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read of the withdrawn table (`per-good-trade-spec-v6.1-frozen.md` L597-606) against the fresh grid sweep (`scripts/r9/europe.out`, `europe.py`, 0.001 grid x1.000-x2.600)",
+  "evidence": "The direction survives — Europe one end to three, Asia one to none, in both. The widest interval does not survive as an interval. v6.1's table named **x1.38-x1.95** (width 0.57) \"the widest single interval in the table\"; the grid's widest three-European/no-Asia run is **x1.973-x2.456** (width 0.483), a different and non-overlapping span. The old span survives only as two grid runs, x1.382-x1.701 and x1.710-x1.947, split by the one-off `doab` set at x1.702-x1.709; merged they would be 0.565 wide and would still be the widest. The sink set survives; the interval's location does not, which is more than \"the row boundaries did not\"."
+ },
+ "Y447": {
+  "claim": "Cost per good is one uncapacitated min-cost flow on 80 nodes and 318 arcs plus an O(V+E) sweep",
+  "verdict": "PARTIAL",
+  "method": "lead recheck: file read (`scripts/drain.py` L203-260 `sweep_priority`, L276-297 `run_drain`, L143-165 `sweep`) plus arithmetic check on the flow sizing",
+  "evidence": "The flow sizing is right: 80 nodes and 2 x 159 = 318 arcs (`flowop.ARCS`). The sweep complexity is not, for the code that actually runs. `run_drain`'s default is `deterministic=True` (L276), which calls `sweep_priority` (L290) — a Kahn sweep with a `heapq` priority ready-queue (L209 `import heapq`, L232 `heapq.heappush`, L236 `heapq.heappop`), i.e. **O((V+E) log V)**; its stall branch additionally scans all of `core` (L240). The non-default `sweep` (L143) is a scan-order loop, O(V^2) worst case. Neither path is O(V+E). The practical point — the LP dominates the cost — is unaffected."
+ },
+ "Y289": {
+  "claim": "Garnatah's window read 3.52 rather than 0.80 x 4.00 = 3.20 because Granada's 1444 monarch held the `Industrious` ruler personality, +10%",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read (`common/ruler_personalities/00_core.txt` L1359-1409; `history/countries/GRA - Granada.txt`) plus arithmetic check, graded at the scope the document sets",
+  "evidence": "`industrious_personality` grants exactly `global_trade_goods_size_modifier = 0.1` — the +10% the document names — inside the block opened at L1359, and 3.20 x 1.10 = **3.52** exactly. `history/countries/GRA - Granada.txt` scripts **no** ruler personality, so Granada's 1444 personality is rolled at start, which is precisely what the document's next sentence says (\"Ruler personalities are rolled at game start wherever country history scripts none, so any window figure is one sample of a random variable\"). `VANILLA_start.eu4` showing a different roll is a different sample of that variable, not counter-evidence: the claim is scoped to one named tooltip session, and at that scope the mechanism, the magnitude and the arithmetic all check out."
+ },
+ "Y1147": {
+  "claim": "What the materials re-verify - and the round-7 audit re-verified again - is the save-side inputs and every step of the arithmetic",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: file read of the round-7 audit record (`scripts/r7/out/S03.md`, rows Y286, Y289, Y295, Y1147, Y1150) as the object of this claim, plus independent re-derivation of the province inputs from `history/provinces/223 - Granada.txt` and `1747 - Caceres.txt`",
+  "evidence": "The record carries the re-verification the sentence claims: row Y1147 of `scripts/r7/out/S03.md` states \"This validation pass re-derived `base_tax`/`base_production`/goods for Garnatah and Caceres from the save (`check_save.py`) and re-computed every truncation/multiplication in Y041-Y049 independently, reproducing all quoted figures\", with rows Y286, Y295 and Y1150 carrying the per-input and per-step checks. The save-side inputs re-derive independently here too: 223 base_tax 6 / base_production 4 / silk; 1747 base_tax 2 / base_production 2 / wool. What the sentence does not claim to re-verify — the on-screen strings — it explicitly leaves as the observation itself."
+ },
+ "Y1014": {
+  "claim": "Orientation under LP column permutation: 0 flips on the aggregate and all 29 goods, objective spread 1.1e-15",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (ran the instrument that produces this figure, `scripts/p3_net.py`, whose docstring names Y1014; cross-checked against `p3_perm.py`)",
+  "evidence": "`p3_net.py` prints \"max objective relative spread, 21 column orders x 30 solves: **1.127e-15** (at livestock)\" — 1.1e-15 to the quoted precision. Its construction (L61-67) is 30 problems (aggregate + 29 goods) x 21 column orders each, taking the worst per-problem relative spread. `p3_perm.py`'s smaller 6-permutation sweep gives 0 flips on aggregate and all 29 goods at `LP_OPTS` with a max relative spread of 1.03e-15 — a smaller sample of the same quantity, which is why a 6-permutation rerun appears to undershoot. The 0-flips half reproduces on both instruments."
+ },
+ "Y197": {
+  "claim": "Under alpha = 16 the cloves sink lands on a high-demand node rather than a geographic accident; the demand-order triple is withdrawn",
+  "verdict": "CONFIRMED",
+  "method": "lead recheck: measurement (own probe `scripts/r9/lead/L_a16.py` — rebuild S and C under the unclamped alpha-squared calibration and run DRAIN on `cloves`) plus file read of the withdrawn text (`per-good-trade-spec-v6.1-frozen.md` L1772) and a grep of the current document",
+  "evidence": "Both halves hold. Measured: `cloves` price 8.0 gives alpha = 16.0 unclamped, and its sinks are `beijing`, `doab`, `genua`, `kongo`; the cloves demand order is `hangzhou` (0.98751), `beijing` (0.00524), `doab` (0.00173), so the Chinese sink `beijing` is demand **rank 2** of 80 — a high-demand node, not a branch-end accident. And the triple is gone: v6.1 read \"under alpha = 16 the cloves demand order is `hangzhou`, `beijing`, `doab`, and the sink lands on a...\" (frozen L1772), while the current L1976 reads only \"the cloves sink lands on a high-demand node rather than a geographic accident\" — 0 occurrences of \"demand order is\" anywhere in the 2,190-line document. (The census row's phrase \"demand-order triple\" is the census's own name for that withdrawn list, not a string the spec ever contained, which is why a literal grep for it finds nothing.)"
+ }
+}

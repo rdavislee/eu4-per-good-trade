@@ -1,0 +1,25 @@
+nodes: 80 ; edges: 159
+north route: every consecutive hop a directed edge: True (11 hops)
+iberia route: every consecutive hop a directed edge: True (11 hops)
+ec->champagne edge: True ; champagne->genua edge: True
+english_channel reaches hangzhou: False
+genua out-degree 0 in-degree 5
+nodes with a European member province: 25
+connected Europe->sink pairs: 30
+pairs with a cape-transiting path: 0
+cape ordered pairs (loose definition): 81
+cape ordered pairs (a shortest path uses the cape): 71
+every node drains to a sink: True
+core directed edges: 159 ; violations of order[u] > order[v]: 0
+nodes outside the core (no marking order defined): 0
+total directed edges: 159
+net demanders: 36 of 80
+top-10 wealth nodes all net demanders: True
+largest k with ALL top-k wealth nodes net demanders: 21
+edges disagreeing, unit-cost Phase 2 vs shipped: 30 of 159
+directional-term totals over 4 distinct feasible flows: ['0.197985873622', '0.197985873622', '0.197985873622', '0.197985873622']
+sum_n w[n]*b[n] = -0.197985873622 ; spread of totals = 1.39e-16
+TIE_EPS2 = 0      goods with an alternative optimum: 18 ['chinaware', 'cloth', 'cocoa', 'copper', 'cotton', 'fish', 'gems', 'glass', 'grain', 'incense', 'naval_supplies', 'paper', 'salt', 'silk', 'spices', 'tropical_wood', 'wine', 'wool']
+TIE_EPS2 = 1e-07  goods with an alternative optimum: 1 ['paper']
+TIE_EPS2 = 1e-06  goods with an alternative optimum: 1 ['paper']
+TIE_EPS2 = 1e-05  goods with an alternative optimum: 1 ['paper']

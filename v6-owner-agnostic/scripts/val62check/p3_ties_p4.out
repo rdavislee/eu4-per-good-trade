@@ -1,0 +1,9 @@
+b-vectors tested (29 goods + aggregate) : 30
+max |sum b|                             : 2.463e-16
+Phase-0 peels across all b-vectors      : 0
+exact (DEF, beta) ties on free-edge ends: 0
+Phase-1 within-cluster beta ties        : 0
+tied cluster masses                     : 0
+sink-set EQUALITY holds                 : 30 of 30
+sink-set CONTAINMENT holds              : 30 of 30
+fallbacks fired                         : 0

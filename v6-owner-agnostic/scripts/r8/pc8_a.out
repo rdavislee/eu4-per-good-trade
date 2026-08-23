@@ -1,0 +1,39 @@
+== A1: alpha / prices ==
+  cloves   price=8.0 alpha=3.0000 exponent=2.0000
+  coal     price=10.0 alpha=3.0000 exponent=2.0000
+  sugar    price=3.0 alpha=1.5000 exponent=0.5000
+  coffee   price=3.0 alpha=1.5000 exponent=0.5000
+  grain    price=2.5 alpha=1.2500 exponent=0.2500
+  live goods count: 29
+  cloves live? True  coal live? False
+  cloves producing nodes: ['the_moluccas']
+  (77/19)^1 = 4.0526   ^0.5 = 2.0131   ^2 = 16.4238
+  (68/33)^1 = 2.0606   ^0.5 = 1.4355   ^2 = 4.2461
+
+== A2 / B3: aggregate Phi_w ==
+  alpha_Phi=1     sinks=['english_channel', 'gulf_of_siam', 'mexico']
+  alpha_Phi=1.4   sinks=['english_channel', 'hangzhou', 'rheinland']
+  alpha_Phi=1.5   sinks=['english_channel']
+  alpha_Phi=1.6   sinks=['genua']
+  alpha_Phi=1.63  sinks=['genua', 'hangzhou']
+  alpha_Phi=2     sinks=['genua', 'hangzhou']
+  alpha_Phi=3     sinks=['genua', 'hangzhou']
+  alpha_Phi=4     sinks=['hangzhou']
+  alpha_Phi=8     sinks=['hangzhou']
+  english_channel  wealth=316.6 rank=1  flow_in=0.0250 flow_out=0.0000  outdeg=3 indeg=2  b_w=-0.025021
+  mexico           wealth=300.4 rank=2  flow_in=0.0110 flow_out=0.0000  outdeg=1 indeg=4  b_w=-0.010956
+  gulf_of_siam     wealth=297.9 rank=3  flow_in=0.0156 flow_out=0.0000  outdeg=1 indeg=2  b_w=-0.015636
+  sevilla          wealth=266.5 rank=7  flow_in=0.0324 flow_out=0.0201  outdeg=3 indeg=2  b_w=-0.012336
+  genua            wealth=296.0 rank=4  flow_in=0.0305 flow_out=0.0000  outdeg=0 indeg=5  b_w=-0.030530
+  hangzhou         wealth=226.7 rank=12  flow_in=0.0347 flow_out=0.0000  outdeg=0 indeg=5  b_w=-0.034664
+  max residual |flow_in-flow_out+b_w| = 5.204170427930421e-17
+  net demanders (b_w<0): 36
+  nodes with outdeg>0 and zero outgoing flow: 18
+   -> ['baltic_sea', 'burma', 'canton', 'champagne', 'constantinople', 'deccan', 'doab', 'english_channel', 'ganges_delta', 'gulf_of_siam', 'mexico', 'persia', 'ragusa', 'rheinland', 'saxony', 'timbuktu', 'venice', 'wien']
+  mexico in that set: True  gulf_of_siam: True
+
+== C5: per-node out-arc coverage over 29 live goods ==
+  goods=29 ; min goods-with-out-arc over nodes = 18 ; max = 29
+  nodes with out-degree 0 for every good: 0
+  nodes that are a sink for >=1 good: 30
+  argmin node: laplata

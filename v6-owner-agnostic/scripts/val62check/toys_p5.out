@@ -1,0 +1,32 @@
+==========================================================================================
+T1  V029/V126 - pendant net-importer (Phase 0 active)
+==========================================================================================
+  S0(selected)=['B']  flow-terminal=['B', 'D']  promoted=[]
+  directed: [('A', 'B'), ('A', 'D'), ('B', 'C'), ('D', 'B')]
+  actual sinks = ['C'] | formula set {S0 cap ft} U promoted = ['B'] | EQUAL: False
+
+==========================================================================================
+T2  V029 core-only - selected flow-terminal demander loses sinkhood on a free edge
+==========================================================================================
+  S0(selected)=['u1', 'u2']  flow-terminal=['u1', 'u2', 'w']  promoted=[]
+  directed: [('S1', 'S2'), ('S1', 'u1'), ('S1', 'w'), ('S2', 'u2'), ('u1', 'w'), ('w', 'u2')]
+  actual sinks = ['u2'] | formula set {S0 cap ft} U promoted = ['u1', 'u2'] | EQUAL: False
+
+==========================================================================================
+T3  the FALLBACK branch - a sink in neither {selected} nor {promoted}
+==========================================================================================
+  S0(selected)=[]  flow-terminal=['A', 'B', 'C']  promoted=[]
+  directed: [('B', 'A'), ('C', 'A'), ('C', 'B')]
+  actual sinks = ['A'] | formula set {S0 cap ft} U promoted = [] | EQUAL: False
+  FALLBACK promoted: ['A']   {selected} U {promoted} = {}
+  sink inside {selected} U {promoted}: False   inside U {fallbacks}: True
+==========================================================================================
+T4  V151 - equal-cost corridors: support membership alternates, flow is NOT small
+==========================================================================================
+  month 1 (eps demand at B): net per edge: {'A-B': np.float64(0.0), 'B-C': np.float64(-0.0), 'C-D': np.float64(-1.0), 'D-A': np.float64(-1.0)}
+  month 2 (eps demand at D): net per edge: {'A-B': np.float64(0.0), 'B-C': np.float64(0.0), 'C-D': np.float64(-1.0), 'D-A': np.float64(-1.0)}
+
+==========================================================================================
+T5  V031 premise - disconnected graph, per-component imbalance -> LP infeasible
+==========================================================================================
+  LP success: False | The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_s

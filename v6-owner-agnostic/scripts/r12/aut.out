@@ -1,0 +1,41 @@
+=== Y1367: Barcelona, pid 213 ===
+  save name='Barcelona' owner='ARA' trade_goods='glass' base_production=5.0 local_autonomy=91.0
+  model row(s) for pid 213: [{'pid': 213, 'node': 'valencia', 'good': 'glass', 'gp': 1.0}]
+  localisation prov_names PROV213: PROV213:0 "Barcelona"
+
+=== Y1369: singleton (node,good) cells ===
+  model (node,good) cells total          : 693
+  singleton cells                        : 245
+  singleton cells WITH an engine quantity: 245
+  cells used (pred>0)                    : 245
+  Pearson r(local_autonomy, engine/model ratio) = -0.0971
+  cells with ratio == 1.000 exactly      : 149 of 245
+
+=== Y1366: do autonomy-heavy provinces reproduce the autonomy-free prediction exactly? ===
+  autonomy >=  5% :  77 cells,  45 exact (58%)
+  autonomy >= 10% :  41 cells,  24 exact (59%)
+  autonomy >= 20% :  27 cells,  14 exact (52%)
+  autonomy >= 30% :  15 cells,   6 exact (40%)
+  autonomy >= 50% :   7 cells,   3 exact (43%)
+  autonomy >= 60% :   4 cells,   2 exact (50%)
+  autonomy >= 80% :   1 cells,   1 exact (100%)
+  autonomy >= 90% :   1 cells,   1 exact (100%)
+
+  every cell with autonomy >= 50%:
+    valencia           glass        pid 213   aut  91.0%  model 1.0000 engine 1.0000 ratio 1.0000  EXACT
+    lahore             salt         pid 4511  aut  64.0%  model 0.6000 engine 0.6600 ratio 1.1000  MISS
+    ganges_delta       ivory        pid 2096  aut  61.0%  model 0.2000 engine 0.2000 ratio 1.0000  EXACT
+    chengdu            copper       pid 675   aut  61.0%  model 0.2000 engine 0.1400 ratio 0.7000  MISS
+    chengdu            silk         pid 679   aut  54.5%  model 1.8000 engine 1.8000 ratio 1.0000  EXACT
+    crimea             fish         pid 2196  aut  52.0%  model 0.6000 engine 0.6800 ratio 1.1333  MISS
+    crimea             cloth        pid 422   aut  51.0%  model 0.6000 engine 0.6800 ratio 1.1333  MISS
+
+  baseline for comparison — cells with autonomy == 0:
+    128 cells, 77 exact (60%)
+
+  mean engine/model ratio by autonomy band:
+    aut  0-19% n=218  mean ratio 1.1554  median 1.0000
+    aut 20-39% n=19   mean ratio 0.9660  median 1.0000
+    aut 40-59% n=4    mean ratio 1.0837  median 1.1333
+    aut 60-79% n=3    mean ratio 0.9333  median 1.0000
+    aut 80-99% n=1    mean ratio 1.0000  median 1.0000

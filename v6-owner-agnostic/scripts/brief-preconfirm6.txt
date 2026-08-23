@@ -1,0 +1,56 @@
+# Task: independently measure a list of proposed changes before any of them is written
+
+## What you are looking at
+
+`C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\fixes-round6.md` is a list of proposed changes to a design spec for an Europa
+Universalis IV mod. Each row states a change and, in most cases, a figure. None of it has been
+applied — the spec is frozen and will not move while you work.
+
+Your job is to measure every figure in that list from primary sources, and to say for each row
+whether the figure is right, wrong, or unmeasurable.
+
+Primary sources:
+
+- the game install, `C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV`
+- the mod's scripts, `C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\scripts\` — `solver.py` builds the wealth table and the
+  trade graph, `drain.py` is the orientation algorithm, `flowop.py` holds the solver options and the
+  Phase-2 arc costs, `measure6.py` prints most quoted figures, `verify6.py` checks the document
+  against computed values, `final.py` produces the calibration figures
+- the spec itself, `C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\per-good-trade-spec.md`, at MD5
+  `59c84a97799db9db97fe889b6e3c6776` — compute it before you start and again when you finish
+- EU4 saves: the save directory holds 581 `.eu4` files and 577 are unreadable OneDrive placeholders.
+  Four open: `VANILLA_start.eu4`, `VANILLA2_start.eu4`, `PERMUTE_start.eu4`, `Castile1444_12_22.eu4`,
+  all under `C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\save games`.
+  The first three are start-date saves. A save is a ZIP whose `gamestate` entry is text; province
+  records start at column 0 and their fields are indented two tabs.
+
+## What to produce
+
+`C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic\preconfirm-round6.md`, one block per row ID (A1-A5, B1-B19, C1-C13, D1-D10):
+
+- **ID** and **verdict**: `CONFIRMED`, `WRONG`, or `UNMEASURABLE`
+- **Method** — the command you ran or the computation you performed
+- **Value** — what you got, against what the row claims
+
+Then a summary: counts by verdict, and the list of WRONG rows with the correct value for each.
+
+## How to measure
+
+Measure independently. Where the list names a figure, compute it yourself rather than reading it out
+of a script's cached output or from the validation reports that produced it. Where a row proposes a
+change to a script, check that the change does what the row says and that nothing else in the tree
+depends on the current behaviour.
+
+Several rows record figures that a previous measurement got wrong, and say so. Treat those as
+unverified claims like any other — the correction may itself be wrong.
+
+Three rows carry a specific warning about how to measure them, in the file's closing section. Those
+warnings are there because a previous attempt failed in exactly the way described; read them before
+measuring those rows, and check that the failure mode described is real rather than taking it on
+faith.
+
+Where a figure is a sample over random draws, say so and give the spread rather than a point value.
+Where a figure cannot be measured from any source available to you, say `UNMEASURABLE` and name the
+source that would settle it.
+
+Report what you find, including where the list is right.

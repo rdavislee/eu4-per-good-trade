@@ -1,0 +1,3 @@
+monotone 12 endpoint diff 12 equal: True
+non-monotone 20 endpoint diff 0 equal: False
+random 5-node paths where telescoping fails: 1951 of 2000

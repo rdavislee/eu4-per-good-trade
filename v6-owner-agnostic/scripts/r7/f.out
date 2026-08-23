@@ -1,0 +1,59 @@
+live goods: 29 | components: 1
+
+====================================================================================================
+PART A - baseline DRAIN, deterministic sweep
+====================================================================================================
+V090 wall time, all 29 goods (LP+sweep, scipy HiGHS): 0.26 s (8.8 ms/good)
+V028 acyclic: 29/29
+V030 sinks/good: min 2 max 8 mean 3.7
+V029 measured (sinks == {S0 cap ft} U promoted): 29/29 goods; mismatches: []
+V060 measured (order-descending reproduces DAG): 29/29
+V032 reach==100%: 29/29 | orphan sinks total: 0
+V089 unserved==stranded (<1e-9): 29/29
+V186 support sizes: min 78 max 79 (N-1 = 79)
+V013 k values: Counter({1: 27, 2: 2})
+V128 nodes with s=c=0 for ALL goods: ['cape_of_good_hope']
+V041 nodes with b==0 exactly (count per node over 29 goods): {'cape_of_good_hope': 29}
+V129 cape in>0 and out>0: 29/29
+V037 six identical solves -> one orientation (spices): True
+V035 orientation flips under 2 index permutations x29 goods: 0 | exact (DEF,b) ties on free edges: 0
+V159 ordered pairs connected by >=1 good: 5723/6320 (90.6%)
+
+====================================================================================================
+PART B - calibration k_exp=2 unclamped, rho=0.5, tol=3e-4, deterministic sweep
+====================================================================================================
+V177 span: 1..6 | spearman(price, sinks) = -0.473
+V179 cloves alpha=16 sinks: ['beijing']
+V107 spices sinks under calibration: ['doab', 'genua']
+V107 China nodes among calibration spices sinks: []
+V180 lowest reach under calibration: [('cloves', '99.9975%'), ('chinaware', '100.0000%'), ('cloth', '100.0000%')]
+V180 max pruned twig mass (share of world supply): 0.00142
+     acyclic: 29/29 | fallbacks: 0
+V179 richest single province: pid=1821 node=hangzhou wealth=27.00
+
+====================================================================================================
+PART C - v1 alpha=1 identity variants (V138, V204)
+====================================================================================================
+V204(a) eps on per-good s only  : rel residual 9.11e-06 | orientation agreement 159/159
+V204(b) eps on both sides       : rel residual 1.22e-15 | orientation agreement 159/159
+V138 phi0 with production-income supply: orientation agreement with Phi(a=1): 159/159
+
+====================================================================================================
+PART D - V168 caravan cap from raw 1444 development
+====================================================================================================
+countries with dev >= 150 (dev/3 >= cap 50): 19
+['MNG', 'ENG', 'TUR', 'CAS', 'LIT', 'VIJ', 'FRA', 'MAM', 'ARA', 'JNP', 'BAH', 'MOS', 'SHY', 'POL', 'BNG', 'HUN', 'VEN', 'HAB', 'QAR']
+  BUR dev=147.0  dev/3=49.00  short of cap by 2.0%
+  KOR dev=145.0  dev/3=48.33  short of cap by 3.3%
+  TIM dev=142.0  dev/3=47.33  short of cap by 5.3%
+  POR dev=136.0  dev/3=45.33  short of cap by 9.3%
+
+====================================================================================================
+PART E - V117 supply vs demand contrast
+====================================================================================================
+spices   supply max/min+ = 36   demand max/min+ = 471
+cloves   supply max/min+ = 1   demand max/min+ = 1.5e+04
+grain    supply max/min+ = 67   demand max/min+ = 309
+
+wrote final.out with 4 figures, stamped bffcda853d87
+FINAL rc=0

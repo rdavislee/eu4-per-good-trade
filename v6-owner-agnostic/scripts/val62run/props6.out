@@ -1,0 +1,13 @@
+nodes N=80  undirected edges=159  live goods=29
+min degree 2  max 8  mean 3.98
+components=1  bridges=0
+Phase1 k==1 on 27 of 29 goods (k values Counter({1: 27, 2: 2}))
+sinks per good min/max/mean: 2/8/3.69
+acyclic goods: 29 of 29
+fallbacks fired: 0
+sink-set identity holds on 29 of 29 goods; failures []
+core nodes summed over goods: 2320 ; exact (DEF,b) key collisions: 0
+Phase-1 within-cluster argmin ties: 0 ; top-k cut ties: 0
+demand reachable: min 100.0000% max 100.0000% ; orphan sinks 0
+nodes with b==0 exactly, by good count: {'cape_of_good_hope': 29}
+scheduler permutations: 0 orientation changes over 145 trials (29 goods x 5)

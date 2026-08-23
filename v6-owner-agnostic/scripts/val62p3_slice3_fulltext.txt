@@ -1,0 +1,137 @@
+| Y323 | §1.6 | `V_g = price(g) ·` the world sum of `goods_produced(m,g)` are the per-good value weights used for display, … | MODEL | 510 |
+| Y324 | §1.6 | For the wealth good, supply is uniform: `s_w(n) = 1/N`. | MODEL | 512 |
+| Y325 | §1.6 | For the wealth good, `c_w(n)` is the node's share of world wealth raised to `α_Φ`. | MODEL | 513 |
+| Y326 | §1.6 | `b_w = s_w − c_w`, with `α_Φ = 2.0`, a hyperparameter. | MODEL | 514 |
+| Y327 | §1.6 | `Φ_w = DRAIN(b_w)` — the §1.1 operator with wealth as the good. | MODEL | 516 |
+| Y328 | §1.6 | `Φ_w` is the graph installed in the game. | DESIGN | 519 |
+| Y329 | §1.6 | Under `Φ_w` every node supplies uniformly and rich nodes are net demanders, so all wealth in the world pulls … | MODEL | 519 |
+| Y078 | §1.6 | Both the sinks' count and their locations move with the wealth field, and `α_Φ` sets how sharply … | MODEL | 522 |
+| Y079 | §1.6 | At `α_Φ = 2.0` the 1444 field gives two sinks and a modestly grown Europe gives two, three or five, so neither the count nor the placement is fixed … | old: a modestly grown Europe gives two, three or five sinks (the Europe table below) → new: scaling European development alone moves the count both up and down before it settles back at two (the sweep below) | MEASURED | `europe.py` (the sweep below) | 523 |
+| Y080 | §1.6 | v2.0 through v4.0 said the count "emerges from concentration" and v5.0 said "the count is set by `α_Φ`"; both … | MODEL | 525 |
+| Y330 | §1.6 | What the world state moves is where the sinks are and how the map drains toward them, which is the property … | DESIGN | 530 |
+| Y083 | §1.6 | Measured on 1444 data at `α_Φ = 2.0`: two sinks, `genua` and `hangzhou`, at `c_w` ranks 2 and 1 and … | MEASURED | 533 |
+| Y084 | §1.6 | Both sinks are properties of the world, because the orientation does not depend on how the nodes are numbered … | MODEL | 534 |
+| Y335 | §1.6 | With unit arc costs Phase 2's b-flow is degenerate: many routings reach the same minimum cost, and the … | MODEL | 538 |
+| Y085 | §1.6 | Measured on that LP directly, 40 of 40 permutations return a different optimal support at an objective … | MEASURED | 540 |
+| Y087 | §1.6 | So the old sink set was partly an artifact of the node order, and v6.0 said so. | MODEL | 541 |
+| Y986 | §1.6 | Phase 2 now breaks those ties inside the objective, with a cost symmetric in the arc and read from node … | MODEL | 544 |
+| Y987 | §1.6 | On the same LP under the tie-break cost, 0 of 40 permutations return a different support. | MEASURED | 545 |
+| Y086 | §1.6 | Over 180 relabellings — three seeds of 60, every input held fixed — the orientation did not change once: 0 of … | MEASURED | 545 |
+| Y988 | §1.6 | The instrument is a reimplementation, and a reimplementation whose Phase 2 minimises the old objective … | MEASURED | 551 |
+| Y989 | §1.6 | A symmetric cost is required rather than a stylistic choice: a directional preference of the form `1 − … | MODEL | 554 |
+| Y091 | §1.6 | Nothing this section quotes about the installed graph is conditional on the node order. | MODEL | 558 |
+| Y093 | §1.6 | Over the 180 relabellings the sink set, every edge direction, and the promotion and fallback counts were … | MEASURED | 558 |
+| Y990 | §1.6 | The per-good graphs are a different matter: the tie-break cost is read from good-independent node wealth, but … | MODEL | 563 |
+| Y991 | §1.6 | Under the first-order tie-break term alone, 84 of 290 per-good relabelling runs moved an edge — the baseline … | MEASURED | 565 |
+| Y1007 | §1.6 | §2.3's second-order term took per-good relabelling sensitivity from 84 of 290 runs to 13, and the goods … | MEASURED | 565 |
+| Y1008 | §1.6 | Pinning the solver's optimality tolerance took the remaining per-good relabelling sensitivity to 0 of 290. | MEASURED | 567 |
+| Y1009 | §1.6 | On this field the per-good graphs are order-invariant over the orderings tried, as `Φ_w` is. | MODEL | 568 |
+| Y336 | §1.6 | The emitter should still fix one canonical order, because both order-invariance guarantees are measured … | DESIGN | 570 |
+| Y993 | §1.6 | The value weights are the exception: `V_g` is `price(g)` times a sum over producers, with no direction in it, … | MODEL | 572 |
+| Y094 | §1.6 | Phase 1 selects `hangzhou`; `genua` arrives by stall promotion, so there is 1 promotion and 0 fallbacks. | MEASURED | 576 |
+| Y095 | §1.6 | Five sources, all in the bottom half of the wealth field, at `c_w` ranks 55–79 and mean degree 2.4 against … | MEASURED | 577 |
+| Y337 | §1.6 | v2 called the sources "cul-de-sacs"; the degrees are not far off that reading here, but it is a description … | MODEL | 578 |
+| Y096 | §1.6 | Every node drains to a sink, the map is acyclic and 159/159 oriented, the sink set is unchanged under ±1% … | MEASURED | 579 |
+| Y082 | §1.6 | 1444's `b_w` has largest magnitude 0.0347. | MEASURED | 580 |
+| Y338 | §1.6 | `Φ_w`'s marking order is a per-node scalar whose descending comparison reproduces the DAG (0 violations), so … | MEASURED | 582 |
+| Y097 | §1.6 | Per good on the same field: 2–8 sinks, mean 3.69, 29/29 acyclic, 0 fallbacks fired, and 90.6% of ordered node … | MEASURED | 585 |
+| Y098 | §1.6 | Agreement with the per-good graphs is 55.1% of edge-goods and 54.8% value-weighted. | MEASURED | 588 |
+| Y1094 | §1.6 | The agreement figure is a description of how often one power map coincides with twenty-nine commodity maps, not a quality score: `Φ_w` models power and the per-good graphs model cargo (§3.9), so full agreement is neither expected nor wanted. | DESIGN | derivation (§3.9) | 588 |
+| Y100 | §1.6 | `α_Φ = 2.0`, `TIE_EPS = 1e-3` and `TIE_EPS2 = 1e-6` are hyperparameters; the choice is developer taste and … | DESIGN | 593 |
+| Y102 | §1.6 | No derivation is claimed, none is implied, and none should be reconstructed from the figures below: they … | DESIGN | 595 |
+| Y103 | §1.6 | Across `α_Φ` = 1.00…8.00 at 0.01 the sink set is a step function, and `α_Φ = 2.0` sits in the band [1.63, … | MEASURED | 599 |
+| Y104 | §1.6 | Sampled at six values the sink count is non-monotone: 3 → 1 → 2 → 2 → 1 → 1 across `α_Φ` in {1, 1.5, 2, 3, 4, … | MEASURED | 601 |
+| Y992 | §1.6 | For `TIE_EPS` the sink set is unchanged from about 1e-6 to about 1 — six orders of magnitude — because the … | MEASURED | 602 |
+| Y1010 | §1.6 | `TIE_EPS2` behaves the same way as `TIE_EPS` and was measured at 1e-7, 1e-6 and 1e-5, all three leaving the … | MEASURED | 606 |
+| Y105 | §1.6 | A written warning against reintroducing the withdrawn justifications for `α_Φ` — resemblance to vanilla's … | DESIGN | 610 |
+| Y106 | §1.6 | "Europe becomes the centre of trade as it develops" is the design claim, and it is what §3.1's first goal … | DESIGN | 615 |
+| Y107 | §1.6 | At 1444 the map ends in Genoa and in Hangzhou, and as European development compounds Europe gains ends and … | MEASURED | 616 |
+| Y108 | §1.6 | The mechanism carrying that is that wealth is linear in development, so developing a region moves its `c_w` … | MODEL | 617 |
+| Y109 | §1.6 | Observed on the 1444 field holding `α_Φ = 2.0` and scaling European development only over 824 counted European provinces, with bisected boundaries, … | old: bisected-boundary table, ten interval rows from ×1.00 to ×2.50, each row a sink set → new: the table is withdrawn ("A table of interval boundaries was published here and is withdrawn"); the sweep is re-reported on a uniform 0.001 grid ×1.000–×2.600, and the one interval still quoted is ×1.973–×2.456 (three European ends, none in Asia) | MEASURED | `europe.py` | 621 |
+| Y1095 | §1.6 | The European sweep samples uniformly on a 0.001 grid from ×1.000 to ×2.600. | MEASURED | `europe.py` | 622 |
+| Y110 | §1.6 | The table is to be read as a direction rather than a trajectory: it scales all 824 counted European provinces by one factor at once, which is not how … | "Read the table as a direction" → "Read this as a direction"; "the row boundaries are a property of one synthetic experiment" → "the interval quoted above is a property of one synthetic sweep"; same scoping | DESIGN | derivation | 624 |
+| Y1096 | §1.6 | The widest interval carrying three European ends and none in Asia runs ×1.973 to ×2.456, with `english_channel`, `genua` and `rheinland` holding them. | MEASURED | `europe.py` (block citation) | 625 |
+| Y111 | §1.6 | The path is not monotone — `hangzhou` leaves at ×1.19, returns at ×1.95 and leaves again; `gulf_of_siam` holds an end across ×1.19–×1.38 and nowhere … | old: `hangzhou` leaves at ×1.14/×1.19, returns at ×1.95; `gulf_of_siam` holds ×1.19–×1.38; two intervals narrower than ×0.03 → new: same non-monotonicity asserted without boundary figures; "several intervals narrower than ×0.01 carry sets that appear once" | MEASURED | `europe.py` (block citation) | 627 |
+| Y1097 | §1.6 | A table of interval boundaries was published here and is withdrawn: its rows came from bisection and disagree with a uniform grid about where several boundaries lie. | PROCESS | unsourced | 632 |
+| Y1098 | §1.6 | The effect of a boundary that sits between samples is a row that looks like a fact and is an artifact of the sampling. | MODEL | derivation | 633 |
+| Y1099 | §1.6 | The direction and the widest interval survive the bisection-versus-grid difference; the row boundaries did not, and quoting them invited exactly the trajectory reading the paragraph warns against. | PROCESS | unsourced | 634 |
+| Y340 | §1.6 | These are properties of this snapshot rather than constants of the model — what one field yielded under one scaling, which a different world state … | "These are properties of this snapshot" → "It is what one field yielded under one scaling"; same proposition, singular referent | DESIGN | unsourced | 643 |
+| Y112 | §1.6 | Because §1.3's wealth is linear in development, scaling development and scaling wealth are the same operation here — maximum difference 0.0 across … | "the distinction that made v5.0's version of this table wrong" → "… of this experiment wrong"; figure (max difference 0.0) unchanged | MEASURED | numerical test (block cites `europe.py`) | 644 |
+| Y341 | §1.6 | All three institutions the period is named for begin in Europe between 1450 and 1550: Renaissance `1450.1.1` … | ENGINE | 648 |
+| Y342 | §1.6 | The Renaissance's embracement bonus is `development_cost = -0.05`, a standing discount on every subsequent … | ENGINE | 651 |
+| Y343 | §1.6 | Those institution bonuses are country-scoped, so §1.3 excludes them from wealth directly; they reach the map … | MODEL | 652 |
+| Y344 | §1.6 | The 1444 map draws the pre-Columbian trade geography unprompted. | old: "the 1444 map draws THE pre-Columbian trade geography UNPROMPTED" → new: "draws A RECOGNISABLE pre-Columbian trade geography" — the definite claim and "unprompted" both softened | MEASURED | the routes enumerated in the same paragraph (`measure6.py` block) | 656 |
+| Y345 | §1.6 | From the north the route to the Asian end is the Volga and the steppe: `white_sea → novgorod → kazan → … | MEASURED | 657 |
+| Y113 | §1.6 | From Iberia the route is the African coast and the Red Sea: `sevilla → safi → timbuktu → katsina → ethiopia → … | MODEL | 659 |
+| Y114 | §1.6 | No route leaves `genua` at all — it is a sink, out-degree 0 against in-degree 5, so the western … | MEASURED | 661 |
+| Y994 | §1.6 | `english_channel` is not an end at this α: it drains to `genua` in two hops through `champagne`, and reaches … | MODEL | 662 |
+| Y115 | §1.6 | No Europe→sink route passes the Cape of Good Hope, checked exhaustively rather than sampled: of the 23 … | MEASURED | 666 |
+| Y346 | §1.6 | That no Europe→sink route passes the Cape is what a 1444 map should say, and it is the one place in this section where a universal is asserted, … | old: "it is the one place in this section where a universal is asserted, because here the whole set was enumerated" → new: "asserted as a universal because the whole set was enumerated rather than sampled — which is the only ground on which this document states one"; the uniqueness moved from section-local to a document-wide ground | DESIGN | unsourced | 667 |
+| Y116 | §1.6 | The Cape is a live conduit rather than an idle one: in-degree 2, out-degree 2, with 81 ordered node pairs for … | MEASURED | 672 |
+| Y117 | §1.6 | The 81 is a count of pairs `(a, b)` where `a` reaches the Cape, the Cape reaches `b`, and `a` reaches `b` — … | MEASURED | 675 |
+| Y118 | §1.6 | In the per-good graphs the Cape also carries Asian spices to Europe; `Φ_w` models power, not cargo. | MODEL | 677 |
+| Y119 | §1.6 | Scaling the 18 western and central European nodes rather than European provinces makes `genua` the sole sink from about ×1.55, while scaling all 22 … | old: `genua` sole sink from about ×1.55; scaling all 22 gives no sole sink below ×4 — "the eastern four keep pulling ends of their own" → new: sole sink from ×1.52, continuous to the top of the swept range; all-22 gives no sole sink below ×25, the set settling at `{genua, rheinland}` from about ×2.50; the eastern-four clause refuted and deleted | MEASURED | `round6.py` | 682 |
+| Y1100 | §1.6 | Swept from ×2.50 to ×25.00 on the all-22 scaling, none of the eastern four holds an end at any multiple, and both surviving ends are western throughout. | MEASURED | `round6.py` | 684 |
+| Y1101 | §1.6 | The earlier draft's clause attributing the no-sole-sink behaviour to "the eastern four pulling ends of their own" was invented and is deleted rather than repaired. | PROCESS | unsourced | 686 |
+| Y120 | §1.6 | The Cape reverses under the same growth — 1444's `ivory_coast`/`zanzibar`→Cape→`comorin_cape`/`malacca` … | MEASURED | 687 |
+| Y347 | §1.6 | The 22 European nodes are the 18 western and central ones (`english_channel`, `north_sea`, `baltic_sea`, … | MODEL | 692 |
+| Y121 | §1.6 | Dev-stacking a single node's top province concentrates the map on that node, and extra sinks at intermediate … | MODEL | 696 |
+| Y1102 | §1.6 | This section's figures are measured under the shipped sweep key (DEF ascending, β ascending, index), which is a design choice inside Phase 3 rather than a property of the world, so a different key moves some of them. | MODEL | unsourced | 699 |
+| Y1103 | §1.6 | Measured against DEF-descending on the same field: of the 19 aggregate-graph facts `round6.py` checks, 6 move and 13 do not. | MEASURED | `round6.py` | 701 |
+| Y1104 | §1.6 | The thirteen that hold: the sink set and its count, the promotion count, the fallback count, acyclicity, the number of oriented edges, `genua`'s in- and out-degree, the Cape's in- and out-degree, the northern route's reach to `hangzhou`, and the two-hop `english_channel → champagne → genua` route and its via-`champagne` form. | MEASURED | `round6.py` | 702 |
+| Y1105 | §1.6 | The six that move: the source count (5 against 10), the sources' `c_w` rank range, their mean degree, the Cape's ordered-pair count (81 against 42), and the two reaches that together are the Iberian long route. | MEASURED | `round6.py` | 705 |
+| Y1106 | §1.6 | Under the descending key `sevilla` reaches neither `ganges_delta` nor the Asian end, so the Iberian route ceases to exist. | MEASURED | `round6.py` | 707 |
+| Y1107 | §1.6 | The northern route's endpoints stay connected under both keys — the check is that `white_sea` still reaches `hangzhou`, not that it does so by the same hops — and the intermediate routing is exactly the kind of fact a key change moves. | MEASURED | `round6.py` | 708 |
+| Y1108 | §1.6 | The two long routes are properties of this field and this key; the sink set is a property of the field alone. | MODEL | derivation over the key sweep | 711 |
+| Y348 | §1.6 | The v1 diagnostic identity (`Φ ≡ φ₀` at α = 1) does not survive the operator change, because DRAIN performs … | MODEL | 715 |
+| Y349 | §1.6 | Its replacement as the end-to-end correctness check is exact orientation equality between the reference and … | DESIGN | 716 |
+| Y388 | §1.10 | Any mechanism gated on one nation being upstream or downstream of another evaluates TRUE. | DESIGN | 793 |
+| Y389 | §1.10 | Any node-pair direction dependency reads `Φ_w`. | DESIGN | 795 |
+| Y390 | §1.10 | Where a gate scopes a set or a path, that scope reads `Φ_w` with a three-rung fallback ladder: the `Φ_w` … | DESIGN | 797 |
+| Y391 | §1.10 | The mechanics below the gates are unpatched and unchanged; reorientation reaches them through the trade power … | ENGINE | 803 |
+| Y392 | §1.10 | Nothing in that group is patched and all of it moves monthly. | MODEL | 803 |
+| Y393 | §1.10 | Trade-conflict casus belli thresholds are `JUSTIFY_TRADE_CONFLICT_LIMIT` (target) and … | ENGINE | 809 |
+| Y394 | §1.10 | Privateer blocking is thresholded by `MINIMUM_TRADE_POWER_TO_PREVENT_PRIVATEER`. | ENGINE | 811 |
+| Y395 | §1.10 | Trade-company extra merchant and control are thresholded by `TRADE_COMPANY_STRONG_LIMIT` and … | ENGINE | 812 |
+| Y396 | §1.10 | Improve Inland Routes needs 50% to establish and 40% to maintain plus a merchant present in the node, and is … | ENGINE | 814 |
+| Y397 | §1.10 | Propagate Religion needs 50% to establish and 50% to maintain in the default branch and 35/35 in the terminal … | ENGINE | 815 |
+| Y398 | §1.10 | The nine `N_trade_power_for_propogate_religion` country-flag rungs are banded: maintain trails select by 5–10 … | ENGINE | 815 |
+| Y399 | §1.10 | The banding is the reverse of what v1 recorded: Improve Inland Routes is the one unconditionally banded … | ENGINE | 817 |
+| Y400 | §1.10 | Banding therefore absorbs very little chatter: a power share oscillating across any single-valued limit … | ENGINE | 819 |
+| Y401 | §1.10 | Banding is not the only damper: three shipped defines rate-limit the mechanics that carry these thresholds. | ENGINE | 821 |
+| Y122 | §1.10 | `TRADING_POLICY_COOLDOWN_MONTHS = 12` applies to seven of the nine entries in … | ENGINE | 822 |
+| Y123 | §1.10 | `maximize_profit` and `maximize_profit_upgraded` carry `cooldown = no` in … | ENGINE | 827 |
+| Y124 | §1.10 | `TRADE_COMPANY_DAYS_TO_SWAP_LEADER = 30` with `TRADE_COMPANY_COOLDOWN = 60` means a flickering share does not … | ENGINE | 828 |
+| Y125 | §1.10 | What is left exposed is everything without a cooldown, which is most of the ladder. | ENGINE | 830 |
+| Y402 | §1.10 | The flicker-risk set is "every country at a single-valued limit, plus flagless countries at Propagate … | ENGINE | 831 |
+| Y403 | §1.10 | Casus belli availability is the most visible symptom, since it can appear and vanish month to month. | ENGINE | 833 |
+| Y404 | §1.10 | Caravan power is in this group but is not a threshold mechanic and is not a function of raw trade power at … | ENGINE | 836 |
+| Y405 | §1.10 | When caravan power applies it is worth up to the cap for any major power — enough to move a node's power … | MODEL | 836 |
+| Y126 | §1.10 | Measured on the 1444 start, the caravan cap of 50 is 9.4% to 47.0% of an inland node's total trade power, … | MEASURED | 836 |
+| Y127 | §1.10 | As a share of the node's total after the grant lands — 50/(total+50) — the same figures read 8.6% to 32.0%, … | MEASURED | 836 |
+| Y128 | §1.10 | On §2.2's derived 25-node inland basis (dropping `siberia`) the median is 21.3%, or 17.5% after the grant. | MEASURED | 836 |
+| Y406 | §1.10 | The largest single incumbent holder runs 23.6 to 143.2, so a country at the caravan cap outweighs the largest … | MEASURED | 836 |
+| Y407 | §1.10 | v4.0 read the save's per-node `highest_power` field as the largest incumbent's power; it is not — parsing … | ENGINE | 836 |
+| Y408 | §1.10 | What `highest_power` does hold was not determined, and the model does not read it. | MODEL | 836 |
+| Y409 | §1.10 | v1 and v2 both described caravan power as "a step function on raw power", which contradicted their own §3.11. | PROCESS | 836 |
+| Y410 | §1.10 | No mission, decision, event, or trade company in 1.37.5 names a trade node — zero non-comment references … | ENGINE | 838 |
+| Y411 | §1.10 | Trade companies are bare province lists. | ENGINE | 839 |
+| Y412 | §1.10 | Scripted content reaches nodes only structurally, through `home_trade_node`, `any/random/every_active_trade_node`, `*_trade_node_member_province` and … | old: unqualified enumeration — "reaches nodes only structurally: `home_trade_node`, `any/random/every_active_trade_node`, `*_trade_node_member_province`, and `highest_value_trade_node`" → new: "through four families" with the member-province family spelled out (`any/random/every/all_…`) and an explicit caveat that the bare-word token scan cannot see every compound key, so "bounded by class" holds only for the families named | ENGINE | `round6.py` (the scan); the four trees | 840 |
+| Y1109 | §1.10 | Measured across `common/`, `missions/`, `decisions/` and `events/` with comments stripped, the four structural construct families account for several hundred uses. | MEASURED | `round6.py` | 842 |
+| Y1110 | §1.10 | None of the 80 node names appears anywhere in the four trees. | MEASURED | `round6.py` | 844 |
+| Y1111 | §1.10 | The token scan matches `trade_node` as a bare word and by construction cannot see every compound key containing it; such keys exist (`add_trade_node_income`, `agenda_trade_node`, `trade_node_value` and others). | ENGINE | named observation (the token scan; the shipped script vocabulary) | 845 |
+| Y1112 | §1.10 | "Bounded by class" is the honest claim only for the families named; the full key inventory is an emitter-time enumeration, not a figure this document maintains. | DESIGN | unsourced | 847 |
+| Y413 | §1.10 | Nodes themselves never change under the mod — only connections do — so the name-collision class of conflict … | MODEL | 848 |
+| Y414 | §1.10 | What remains exposed is semantics: `highest_value_trade_node` and node-scoped triggers are evaluated against … | ENGINE | 850 |
+| Y415 | §1.10 | That semantic exposure is accepted and listed for the compatibility pass rather than engineered around. | DESIGN | 853 |
+| Y416 | §1.11 | The overlord always receives the treasure fleet. | DESIGN | 858 |
+| Y417 | §1.11 | The fleet routes by the §1.10 ladder, passing each node en route where privateers skim a share proportional … | MODEL | 858 |
+| Y418 | §1.11 | Where the diversion mechanic is active, colonial gold income is diverted from the colonial nation. | ENGINE | 860 |
+| Y419 | §1.11 | Diverted gold does not enter `wealth` at either end, for the deeper reason of §1.5: gold income is its own … | MODEL | 861 |
+| Y420 | §1.12 | The in-game economy is the per-good economy: node values, the node window, pie charts, the ledger, the … | DESIGN | 866 |
+| Y421 | §1.12 | Trade map mode colours provinces by node and draws arrows between nodes rendering `Φ_w`, with arrow weight … | MODEL | 868 |
+| Y422 | §1.12 | Clicking a province switches province colouring to the vanilla trade-goods rendering for that good and … | MODEL | 870 |
+| Y423 | §1.12 | Value broken down by commodity is not representable in the vanilla UI: the node window carries several … | ENGINE | 874 |
+| Y424 | §1.12 | A link's two-way traffic is not representable: one scalar per link, shown as net. | ENGINE | 877 |
+| Y425 | §1.12 | Per-country effective trade power where eligibility differs by good is not representable and is shown as a … | ENGINE | 878 |
+| Y426 | §1.12 | There is no new art, sprites, shaders or map-mode chrome; making the node window's existing incoming-link … | DESIGN | 880 |

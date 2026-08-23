@@ -1,0 +1,43 @@
+nodes in save order: 80
+nodes with >=1 country holding power: 79
+incoming link blocks: 159
+all 'from' indices resolved to a real node: True
+
+=== the round-5 gate table, reproduced ===
+  links total                                  : 159
+  zero-value links                             : 50
+    of those, NO country holds power at both ends: 33
+    of those, >=1 country holds both ends        : 17  (the gate cannot explain these)
+  value-carrying links                         : 109
+    of those, NO country holds power at both ends: 3
+
+  value-carrying links with NO both-ends holder (counterexamples to the gate):
+     cuiaba                 -> brazil                 value=0.085
+     rio_grande             -> mississippi_river      value=0.129
+     california             -> mississippi_river      value=0.012
+
+  zero-value links WITH both-ends holders (top by holder count):
+     tunis                  -> valencia                9 both-ends holders
+     champagne              -> genua                   9 both-ends holders
+     tunis                  -> genua                   8 both-ends holders
+     canton                 -> hangzhou                8 both-ends holders
+     hangzhou               -> malacca                 7 both-ends holders
+     gujarat                -> zanzibar                7 both-ends holders
+     comorin_cape           -> gulf_of_aden            6 both-ends holders
+     basra                  -> aleppo                  6 both-ends holders
+
+  contingency  [no both-ends holder / has one]:
+     zero-value :  33 /  17
+     has value  :   3 / 106
+     chi-square (1 df) = 78.3
+
+=== the 3 counterexample links, in detail ===
+  cuiaba -> brazil   value=0.085 add=0.000
+     power holders at cuiaba                : [('CLA', 25.204), ('CCQ', 18.043), ('CRA', 14.783), ('PCJ', 13.512), ('QTO', 5.963), ('CUA', 4.964), ('ICM', 3.254), ('CHM', 2.867)]
+     power holders at brazil                : [('PTG', 17.821), ('TPQ', 10.464), ('TUA', 10.157)]
+  rio_grande -> mississippi_river   value=0.129 add=0.000
+     power holders at rio_grande            : [('OHK', 15.8), ('KER', 9.446), ('ISL', 9.446), ('ACO', 9.446), ('NAH', 9.192), ('WIC', 8.937), ('ZNI', 8.937), ('MSC', 8.937)]
+     power holders at mississippi_river     : [('WCY', 10.039), ('COW', 9.7), ('CHI', 9.464), ('QUI', 9.464), ('ANL', 9.464), ('CHO', 9.446), ('ATA', 9.446), ('NTC', 9.446)]
+  california -> mississippi_river   value=0.012 add=0.000
+     power holders at california            : [('CNK', 26.453), ('SAL', 10.039), ('HDA', 9.238), ('YAQ', 9.238), ('SHO', 9.065), ('APA', 8.937), ('PIM', 8.937), ('YKT', 8.921)]
+     power holders at mississippi_river     : [('WCY', 10.039), ('COW', 9.7), ('CHI', 9.464), ('QUI', 9.464), ('ANL', 9.464), ('CHO', 9.446), ('ATA', 9.446), ('NTC', 9.446)]

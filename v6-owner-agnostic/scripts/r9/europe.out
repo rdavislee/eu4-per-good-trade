@@ -1,0 +1,24 @@
+counted European provinces scaled: 824 ; alpha_Phi = 2 ; grid x1.000-x2.600 step 0.001
+
+maximal runs of constant sink set (15):
+  x1.000-x1.139  2 sinks  EU:1 Asia:1  ['genua', 'hangzhou']
+  x1.140-x1.158  4 sinks  EU:3 Asia:1  ['english_channel', 'genua', 'hangzhou', 'rheinland']
+  x1.159-x1.186  2 sinks  EU:1 Asia:1  ['genua', 'hangzhou']
+  x1.187-x1.286  3 sinks  EU:1 Asia:2  ['genua', 'gulf_of_siam', 'hangzhou']
+  x1.287-x1.288  5 sinks  EU:3 Asia:2  ['english_channel', 'genua', 'gulf_of_siam', 'hangzhou', 'rheinland']
+  x1.289-x1.350  3 sinks  EU:1 Asia:2  ['genua', 'gulf_of_siam', 'hangzhou']
+  x1.351-x1.361  5 sinks  EU:3 Asia:2  ['english_channel', 'genua', 'gulf_of_siam', 'hangzhou', 'rheinland']
+  x1.362-x1.368  3 sinks  EU:1 Asia:2  ['genua', 'gulf_of_siam', 'hangzhou']
+  x1.369-x1.381  2 sinks  EU:1 Asia:1  ['genua', 'gulf_of_siam']
+  x1.382-x1.701  3 sinks  EU:3 Asia:0  ['english_channel', 'genua', 'rheinland']
+  x1.702-x1.709  4 sinks  EU:3 Asia:1  ['doab', 'english_channel', 'genua', 'rheinland']   <== set occurs in this run alone
+  x1.710-x1.947  3 sinks  EU:3 Asia:0  ['english_channel', 'genua', 'rheinland']
+  x1.948-x1.972  4 sinks  EU:3 Asia:1  ['english_channel', 'genua', 'hangzhou', 'rheinland']
+  x1.973-x2.456  3 sinks  EU:3 Asia:0  ['english_channel', 'genua', 'rheinland']
+  x2.457-x2.600  2 sinks  EU:2 Asia:0  ['genua', 'rheinland']
+
+widest run with three European ends and none in Asia : x1.973-x2.456  ['english_channel', 'genua', 'rheinland']
+hangzhou      holds an end over: x1.000-x1.368 and x1.948-x1.972
+gulf_of_siam  holds an end over: x1.187-x1.381
+runs narrower than x0.01: 3  (x1.287-x1.288; x1.362-x1.368; x1.702-x1.709 ONE-OFF)
+top of range: x2.457-x2.600 settles at 2 sinks ['genua', 'rheinland']

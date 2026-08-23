@@ -1,0 +1,22 @@
+==========================================================================================
+INSTRUMENT VALIDATION against drain.phase2 (shipped)
+==========================================================================================
+  30 of 30 b-vectors reproduce drain.phase2's support and objective exactly
+
+==========================================================================================
+ZERO-REDUCED-COST ARCS OUTSIDE THE SUPPORT (threshold 1e-9)
+==========================================================================================
+unit      aggregate  40 (margin 1) | per-good total 1078 on 29 of 29 goods | worst per-good margin 1
+first     aggregate   0 (margin 6.317e-06) | per-good total  41 on 18 of 29 goods | worst per-good margin 1.263e-06
+full      aggregate   0 (margin 7.527e-06) | per-good total   1 on  1 of 29 goods | worst per-good margin 3.765e-08
+           goods still carrying one: {'paper': 1}
+absdiff   aggregate   0 (margin 6.317e-06) | per-good total  17 on 11 of 29 goods | worst per-good margin 8.212e-09
+           goods still carrying one: {'chinaware': 1, 'cloth': 2, 'cocoa': 1, 'copper': 3, 'cotton': 1, 'gems': 1, 'glass': 3, 'paper': 2, 'spices': 1, 'tropical_wood': 1, 'wine': 1}
+
+==========================================================================================
+DISTINCTNESS OF ARC COSTS (per undirected edge, 159)
+==========================================================================================
+unit      1 distinct of 159 edge costs; 158 duplicate slots
+first     156 distinct of 159 edge costs; 3 duplicate slots
+full      159 distinct of 159 edge costs; 0 duplicate slots
+absdiff   159 distinct of 159 edge costs; 0 duplicate slots

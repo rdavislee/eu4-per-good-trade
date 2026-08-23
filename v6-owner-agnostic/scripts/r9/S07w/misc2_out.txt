@@ -1,0 +1,71 @@
+=== 18 western/central NODES scaled ===
+  x1.00  genua,hangzhou
+  x1.14  english_channel,genua,hangzhou,rheinland
+  x1.22  english_channel,genua,gulf_of_siam,hangzhou,rheinland
+  x1.43  english_channel,genua,rheinland
+  x1.52  genua
+  first x with genua the SOLE sink: 1.52 ; first x after that where it is not: None ; top of range x26.00
+
+=== all 22 NODES scaled ===
+  x1.00  genua,hangzhou
+  x1.16  english_channel,genua,hangzhou,rheinland
+  x1.20  english_channel,genua,gulf_of_siam,hangzhou,rheinland
+  x1.32  genua,gulf_of_siam,hangzhou
+  x1.33  english_channel,genua,gulf_of_siam,hangzhou,rheinland
+  x1.38  english_channel,genua,rheinland
+  x1.72  doab,english_channel,genua,rheinland
+  x1.73  english_channel,genua,rheinland
+  x2.47  genua,rheinland
+  multiples (x1.00..x26.00 step .01) with a SOLE sink: none
+
+=== the Cape under the 22-node scaling ===
+  x1.00  in=ivory_coast,zanzibar                       out=comorin_cape,malacca
+  x1.08  in=ivory_coast                                out=comorin_cape,malacca,zanzibar
+  x1.16  in=ivory_coast,zanzibar                       out=comorin_cape,malacca
+  x1.20  in=ivory_coast                                out=comorin_cape,malacca,zanzibar
+  x1.21  in=                                           out=comorin_cape,ivory_coast,malacca,zanzibar
+  x1.26  in=zanzibar                                   out=comorin_cape,ivory_coast,malacca
+  x1.27  in=                                           out=comorin_cape,ivory_coast,malacca,zanzibar
+  x1.59  in=comorin_cape,malacca,zanzibar              out=ivory_coast
+  x2.47  in=malacca                                    out=comorin_cape,ivory_coast,zanzibar
+
+=== dev-stacking a single node's top province ===
+  english_channel  top province pid 1744  
+      x2      english_channel,hangzhou
+      x5      english_channel,hangzhou
+      x10     english_channel,hangzhou
+      x25     english_channel
+      x50     english_channel
+      x100    english_channel
+      x250    english_channel
+      x1000   english_channel
+  genua            top province pid 101  
+      x2      genua,hangzhou
+      x5      genua,hangzhou
+      x10     genua
+      x25     genua
+      x50     genua
+      x100    genua
+      x250    genua
+      x1000   genua
+  hangzhou         top province pid 1821  
+      x2      genua,hangzhou
+      x5      genua,gulf_of_siam,hangzhou
+      x10     hangzhou
+      x25     hangzhou
+      x50     hangzhou
+      x100    hangzhou
+      x250    hangzhou
+      x1000   hangzhou
+
+=== +/-1%% wealth noise, six seeds ===
+  seed 9000 sinks genua,hangzhou               edges moved 0
+  seed 9001 sinks genua,hangzhou               edges moved 0
+  seed 9002 sinks genua,hangzhou               edges moved 0
+  seed 9003 sinks genua,hangzhou               edges moved 0
+  seed 9004 sinks genua,hangzhou               edges moved 0
+  seed 9005 sinks genua,hangzhou               edges moved 0
+
+=== Cape ordered pairs: strict shortest-path readings ===
+  pairs with SOME shortest path through the cape: 71
+  pairs where EVERY shortest path goes through the cape: 60

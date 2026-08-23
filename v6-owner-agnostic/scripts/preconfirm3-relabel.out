@@ -1,0 +1,65 @@
+
+================================================================================================
+E.  R06-R12  node relabelling on Phi_w
+================================================================================================
+  drain.py    core 80  edges 159/159  promotions 2  fallbacks 0  sinks ['english_channel', 'hangzhou']
+  instrument  core 80  edges 159/159  promotions 2  fallbacks 0  sinks ['english_channel', 'hangzhou']
+  VALIDATION: edges agreeing 159 of 159 ; orientation sets identical True
+
+  --- seed 4242, 100 trials ---
+  R06 orientation changed                          100/100
+  R07 mean edges moving (of 159)                   25.80   (min 10 max 39)
+  R08 returns the baseline set {english_channel,hangzhou} 8/100
+  R09 hangzhou is an end                           100/100
+  R10 english_channel is an end                    40/100
+  R11 every other end holder                       [('gulf_of_siam', 55), ('wien', 37), ('sevilla', 19), ('rheinland', 12), ('champagne', 10), ('genua', 2), ('ganges_delta', 1)]
+  R12 sink-count distribution                      {1: 8, 2: 40, 3: 26, 4: 20, 5: 6}  (range 1-5, mode 2)
+      distinct sink sets 22 ; fallbacks fired 0
+
+  --- seed 7, 100 trials ---
+  R06 orientation changed                          100/100
+  R07 mean edges moving (of 159)                   24.45   (min 5 max 40)
+  R08 returns the baseline set {english_channel,hangzhou} 9/100
+  R09 hangzhou is an end                           99/100
+  R10 english_channel is an end                    37/100
+  R11 every other end holder                       [('gulf_of_siam', 48), ('wien', 30), ('sevilla', 18), ('rheinland', 16), ('champagne', 6), ('genua', 3), ('ganges_delta', 3)]
+  R12 sink-count distribution                      {1: 13, 2: 37, 3: 29, 4: 19, 5: 2}  (range 1-5, mode 2)
+      distinct sink sets 26 ; fallbacks fired 0
+
+  --- seed 999, 100 trials ---
+  R06 orientation changed                          100/100
+  R07 mean edges moving (of 159)                   25.64   (min 5 max 40)
+  R08 returns the baseline set {english_channel,hangzhou} 5/100
+  R09 hangzhou is an end                           97/100
+  R10 english_channel is an end                    44/100
+  R11 every other end holder                       [('gulf_of_siam', 63), ('wien', 35), ('sevilla', 16), ('rheinland', 14), ('champagne', 9), ('ganges_delta', 2), ('genua', 1)]
+  R12 sink-count distribution                      {1: 11, 2: 30, 3: 31, 4: 23, 5: 5}  (range 1-5, mode 3)
+      distinct sink sets 22 ; fallbacks fired 0
+
+  --- seed 1, 100 trials ---
+  R06 orientation changed                          100/100
+  R07 mean edges moving (of 159)                   24.94   (min 9 max 42)
+  R08 returns the baseline set {english_channel,hangzhou} 12/100
+  R09 hangzhou is an end                           100/100
+  R10 english_channel is an end                    47/100
+  R11 every other end holder                       [('gulf_of_siam', 58), ('wien', 34), ('sevilla', 14), ('rheinland', 13), ('champagne', 9), ('ganges_delta', 2)]
+  R12 sink-count distribution                      {1: 10, 2: 28, 3: 39, 4: 21, 5: 2}  (range 1-5, mode 3)
+      distinct sink sets 21 ; fallbacks fired 0
+
+  --- seed 20250821, 100 trials ---
+  R06 orientation changed                          100/100
+  R07 mean edges moving (of 159)                   24.69   (min 10 max 37)
+  R08 returns the baseline set {english_channel,hangzhou} 10/100
+  R09 hangzhou is an end                           98/100
+  R10 english_channel is an end                    39/100
+  R11 every other end holder                       [('gulf_of_siam', 52), ('wien', 29), ('rheinland', 16), ('champagne', 10), ('sevilla', 10), ('ganges_delta', 5), ('genua', 3)]
+  R12 sink-count distribution                      {1: 14, 2: 37, 3: 27, 4: 17, 5: 5}  (range 1-5, mode 2)
+      distinct sink sets 26 ; fallbacks fired 0
+
+  pooled over 5 seeds x 100 trials = 500 relabellings
+  end holders pooled  [('hangzhou', 494), ('gulf_of_siam', 276), ('english_channel', 207), ('wien', 165), ('sevilla', 77), ('rheinland', 71), ('champagne', 44), ('ganges_delta', 13), ('genua', 9)]
+  sink counts pooled  {1: 56, 2: 172, 3: 152, 4: 100, 5: 20}
+  hangzhou pooled     494/500
+  channel  pooled     207/500
+  mean edges moving pooled 25.10
+  baseline set pooled 44/500

@@ -1,0 +1,11 @@
+================================================================================================
+negative fixtures: the harness must go RED on each of these
+================================================================================================
+  [RED ] unscannable needle -> shows() fails            3 failed
+  [RED ] lead-in reworded -> 1.3 check must not vanish  table check present (RESULT: 36 checks)
+  [RED ] unroutable document -> refused, not passed     unroutable: refused
+  [RED ] coverage credits by key, not by exit code      NO SITE bucket present; coverage: 4 of 6
+  [RED ] FROZEN marker on the spec -> ignored           no DRIFT on spec, 2 failed (baseline 2)
+  [RED ] coverage subtracts the baseline                denominator 6 -> 6; baseline named
+
+RESULT: 6 fixtures, 0 did not produce the required red

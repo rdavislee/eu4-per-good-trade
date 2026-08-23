@@ -1,0 +1,150 @@
+# Task: validate the claims of per-good-trade-spec.md (v6.2) against primary sources
+
+You are one of seven validators. Each validator grades a disjoint slice of the 959 live claims;
+your slice is named in your launch prompt. Every claim gets its own verdict, earned from the
+sources — never from the document's own restatement of them, and never from plausibility.
+
+Base directory (everything relative below is relative to this):
+C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\mod\per-good-trade\v6-owner-agnostic
+
+## The document under test
+
+`per-good-trade-spec.md` — 2,079 lines, MD5 `5ec633ef46e7fd68bb118e10e83692eb`. Check the MD5
+before you start and again before you finish; if it moved, stop and say so.
+
+## The claim inventory
+
+`claims-delta-v62.md` — one row per claim: ID, section, label, type, (provenance,) and a line
+number into the current document. The live claims are every row of its four live tables:
+
+- UNCHANGED  rows sit at file lines  42-853   | ID | § | claim (label) | type | line |
+- REWORDED   rows sit at file lines 858-877   | ID | § | claim | rewording | type | provenance | line |
+- CHANGED    rows sit at file lines 883-928   | ID | § | claim (census wording) | old -> new | type | provenance | line |
+- NEW        rows sit at file lines 1118-1201 | ID | § | claim | type | provenance | line |
+
+Rows in the two REMOVED tables (lines 930-1113) are NOT claims and are NOT graded.
+
+Extract your slice mechanically. This prints every live row for one section, prefixed by its
+file line (from which you can tell the table: below 854 UNCHANGED, 854-878 REWORDED, 879-929
+CHANGED, 1114+ NEW):
+
+  awk -F'|' '(NR<930 || NR>=1114) && /^\| Y/ {s=$3; gsub(/ /,"",s); if (s=="§1.6") printf "%d%s\n", NR, $0}' claims-delta-v62.md
+
+Your launch prompt gives the expected row count per section. If your extraction disagrees with
+those counts, stop and re-check your extraction before grading.
+
+The delta's labels are compressed (many end in "…"). The full census text of any claim with ID
+at or below Y1057 is in `claims-v6.md` (grep "^| Y123 "). The `line` column of the delta is the
+line in the CURRENT `per-good-trade-spec.md` where the claim now sits — read the claim's current
+wording there; THE DOCUMENT'S WORDING GOVERNS. For CHANGED rows grade the new assertion (the
+current document wording), not the census wording. NEW rows (Y1058 and up) have no census entry:
+the delta row plus the document line are the text.
+
+## The primary sources
+
+- The EU4 1.37.5 install: C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV
+  — game files under common/, events/, missions/, decisions/, history/, map/, localisation/.
+- `scripts/` in the base directory — the reference implementation (`solver.py`, `drain.py`,
+  `flowop.py`) and its instruments. Scripts are runnable; measured claims are settled by running
+  the computation, not by reading a script's comments. A script named in a claim's provenance is
+  where to start, not what to trust: read what it actually computes, then run it.
+- Prior-version directories `../v1-laplacian/` through `../v5-owner-agnostic/` — for claims about
+  what earlier versions said or did.
+- EU4 saves as engine-produced evidence: most files in
+  C:\Users\rdavi\OneDrive\Documents\Paradox Interactive\Europa Universalis IV\save games
+  are unreadable OneDrive placeholders, but at least these four open as real files:
+  VANILLA_start.eu4, VANILLA2_start.eu4, PERMUTE_start.eu4, Castile1444_12_22.eu4. A save is a
+  ZIP whose `gamestate` entry is text. A save's own ledger/fields are the engine's arithmetic
+  and may settle engine claims without a tooltip.
+- The RUNNING GAME IS NOT AMONG YOUR MATERIALS. Do not launch EU4. A claim that only a live
+  observation (a tooltip reading, a crash, a UI behavior) can settle is UNTESTABLE — state the
+  observation that would settle it — unless a file or a save settles it.
+
+Prior validation rounds exist in the base dir and in scripts/ (validation-v6-round5-part*.md and
+earlier). PRIOR VERDICTS DO NOT EXIST FOR YOUR PURPOSES. Never inherit a verdict, never copy
+evidence from one. You may glance at one only to locate an instrument, never to source a verdict.
+
+## Method — this defines the verdicts
+
+- Re-derive; never inherit. A claim graded in any earlier round is graded again from sources.
+- Read the file, not the document's quotation of it. Where a claim cites a game file, open the file.
+- Re-run measurements. Where a claim states a measured figure, produce the figure. Where a
+  claim's instrument exists, run it; where the instrument disagrees with the document, the
+  instrument's output is the evidence and the disagreement is the finding.
+- Attack derivations as arguments. A derivation is graded by checking each step, not by
+  re-measuring its conclusion. Keep measurement-verdicts and derivation-verdicts distinct in
+  your Method column.
+- A universal is graded as a universal. A claim proved or asserted for any input, checked only
+  on the 1444 start, is at most PARTIAL; a proof that holds on 1444 but fails on a constructible
+  input is REFUTED.
+- No confirmation on plausibility, consensus, or community documentation. A wiki is not a
+  source. A claim that cannot be settled with the materials above is UNTESTABLE, and its row
+  states exactly what is missing.
+- Scope is yours. Grade what the sentence asserts, including its qualifiers and its stated
+  scope — not what a friendlier reading of it would assert.
+
+Type is a hint, not a rule: ENGINE claims live in game files/saves; MEASURED claims carry a
+figure to reproduce; MODEL claims describe the design's algorithm/mathematics — grade them
+against the reference implementation and by checking the mathematics; DESIGN claims are
+stipulations or intent — grade the checkable content (that the implementation and the rest of
+the document actually conform to the stipulation); where a sentence asserts pure intent with
+nothing checkable in any source, it is UNTESTABLE and the row says that is the gap. PROCESS
+claims are about the project's own files and history — open the named files, diff the versions.
+
+## Verdicts
+
+- CONFIRMED  — the sources establish the claim as stated.
+- PARTIAL    — part holds, part does not, or the claim outruns its evidence in scope or
+               precision. State which part fails.
+- REFUTED    — the sources contradict the claim. For a figure, report the value the sources give.
+- UNTESTABLE — cannot be settled with the materials above. State what would settle it.
+
+## Practical notes
+
+- Python 3.12 is on PATH. Run instruments from inside scripts/ (they use relative paths).
+  "python measure6.py" (~15 s) regenerates measure6.out (66 labelled figures).
+  "python verify6.py ../per-good-trade-spec.md" (~17 s) runs the document's own guard harness.
+- Never trust a stale .out file: regenerate before you read. Other validators run concurrently
+  and share scripts/measure6.out; its content is deterministic, so a complete read is a good
+  read — if a read looks truncated (fewer than ~60 lines), regenerate and read again in the
+  same Bash call.
+- Long experiments (relabel6.py, europe.py sweeps, props6.py permutations, ...): Bash calls
+  time out at 10 minutes; use run_in_background for longer runs and keep working meanwhile.
+  Prefer running the claim's actual instrument to completion. If that is genuinely prohibitive,
+  run a reduced version and say exactly what you ran in Method — and grade on what you actually
+  established, not on what the full run would presumably show.
+- Write nothing except your fragment file (base dir) and throwaway scripts named
+  scripts/val62pN_*.py (N = your part number). Treat the game install, the saves, the spec, the
+  inventories and the prior-version directories as READ-ONLY. Do not edit shipped scripts.
+- For clear communication, no emojis anywhere.
+
+## Output
+
+Write your fragment validation-v62-partN.md (N in your launch prompt) in the base directory.
+No file-level header — the fragments are concatenated by the coordinator. For each document
+section in your slice, in document order:
+
+  ## §X — section name (n claims)
+
+  | ID | claim (short) | verdict | method | evidence |
+  |---|---|---|---|---|
+
+- claim (short): your own compression, at most ~15 words, faithful to the governing wording.
+- verdict: exactly one of CONFIRMED / PARTIAL / REFUTED / UNTESTABLE.
+- method: what you actually did — measurement (what you ran), file read (which file and line),
+  derivation check, observation cited by the claim (which artifact you opened), or the gap that
+  makes it untestable. "Read the spec" is not a method; the spec is the thing under test.
+- evidence: the concrete result — a number, a quote, a file path and line, a script output —
+  sufficient for a reader to re-check without repeating your work. Escape a literal pipe
+  character inside a cell as backslash-pipe.
+
+Every ID in your slice appears exactly once. Self-check before finishing:
+grep -c '^| Y' validation-v62-partN.md must equal your slice's claim count, and the ID set
+must equal the extraction's ID set (compare sorted lists, e.g. with comm).
+
+## Report back (your final message — data, not impressions)
+
+- Verdict counts per section and slice total.
+- The full ID lists of REFUTED, PARTIAL and UNTESTABLE claims, each with a half-line reason.
+- Where you stopped, if you did not finish (and the fragment states it too).
+- Anything in this brief that proved wrong about the files.

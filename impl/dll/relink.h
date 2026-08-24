@@ -158,6 +158,70 @@ inline bool capture(std::ofstream& log) {
     return true;
 }
 
+
+// ---------------------------------------------------------------------------------------
+// THE ENGINE'S OWN FIXUP ROUTINES. EU4 mutates this graph itself (the Random New World path
+// at 0x8BD6D0), and its epilogue is the recipe to copy. Reusing the engine's routines beats
+// replicating them: 0xB69710 re-derives each entry's destination pointer FROM THE NAME and
+// re-pushes the definition into every destination's incoming vector, which is exactly the
+// consistency the load-time validator checks.
+//
+// Hard constraint: 0xB67D20 -> 0xB6A840 is an unbounded recursive DFS over outgoing links, so
+// the mutated graph MUST stay a DAG. Phi_w is acyclic by construction (spec 1.1), so that holds.
+// DO NOT call 0xB4C620: it destructs every CTradeNode, losing all per-country records and
+// merchant flags -- that is a reload, not a fixup.
+using FnDef  = void(__fastcall*)(uintptr_t);
+using FnDB   = void(__fastcall*)(uintptr_t);
+using FnMgr  = void(__fastcall*)(uintptr_t);
+
+inline uintptr_t defs_db() { return livetrade::rq(livetrade::module_base() + 0x242BE48); }
+
+// Re-resolve one definition's outgoing destinations from their names and re-push it into every
+// destination's incoming vector.
+inline void engine_relink_def(uintptr_t def) {
+    ((FnDef)(livetrade::module_base() + 0xB69710))(def);
+}
+// Recompute def+0xE0, the calc-order sort key. REQUIRED after any topology change; DAG only.
+inline void engine_recompute_order_keys() {
+    uintptr_t db = defs_db();
+    if (db) ((FnDB)(livetrade::module_base() + 0xB67D20))(db);
+}
+// Rebuild and re-sort the manager's calc order WITHOUT destroying any CTradeNode. REQUIRED.
+inline void engine_rebuild_calc_order() {
+    uintptr_t g = livetrade::game_singleton();
+    if (g) ((FnMgr)(livetrade::module_base() + 0xB4C490))(g + 0x2198);
+}
+
+// The node window indexes outgoing[rec+0xA8] UNGUARDED (0x13D04A4), so a steer index left over
+// from a larger outgoing list is an out-of-bounds read the moment the window opens. Clamp every
+// country record on every node whenever link counts change.
+inline int clamp_steer_indices(const std::vector<livetrade::SimNode>& sim) {
+    int clamped = 0;
+    for (auto& s : sim) {
+        uintptr_t def = livetrade::fq(s.obj + 0xA8);
+        if (!def || !livetrade::validate_region(def + D_OUT_BEGIN, 16)) continue;
+        uintptr_t ob = livetrade::fq(def + D_OUT_BEGIN), oe = livetrade::fq(def + D_OUT_END);
+        int n = (ob && oe > ob) ? (int)((oe - ob) / E_STRIDE) : 0;
+        uintptr_t base = livetrade::rq(s.obj + 0x18);
+        int cnt = livetrade::ri(s.obj + 0x24);
+        if (!base || cnt <= 0 || cnt > 4096) continue;
+        if (!livetrade::validate_region(base, (size_t)cnt * 0xC0)) continue;
+        for (int i = 0; i < cnt; i++) {
+            uintptr_t rec = base + (uintptr_t)i * 0xC0;
+            int32_t idx = livetrade::fi(rec + 0xA8);
+            if (idx >= n || idx < 0) {
+                DWORD old = 0;
+                if (VirtualProtect((void*)(rec + 0xA8), 4, PAGE_READWRITE, &old)) {
+                    *(int32_t*)(rec + 0xA8) = 0;
+                    VirtualProtect((void*)(rec + 0xA8), 4, old, &old);
+                    clamped++;
+                }
+            }
+        }
+    }
+    return clamped;
+}
+
 // Point a definition's {begin,end,cap} triple at our own array.
 inline void set_vector(uintptr_t def, int off_begin, uintptr_t begin, uintptr_t end, uintptr_t cap) {
     DWORD old = 0;
@@ -168,117 +232,131 @@ inline void set_vector(uintptr_t def, int off_begin, uintptr_t begin, uintptr_t 
     VirtualProtect((void*)(def + off_begin), 24, old, &old);
 }
 
-// Install `desired` (directed edges over node indices) into the definition graph.
-// Returns the number of links drawn/listed in the opposite sense to their file declaration.
-inline int apply(const std::set<std::pair<int, int>>& desired_in, std::ofstream& log) {
+// Install `desired` (directed edges over node indices) into the definition graph, following the
+// engine's own Random-New-World fixup order (see relink.md 5.2). Returns links reversed, or -1.
+inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in,
+                 std::ofstream& log, const std::vector<livetrade::SimNode>& sim) {
     if (!g_ready) return -1;
-    // IDENTITY MODE: repoint every definition at our own arrays but keep the file's own
-    // directions, so nothing reverses. If the game still dies, the fault is the array handoff
-    // itself (lifetime, alignment, or a field inside the entry that cannot simply be copied)
-    // rather than the reversal -- which is the only way to tell those two apart.
-    std::set<std::pair<int, int>> identity;
-    if (livetrade::marker_present("RELINK_IDENTITY")) {
-        for (auto& L : g_links) identity.insert({L.a, L.b});
-        log << "  [relink] IDENTITY MODE: " << identity.size() << " declared directions kept\n";
-    }
-    // ONE-LINK MODE: keep every declared direction except the FIRST link that wants reversing.
-    // If even a single reversal is fatal, the cause is structural (something else is sized to a
-    // node's original outgoing count) rather than a matter of how many links moved.
-    std::set<std::pair<int, int>> single;
+    // Everything below is keyed by NODE NAME. The engine has two distinct index spaces --
+    // definition indices (def+0xD8, where 0 is a null sentinel) and sim node indices
+    // (node+0x120) -- and conflating them silently left links "unmatched". An unmatched link
+    // keeps its file direction, and mixing those with solver-oriented links closed a CYCLE,
+    // which is the stack overflow. Names remove the whole hazard.
+    using NamePair = std::pair<std::string, std::string>;
+    auto NA = [&](int i) { return g_defs[i].name; };
+
+    std::set<NamePair> identity;
+    if (livetrade::marker_present("RELINK_IDENTITY"))
+        for (auto& L : g_links) identity.insert({NA(L.a), NA(L.b)});
+    std::set<NamePair> single;
     if (livetrade::marker_present("RELINK_ONE")) {
         bool used = false;
         for (auto& L : g_links) {
-            bool wants_rev = !desired_in.count({L.a, L.b}) && desired_in.count({L.b, L.a});
-            if (wants_rev && !used) { single.insert({L.b, L.a}); used = true;
-                log << "  [relink] ONE-LINK MODE: reversing only " << g_defs[L.a].name
-                    << " -> " << g_defs[L.b].name << "\n"; }
-            else single.insert({L.a, L.b});
+            bool rev = !desired_in.count({NA(L.a), NA(L.b)}) && desired_in.count({NA(L.b), NA(L.a)});
+            if (rev && !used) { single.insert({NA(L.b), NA(L.a)}); used = true;
+                log << "  [relink] ONE-LINK: " << NA(L.a) << " -> " << NA(L.b) << "\n"; }
+            else single.insert({NA(L.a), NA(L.b)});
         }
     }
-    const std::set<std::pair<int, int>>& desired =
+    const std::set<NamePair>& desired =
         livetrade::marker_present("RELINK_IDENTITY") ? identity
         : (livetrade::marker_present("RELINK_ONE") ? single : desired_in);
-    int reversed_count = 0;
-    // build each node's outgoing entry array and incoming pointer array
-    std::map<int, std::vector<uint8_t>> outbuf;
-    std::map<int, std::vector<uintptr_t>> inbuf;
-    for (auto& [idx, di] : g_defs) { outbuf[idx]; inbuf[idx]; }
 
+    // ---- 2. decide each link's direction ----
+    int reversed_count = 0, unmatched = 0;
+    std::map<int, std::vector<int>> per_node;      // node index -> link ids, in slot order
+    std::vector<std::pair<int, int>> final_edges;  // the graph we are about to install
     for (size_t li = 0; li < g_links.size(); li++) {
         const Link& L = g_links[li];
-        bool forward = desired.count({L.a, L.b}) > 0;
-        bool backward = !forward && desired.count({L.b, L.a}) > 0;
-        int src = forward ? L.a : (backward ? L.b : L.a);   // unknown links keep the declaration
-        int dst = forward ? L.b : (backward ? L.a : L.b);
-        if (backward) reversed_count++;
-        // the entry, adjusted to point from src to dst
-        std::vector<uint8_t> e = L.entry;
-        std::vector<uint8_t>& buf = outbuf[src];
-        size_t at = buf.size();
-        buf.insert(buf.end(), e.begin(), e.end());
-        // record where the polyline for this entry must live; patched after the buffer is final
-        inbuf[dst].push_back((uintptr_t)g_defs[src].obj);
-        (void)at;
+        bool fwd = desired.count({NA(L.a), NA(L.b)}) > 0;
+        bool bwd = !fwd && desired.count({NA(L.b), NA(L.a)}) > 0;
+        if (bwd) reversed_count++;
+        if (!fwd && !bwd) {
+            unmatched++;                            // no opinion: keep the file's declaration
+            if (unmatched <= 6)
+                log << "  [relink] unmatched link " << g_defs[L.a].name << " -> "
+                    << g_defs[L.b].name << " (keeping declared direction)\n";
+        }
+        int src = bwd ? L.b : L.a, dst = bwd ? L.a : L.b;
+        per_node[src].push_back((int)li);
+        final_edges.push_back({src, dst});
     }
 
-    // commit: copy into the stable storage, patch per-entry fields, then repoint the vectors
+    // ---- 2a. THE GRAPH MUST BE A DAG ----
+    // 0xB67D20 -> 0xB6A840 is an unbounded recursive DFS over outgoing links with only a
+    // "monotone deepen" memo: a directed cycle recurses until the stack dies, with no crash dump.
+    // Mixing solver-oriented links with unmatched links that keep their file direction can close
+    // a cycle, so verify before touching anything and refuse rather than kill the game.
+    {
+        std::map<int, std::vector<int>> adj;
+        std::map<int, int> indeg;
+        std::set<int> nodes;
+        for (auto& [u, v] : final_edges) { adj[u].push_back(v); indeg[v]++; nodes.insert(u); nodes.insert(v); }
+        std::vector<int> q;
+        for (int n : nodes) if (!indeg.count(n) || indeg[n] == 0) q.push_back(n);
+        size_t seen = 0;
+        while (!q.empty()) {
+            int x = q.back(); q.pop_back(); seen++;
+            for (int y : adj[x]) if (--indeg[y] == 0) q.push_back(y);
+        }
+        if (seen != nodes.size()) {
+            log << "  [relink] REFUSED: the requested graph has a CYCLE (" << (nodes.size() - seen)
+                << " of " << nodes.size() << " nodes in it) -- installing it would stack-overflow "
+                   "the engine's DFS at 0xB67D20. " << unmatched
+                << " links had no orientation from the solve and kept their declared direction.\n";
+            return -2;
+        }
+    }
     for (auto& [idx, di] : g_defs) {
+        if (idx == 0) continue;                     // definition 0 is the null sentinel
         std::vector<uint8_t>& stable = g_out_storage[idx];
-        std::vector<uint8_t>& fresh = outbuf[idx];
-        if (fresh.size() > stable.size()) continue;             // cannot happen: pre-sized
-        if (!fresh.empty()) memcpy(stable.data(), fresh.data(), fresh.size());
+        const std::vector<int>& mine = per_node[idx];
+        size_t need = mine.size() * E_STRIDE;
+        if (need > stable.size()) { log << "  [relink] overflow at node " << idx << "\n"; return -1; }
         uintptr_t base = (uintptr_t)stable.data();
-        // patch every entry's destination pointer + name (the entries were copied verbatim)
-        size_t n = fresh.size() / E_STRIDE;
-        size_t k = 0;
-        for (size_t li = 0; li < g_links.size() && k < n; li++) {
-            const Link& L = g_links[li];
-            bool forward = desired.count({L.a, L.b}) > 0;
-            bool backward = !forward && desired.count({L.b, L.a}) > 0;
-            int src = forward ? L.a : (backward ? L.b : L.a);
-            int dst = forward ? L.b : (backward ? L.a : L.b);
-            if (src != idx) continue;
+        for (size_t k = 0; k < mine.size(); k++) {
+            const Link& L = g_links[mine[k]];
+            bool bwd = (L.b == idx) && !(desired.count({NA(L.a), NA(L.b)}) > 0);
+            int dst = bwd ? L.a : L.b;
             uintptr_t e = base + k * E_STRIDE;
-            *(uintptr_t*)(e + E_TARGET) = g_defs[dst].obj;
-            write_str(e + E_NAME, g_defs[dst].name);
-            // the drawn ribbon runs from the entry's owner outward, so the polyline must be in
-            // source->destination order. The entry keeps the engine's own polyline buffer; we
-            // rewrite its CONTENTS from the captured original, reversed when the link now runs
-            // the other way. Each physical link has exactly one live entry, so no sharing.
-            if (!L.poly.empty()) {
+            memcpy((void*)e, L.entry.data(), E_STRIDE);
+            *(uintptr_t*)(e + E_TARGET) = g_defs[dst].obj;      // destination definition
+            write_str(e + E_NAME, g_defs[dst].name);            // destination NAME (0xB69710 reads it)
+            *(int32_t*)(e + 0x38) = (int32_t)k;                 // the entry's own index -- REQUIRED
+            if (!L.poly.empty()) {                              // ribbon runs source -> destination
                 uintptr_t pb = livetrade::fq(e + E_POLY_B);
                 size_t bytes = L.poly.size();
                 if (pb && livetrade::validate_region(pb, bytes)) {
-                    DWORD oldp = 0;
-                    if (VirtualProtect((void*)pb, bytes, PAGE_READWRITE, &oldp)) {
-                        if (!backward) {
-                            memcpy((void*)pb, L.poly.data(), bytes);
-                        } else {
-                            size_t pts = bytes / 8;              // float2
-                            const uint64_t* srcp = (const uint64_t*)L.poly.data();
-                            uint64_t* dstp = (uint64_t*)pb;
-                            for (size_t q = 0; q < pts; q++) dstp[q] = srcp[pts - 1 - q];
-                        }
-                        VirtualProtect((void*)pb, bytes, oldp, &oldp);
+                    DWORD op = 0;
+                    if (VirtualProtect((void*)pb, bytes, PAGE_READWRITE, &op)) {
+                        const uint64_t* sp = (const uint64_t*)L.poly.data();
+                        uint64_t* dp = (uint64_t*)pb;
+                        size_t pts = bytes / 8;
+                        for (size_t q = 0; q < pts; q++) dp[q] = bwd ? sp[pts - 1 - q] : sp[q];
+                        VirtualProtect((void*)pb, bytes, op, &op);
                     }
                 }
             }
-            k++;
         }
-        std::vector<uintptr_t>& instable = g_in_storage[idx];
-        std::vector<uintptr_t>& infresh = inbuf[idx];
-        if (infresh.size() <= instable.size() && !infresh.empty())
-            memcpy(instable.data(), infresh.data(), infresh.size() * 8);
-        set_vector(di.obj, D_OUT_BEGIN, base, base + fresh.size(), base + stable.size());
-        // The incoming vector's element type is not yet confirmed, so it is only repointed when
-        // explicitly enabled; the outgoing vector alone drives the tabs' outgoing side and the
-        // arrow layer, and is what this step is proving.
-        if (livetrade::marker_present("RELINK_IN")) {
-            uintptr_t ibase = (uintptr_t)instable.data();
-            set_vector(di.obj, D_IN_BEGIN, ibase, ibase + infresh.size() * 8,
-                       ibase + instable.size() * 8);
-        }
+        set_vector(di.obj, D_OUT_BEGIN, base, base + need, base + need);
     }
+
+    // ---- 3. let the ENGINE rebuild incoming: empty each, then re-push from the names ----
+    for (auto& [idx, di] : g_defs) {
+        uintptr_t b = livetrade::fq(di.obj + D_IN_BEGIN);
+        set_vector(di.obj, D_IN_BEGIN, b, b, livetrade::fq(di.obj + D_IN_CAP));
+    }
+    for (auto& [idx, di] : g_defs) if (idx != 0) engine_relink_def(di.obj);
+
+    // ---- 4. clamp steer indices (the node window indexes these unguarded) ----
+    int clamped = clamp_steer_indices(sim);
+
+    // ---- 5 + 7. the two REQUIRED fixups: order keys, then the manager's calc order ----
+    engine_recompute_order_keys();
+    engine_rebuild_calc_order();
+
+    log << "  [relink] applied: " << reversed_count << " links reversed, "
+        << clamped << " steer indices clamped, calc order rebuilt\n";
     return reversed_count;
 }
 

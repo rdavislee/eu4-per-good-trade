@@ -172,7 +172,14 @@ inline int apply(uintptr_t mgr) {
                 int relinked = -1;
                 if (livetrade::marker_present("RELINK")) {
                     std::ofstream lgr(g_log, std::ios::app);
-                    if (relink::capture(lgr)) relinked = relink::apply(desired, lgr);
+                    auto sim_now = livetrade::read_sim_nodes();   // needed for the steer clamp
+                    // by NAME: the solver's field indices map straight to node names, so the
+                    // engine's two index spaces never enter the picture.
+                    std::set<std::pair<std::string, std::string>> want;
+                    for (auto& [u, v] : o.phi_w)
+                        if (u < (int)g_plan.names.size() && v < (int)g_plan.names.size())
+                            want.insert({g_plan.names[u], g_plan.names[v]});
+                    if (relink::capture(lgr)) relinked = relink::apply(want, lgr, sim_now);
                 }
                 int flipped = livetrade::marker_present("RELINK") ? relinked
                                                                   : arrows::set_directions(desired);

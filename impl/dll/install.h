@@ -70,7 +70,8 @@ inline std::vector<double> route_good(int N, const std::vector<std::pair<int, in
 // (+0xCC accum) and the UI total cache; leaves local untouched (spec B4). Returns nodes written.
 inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
                              const std::vector<std::string>& field_names,
-                             const std::vector<econ::NodeAggregate>& agg) {
+                             const std::vector<econ::NodeAggregate>& agg,
+                             bool write_local = false) {
     auto byname = live_by_name(sim);
     int wrote = 0;
     for (int fn = 0; fn < (int)field_names.size() && fn < (int)agg.size(); fn++) {
@@ -105,6 +106,10 @@ inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
         livetrade::write_outgoing(node, out);
         // the collectible pool is what is NOT forwarded (spec 2.6): pass 10 divides this
         bool a = livetrade::write_pool(node, held - out);
+        // In the AGGREGATE view local is never written: test B4 requires it to stay the engine's
+        // own origination. In a PER-GOOD view spec 1.12 asks for all six fields to show the
+        // selected good alone, so local becomes that good's inject.
+        if (write_local) livetrade::write_local_value(node, agg[fn].local / 12.0);
         if (a) wrote++;
     }
     return wrote;

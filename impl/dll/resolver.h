@@ -32,6 +32,7 @@ struct Orientation {
     std::vector<std::vector<std::pair<int, int>>> graphs;   // per live good
     std::vector<int> slots;                                  // engine tgs slot per good
     std::vector<double> prices;                              // price per good
+    std::vector<std::string> good_names;                     // the good each graph belongs to
     std::vector<std::vector<std::vector<char>>> reach;       // per good reachability
     std::vector<std::pair<int, int>> phi_w;                  // the aggregate orientation
     double world_wealth = 0;
@@ -73,6 +74,7 @@ inline bool solve_once(Orientation& out, std::string* why = nullptr) {
     if (!w.ok) { if (why) *why = "live world read failed"; return false; }
     field::Field f = field::build(g_st.tn, g_st.sm, w.sd, g_st.base_prices);
     out.graphs.clear(); out.slots.clear(); out.prices.clear(); out.reach.clear();
+    out.good_names.clear();
     out.world_wealth = f.world_wealth;
     out.counted_provinces = (int)f.rows.size();
 
@@ -94,6 +96,7 @@ inline bool solve_once(Orientation& out, std::string* why = nullptr) {
         out.slots.push_back(slotit != g_st.good_slot.end() ? slotit->second : gi + 1);
         out.prices.push_back(field::price_of(f.goods[gi], w.sd.current_prices, g_st.base_prices));
         out.graphs.push_back(r.directed);
+        out.good_names.push_back(f.goods[gi]);
         std::vector<std::vector<int>> outs(f.N);
         for (auto& e : r.directed) outs[e.first].push_back(e.second);
         out.reach.push_back(econ::reach_sets(f.N, outs));

@@ -32,6 +32,9 @@
 #include "install.h"
 #include "resolver.h"
 #include "arrows.h"
+#include "shock.h"
+#include "relink.h"
+#include "viewmode.h"
 #include "../src/economy.h"
 
 namespace ticklive {
@@ -44,8 +47,10 @@ struct Plan {
     std::vector<int> slots;                                // engine trade_goods_size slot per good
     std::vector<double> prices;                            // current price per good
     std::vector<std::string> names;                        // field index -> node name
+    std::vector<std::string> good_names;                   // parallel to graphs: the good's name
     std::vector<std::vector<int>> link_targets;            // node -> outgoing destinations
     std::vector<std::pair<int, int>> phi_w;                // the installed orientation
+    std::vector<std::pair<int, int>> phi_w_prev;           // previous, to name the flips
     std::vector<std::vector<std::vector<char>>> reach;      // per good, precomputed reachability
     int N = 0;
     int generation = 0;
@@ -131,7 +136,9 @@ inline int apply(uintptr_t mgr) {
             g_plan.graphs = o.graphs;
             g_plan.slots  = o.slots;
             g_plan.prices = o.prices;
+            g_plan.good_names = o.good_names;
             g_plan.reach  = o.reach;
+            g_plan.phi_w_prev = g_plan.phi_w;
             g_plan.phi_w  = o.phi_w;
             g_plan.generation = o.generation;
             // Redraw the map arrows to the new Phi_w (spec 1.12: Phi_w is the drawn direction).
@@ -148,7 +155,27 @@ inline int apply(uintptr_t mgr) {
                     if (a == name_to_id.end() || b == name_to_id.end()) continue;
                     desired.insert({a->second, b->second});
                 }
-                int flipped = arrows::set_directions(desired);
+                // name the links whose drawn direction changed, so the flip can be found on
+                // the map (test F1 wants it confirmed by eye, not by log line)
+                {
+                    std::set<std::pair<int,int>> prev;
+                    for (auto& [u, v] : g_plan.phi_w_prev) prev.insert({u, v});
+                    std::ofstream lg3(g_log, std::ios::app);
+                    for (auto& [u, v] : o.phi_w)
+                        if (prev.count({v, u}))
+                            lg3 << "[flip] " << g_plan.names[v] << " -> " << g_plan.names[u]
+                                << "  became  " << g_plan.names[u] << " -> " << g_plan.names[v] << "\n";
+                }
+                // REORIENT THE DEFINITION GRAPH -- what actually drives the node window's
+                // incoming/outgoing tabs AND the arrow layer. Reversing render geometry alone
+                // changed neither (observed in the running game).
+                int relinked = -1;
+                if (livetrade::marker_present("RELINK")) {
+                    std::ofstream lgr(g_log, std::ios::app);
+                    if (relink::capture(lgr)) relinked = relink::apply(desired, lgr);
+                }
+                int flipped = livetrade::marker_present("RELINK") ? relinked
+                                                                  : arrows::set_directions(desired);
                 bool rebuilt = flipped > 0 ? arrows::rebuild() : true;
                 std::ofstream lg2(g_log, std::ios::app);
                 lg2 << "[arrows] re-oriented " << flipped << " drawn routes, layer rebuild "
@@ -172,6 +199,7 @@ inline int apply(uintptr_t mgr) {
         auto it = install::g_id_to_name.find(s.index);
         if (it != install::g_id_to_name.end()) s.name = it->second;
     }
+    shock::maybe_apply(g_log, sim, install::g_id_to_name);
     int gc = 0, matched = 0;
     auto inject = install::gather_inject(sim, g_plan.names, gc, matched);
     std::map<int, std::vector<int>> collect_nodes;
@@ -191,12 +219,21 @@ inline int apply(uintptr_t mgr) {
             econ::route(g_plan.N, g_plan.graphs[k], inj, st, collect_nodes, 0.05, R));
         inj_field.push_back(std::move(inj));
     }
-    auto agg = econ::aggregate(g_plan.N, per_good, inj_field);
-    auto gross = econ::gross_link_flows(per_good);
+    // SWAP-ON-VIEW (spec 1.12): in a per-good view the SAME fields carry that good's numbers
+    // alone, so the aggregate is taken over just the selected good.
+    viewmode::poll(g_plan.good_names);
+    std::vector<econ::GoodFlow> shown = per_good;
+    std::vector<std::vector<double>> shown_inj = inj_field;
+    if (viewmode::per_good() && viewmode::g_selected < (int)per_good.size()) {
+        shown.assign(1, per_good[viewmode::g_selected]);
+        shown_inj.assign(1, inj_field[viewmode::g_selected]);
+    }
+    auto agg = econ::aggregate(g_plan.N, shown, shown_inj);
+    auto gross = econ::gross_link_flows(shown);
 
     // links first: install_aggregate derives outgoing from what each node actually holds
     install::install_links(sim, g_plan.names, gross, install::g_id_to_name);
-    int wrote = install::install_aggregate(sim, g_plan.names, agg);
+    int wrote = install::install_aggregate(sim, g_plan.names, agg, viewmode::per_good());
 
     // predict this month's per-country division: pool (what we just wrote) x the engine's own
     // powershare. Recompute the monthly pool exactly as install_aggregate did.

@@ -128,43 +128,79 @@ inline bool looks_like_definition(uintptr_t d) {
 // Dump the raw layout of a few real definition objects, so the outgoing-list and node-index
 // offsets are READ rather than assumed. A definition is identified by its vtable and by having a
 // readable node name (inline std::string at +0x10), exactly as the node-name scan already does.
+inline std::vector<uintptr_t> definitions();     // fwd
+
 inline void dump_definition_layout(const std::string& logpath, int how_many = 3) {
     std::ofstream log(logpath, std::ios::app);
-    log << "--- CTradeNodeDefinition raw layout (vtable-scanned objects) ---\n";
-    uintptr_t defvt = livetrade::module_base() + 0x1C439D0;
+    log << "--- CTradeNodeDefinition raw layout (from the real definition vector) ---\n";
+    auto defs = definitions();
     int shown = 0;
-    livetrade::walk_self([&](uintptr_t region, size_t sz) {
-        if (shown >= how_many) return;
-        const uint8_t* p = (const uint8_t*)region;
-        for (size_t i = 0; i + 0x140 <= sz && shown < how_many; i += 8) {
-            uintptr_t vt;
-            memcpy(&vt, p + i, 8);
-            if (vt != defvt) continue;
-            uintptr_t d = region + i;
-            // read the inline std::string name at +0x10 to confirm this is a real definition
+    for (uintptr_t d : defs) {
+        if (shown >= how_many) break;
+        if (!livetrade::validate_region(d, 0x160)) continue;
+        int idx = livetrade::fi(d + DEF_NODE_INDEX);
+        log << "  def[idx " << idx << "] @0x" << std::hex << d << std::dec << "\n";
+        for (int off = 0x00; off <= 0x150; off += 8) {
+            uintptr_t q = livetrade::fq(d + off);
+            uintptr_t nxt = livetrade::fq(d + off + 8);
+            int32_t lo = livetrade::fi(d + off), hi = livetrade::fi(d + off + 4);
+            std::string tag;
+            if (q && nxt >= q && (nxt - q) <= 0x78 * 32 && ((nxt - q) % 0x78) == 0 && nxt != q)
+                tag = "  <== {begin,end} stride 0x78  (" + std::to_string((nxt - q) / 0x78) + " entries)";
+            else if (q && nxt >= q && (nxt - q) <= 8 * 64 && ((nxt - q) % 8) == 0 && nxt != q)
+                tag = "  <== {begin,end} stride 8  (" + std::to_string((nxt - q) / 8) + " elems)";
+            // is it a readable inline std::string?
             char nm[17] = {0};
-            memcpy(nm, p + i + 0x10, 16);
-            size_t len = strnlen(nm, 16);
-            std::string name(nm, len);
-            bool ok = !name.empty();
-            for (char c : name) if (!((c >= 'a' && c <= 'z') || c == '_' || (c >= '0' && c <= '9'))) ok = false;
-            if (!ok) continue;
-            log << "  def '" << name << "' @0x" << std::hex << d << std::dec << "\n";
-            for (int off = 0x00; off <= 0x78; off += 8) {
-                uintptr_t q; memcpy(&q, p + i + off, 8);
-                int32_t lo; memcpy(&lo, p + i + off, 4);
-                int32_t hi; memcpy(&hi, p + i + off + 4, 4);
-                const char* tag = "";
-                // a {begin,end} pair whose span divides 0x78 is an outgoing-link vector
-                uintptr_t nxt; memcpy(&nxt, p + i + off + 8, 8);
-                if (q && nxt > q && (nxt - q) <= 0x78 * 32 && ((nxt - q) % 0x78) == 0) tag = "  <-- {begin,end} stride 0x78";
-                if (q && nxt > q && (nxt - q) <= 8 * 32 && ((nxt - q) % 8) == 0 && (nxt - q) > 0) tag = "  <-- {begin,end} stride 8";
-                log << "    +0x" << std::hex << off << " = 0x" << q << std::dec
-                    << "  (i32 " << lo << ", " << hi << ")" << tag << "\n";
+            if (livetrade::validate_region(d + off, 16)) {
+                memcpy(nm, (const void*)(d + off), 16);
+                size_t len = strnlen(nm, 16);
+                bool okn = len >= 3;
+                for (size_t c = 0; c < len; c++)
+                    if (!((nm[c] >= 'a' && nm[c] <= 'z') || nm[c] == '_' || (nm[c] >= '0' && nm[c] <= '9'))) okn = false;
+                if (okn) tag += std::string("  STR '") + std::string(nm, len) + "'";
             }
-            shown++;
+            log << "    +0x" << std::hex << off << " = 0x" << q << std::dec
+                << "  (i32 " << lo << ", " << hi << ")" << tag << "\n";
         }
-    });
+        shown++;
+    }
+    // and the outgoing ENTRIES of the first well-connected definition, which is what a link
+    // actually is: 0x78 bytes carrying the destination and the drawn polyline.
+    log << "--- outgoing link ENTRY layout ---\n";
+    for (uintptr_t d : defs) {
+        uintptr_t ob = livetrade::fq(d + DEF_OUT_BEGIN), oe = livetrade::fq(d + DEF_OUT_END);
+        if (!ob || oe <= ob) continue;
+        int n = (int)((oe - ob) / OUT_STRIDE);
+        if (n < 2) continue;
+        log << "  def[idx " << livetrade::fi(d + DEF_NODE_INDEX) << "] has " << n << " entries\n";
+        for (int k = 0; k < 2 && k < n; k++) {
+            uintptr_t e = ob + (uintptr_t)k * OUT_STRIDE;
+            log << "   entry[" << k << "] @0x" << std::hex << e << std::dec << "\n";
+            for (int off = 0; off < OUT_STRIDE; off += 8) {
+                uintptr_t q = livetrade::fq(e + off);
+                uintptr_t nxt = livetrade::fq(e + off + 8);
+                std::string tag;
+                // a pointer to a definition?
+                if (q && livetrade::validate_region(q + DEF_NODE_INDEX, 4) &&
+                    livetrade::fq(q) == livetrade::fq(d)) {
+                    tag = "  <== DEFINITION ptr, idx " + std::to_string(livetrade::fi(q + DEF_NODE_INDEX));
+                }
+                if (q && nxt > q && (nxt - q) <= 4096 && ((nxt - q) % 8) == 0)
+                    tag += "  <== {begin,end} " + std::to_string((nxt - q) / 8) + " x float2";
+                char nm[17] = {0};
+                if (livetrade::validate_region(e + off, 16)) {
+                    memcpy(nm, (const void*)(e + off), 16);
+                    size_t len = strnlen(nm, 16);
+                    bool okn = len >= 3;
+                    for (size_t c = 0; c < len; c++)
+                        if (!((nm[c] >= 'a' && nm[c] <= 'z') || nm[c] == '_' || (nm[c] >= '0' && nm[c] <= '9'))) okn = false;
+                    if (okn) tag += std::string("  STR '") + std::string(nm, len) + "'";
+                }
+                log << "     +0x" << std::hex << off << " = 0x" << q << std::dec << tag << "\n";
+            }
+        }
+        break;
+    }
 }
 
 inline std::vector<uintptr_t> definitions() {
@@ -232,6 +268,34 @@ inline bool reverse_polyline(uintptr_t entry) {
     }
     VirtualProtect((void*)b, bytes, old, &old);
     return true;
+}
+
+// DECISIVE PROBE (spec 2.7 item 7). Reversing the polyline changed no arrow on screen, so one of
+// two things is true: either this is not the render geometry / the rebuild is not taking effect,
+// or the arrowhead direction is simply not derived from point order (the RE marked that UNKNOWN).
+// Blanking a route's polyline distinguishes them: if the arrows for the blanked links VANISH,
+// this is the right memory and the rebuild works, and the arrowhead must come from somewhere else
+// (the shader's UV convention, or the def->target pairing). If they stay, the edit or the rebuild
+// is not landing. Behind the BLANKTEST marker; blanks the first `n` links of each node.
+inline int blank_polylines(int per_node) {
+    int blanked = 0;
+    for (uintptr_t def : definitions()) {
+        if (!livetrade::validate_region(def + DEF_OUT_BEGIN, 16)) continue;
+        uintptr_t ob = livetrade::fq(def + DEF_OUT_BEGIN), oe = livetrade::fq(def + DEF_OUT_END);
+        if (!ob || oe <= ob) continue;
+        int k = 0;
+        for (uintptr_t e = ob; e + OUT_STRIDE <= oe && k < per_node; e += OUT_STRIDE, k++) {
+            uintptr_t pb = livetrade::fq(e + OUT_POLY_BEGIN);
+            if (!pb) continue;
+            DWORD old = 0;
+            if (VirtualProtect((void*)(e + OUT_POLY_END), 8, PAGE_READWRITE, &old)) {
+                *(uintptr_t*)(e + OUT_POLY_END) = pb;    // end = begin -> empty strip
+                VirtualProtect((void*)(e + OUT_POLY_END), 8, old, &old);
+                blanked++;
+            }
+        }
+    }
+    return blanked;
 }
 
 // Make the drawn arrows match `desired` (a directed edge set over engine NODE INDICES).

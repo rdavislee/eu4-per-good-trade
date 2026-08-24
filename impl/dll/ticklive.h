@@ -179,7 +179,11 @@ inline int apply(uintptr_t mgr) {
                     for (auto& [u, v] : o.phi_w)
                         if (u < (int)g_plan.names.size() && v < (int)g_plan.names.size())
                             want.insert({g_plan.names[u], g_plan.names[v]});
-                    if (relink::capture(lgr)) relinked = relink::apply(want, lgr, sim_now);
+                    if (relink::capture(lgr)) {
+                        relinked = relink::apply(want, lgr, sim_now);
+                        if (livetrade::marker_present("LISTDUMP"))
+                            relink::dump_lists(g_log, {"baltic_sea", "novgorod", "lubeck"});
+                    }
                 }
                 int flipped = livetrade::marker_present("RELINK") ? relinked
                                                                   : arrows::set_directions(desired);

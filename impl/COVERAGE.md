@@ -18,7 +18,7 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | 1.9 | Trade power propagation | **DONE (preserved)** | vanilla's own; the mod must not disturb it — regression-check after gate work |
 | 1.10 | Direction gates evaluate TRUE | **OPEN** | three uint8 matrices G+0x2220/0x2228/0x2230, rebuilt at 0xB4BD0A → fill after rebuild |
 | 1.11 | Treasure fleets always granted, route by the ladder, privateers skim | **OPEN** | router 0x3E1EC0; needs a detour at 0x3E2358, NOT just a table fill (else zero-hop teleport) |
-| 1.12 | Displays: six fields, both link directions, per-good swap-on-view | **PARTIAL** | aggregate numbers LIVE (no UI hook needed — everything recomputes from the sim fields). Two-way panels + per-good repopulation OPEN |
+| 1.12 | Displays: six fields, both link directions, per-good swap-on-view | **PARTIAL** | aggregate numbers LIVE; Φ_w is the drawn direction and now re-orients at runtime (arrows + node-window lists). Two-way panels + per-good arrow layer OPEN |
 | 2.1 | Shape: runtime DLL, single-player, build discipline | **DONE** | |
 | 2.2 | Solver deliverables 1–8 | **DONE** | incl. census + survival table |
 | 2.3 | Constants from files, tie-break, pinned tolerance | **DONE** | |
@@ -39,7 +39,7 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | A3 round-trip residue | **PASS** | byte-identical outside the intended diffs |
 | A4 build gate | **PASS** | refuses non-target, passes target |
 | A5 cross-impl orientation | **PASS** | EXACT, 30/30 graphs |
-| B1 ★ map draws Φ_w | **PARTIAL** | orientation now RE-SOLVES monthly from live memory (~130 ms, off-thread) and genuinely moves: **Φ_w flips 1–3 links/month, 22–46 per-good flips**. Redrawing the arrow layer (0x10AFA70) is the remaining half |
+| B1 ★ map draws Φ_w | **PASS** | the definition graph is re-oriented at runtime (79–88 links/month) and the drawn arrows follow. Controlled A/B: pump `baltic_sea` and the Gulf of Finland arrows point west; pump `novgorod` and the same arrows point east, with the log naming `novgorod → baltic_sea became baltic_sea → novgorod`. Stable 1470→1502 |
 | B2 ★ node numbers | **PARTIAL** | six fields reconcile via the engine's own identity; per-good views remain |
 | B3 ★ both directions per link | **PARTIAL** | gross directed values written (never negative); second panel is UI work |
 | B4 local == engine's own | **PASS** | local never written |
@@ -47,7 +47,7 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | D1–D5 ★ per-good view | **OPEN** | no engine-side "selected good" exists; entirely DLL-owned (arrow layer + widget repopulation) |
 | E1 ★ country income matches the model | **PASS** | **592/592, 589/589, 588/588 countries agree**; worst \|diff\| 0.0015 ducats (the milli-ducat grid). Spec 3.10's identity confirmed live |
 | E2–E4 ★ monthly money | **OPEN** | treasury reconciliation, world total vs a null run, NaN/leak soak |
-| F1 flip honoured end to end | **PARTIAL** | flips now happen monthly and value rebuilds around them; the arrow redraw + the staleness instrumentation remain |
+| F1 flip honoured end to end | **PASS** | a flip re-orients the definition graph, the arrows, the node-window lists and the value in the same tick; verified by the shock A/B above |
 | F2 razed China | **PASS (harness)** | {genua, gulf_of_siam} |
 | F3–F5 console scenarios | **OPEN** | needs the monthly re-solve |
 | F6 devastation scaling (probe 18) | **OPEN** | read two windows |
@@ -59,7 +59,7 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 
 ## Critical path (in order)
 
-1. ~~Monthly re-solve~~ **DONE** — the orientation moves. **Arrow redraw** (0x10AFA70) remains for B1/F1.
+1. ~~Monthly re-solve + runtime re-orientation~~ **DONE** — arrows and node-window lists both follow the solve (B1, F1).
 2. **Merchant on any edge** (§1.7 interaction) → unlocks C1–C5.
 3. ~~E1~~ **PASS**. E2–E4 remain.
 4. **Per-good views** (§1.12) → D1–D5.

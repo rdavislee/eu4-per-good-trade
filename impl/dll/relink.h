@@ -232,6 +232,38 @@ inline void set_vector(uintptr_t def, int off_begin, uintptr_t begin, uintptr_t 
     VirtualProtect((void*)(def + off_begin), 24, old, &old);
 }
 
+
+// Log a node's CURRENT outgoing and incoming lists, by name, straight from the definition graph.
+// The node window's listboxes are built from exactly this (UI RE: 0x13D5560 reads the definition
+// graph, never the runtime link records), so what this prints is what those tabs must show.
+inline void dump_lists(const std::string& logpath, const std::vector<std::string>& want) {
+    std::ofstream log(logpath, std::ios::app);
+    log << "--- definition graph: outgoing / incoming by name ---\n";
+    for (auto& [idx, di] : g_defs) {
+        bool wanted = want.empty();
+        for (auto& w : want) if (w == di.name) wanted = true;
+        if (!wanted) continue;
+        std::string outs, ins;
+        uintptr_t ob = livetrade::fq(di.obj + D_OUT_BEGIN), oe = livetrade::fq(di.obj + D_OUT_END);
+        for (uintptr_t e = ob; ob && oe > ob && e + E_STRIDE <= oe; e += E_STRIDE) {
+            uintptr_t t = livetrade::fq(e + E_TARGET);
+            if (t && livetrade::validate_region(t + D_INDEX, 4)) {
+                int ti = livetrade::fi(t + D_INDEX);
+                outs += (g_defs.count(ti) ? g_defs[ti].name : std::string("?")) + " ";
+            }
+        }
+        uintptr_t ib = livetrade::fq(di.obj + D_IN_BEGIN), ie = livetrade::fq(di.obj + D_IN_END);
+        for (uintptr_t p = ib; ib && ie > ib && p + 8 <= ie; p += 8) {
+            uintptr_t t = livetrade::fq(p);
+            if (t && livetrade::validate_region(t + D_INDEX, 4)) {
+                int ti = livetrade::fi(t + D_INDEX);
+                ins += (g_defs.count(ti) ? g_defs[ti].name : std::string("?")) + " ";
+            }
+        }
+        log << "  " << di.name << ":  OUTGOING [ " << outs << "]   INCOMING [ " << ins << "]\n";
+    }
+}
+
 // Install `desired` (directed edges over node indices) into the definition graph, following the
 // engine's own Random-New-World fixup order (see relink.md 5.2). Returns links reversed, or -1.
 inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in,

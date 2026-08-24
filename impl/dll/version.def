@@ -1,0 +1,24 @@
+; Export forwarders so per-good-trade.dll can stand in as version.dll (the injection vector EU4
+; imports, following the EU4dll precedent). Windows loads a version.dll in the game directory
+; before the System32 one; these forwarders hand every real call straight through to the system
+; version.dll, so the game is unaffected while our DllMain runs the attach logic.
+;
+; Forwarder syntax: EXPORT = forward-to-module.export-name. WinSxS resolves the bare module name
+; "version" to the system copy for the calling process.
+LIBRARY per-good-trade
+EXPORTS
+    GetFileVersionInfoA        = version.GetFileVersionInfoA
+    GetFileVersionInfoByHandle = version.GetFileVersionInfoByHandle
+    GetFileVersionInfoExW      = version.GetFileVersionInfoExW
+    GetFileVersionInfoSizeA    = version.GetFileVersionInfoSizeA
+    GetFileVersionInfoSizeExW  = version.GetFileVersionInfoSizeExW
+    GetFileVersionInfoSizeW    = version.GetFileVersionInfoSizeW
+    GetFileVersionInfoW        = version.GetFileVersionInfoW
+    VerFindFileA               = version.VerFindFileA
+    VerFindFileW               = version.VerFindFileW
+    VerInstallFileA            = version.VerInstallFileA
+    VerInstallFileW            = version.VerInstallFileW
+    VerLanguageNameA           = version.VerLanguageNameA
+    VerLanguageNameW           = version.VerLanguageNameW
+    VerQueryValueA             = version.VerQueryValueA
+    VerQueryValueW             = version.VerQueryValueW

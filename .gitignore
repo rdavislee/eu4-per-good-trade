@@ -9,3 +9,7 @@ v6-owner-agnostic/scripts/r8/S18w/gamestate.txt
 # Local scratch
 nul
 *.tmp
+impl/*.exe
+impl/dll/*.dll
+impl/dll/*.exe
+*.o

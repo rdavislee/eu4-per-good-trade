@@ -13,7 +13,7 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | 1.4 | Market concentration α | **DONE** | `field.h` |
 | 1.5 | Goods without a graph (latent) | **LIVE** | the monthly re-solve rebuilds the live-good set from live production each month, so a good activating mid-campaign gets its graph that month |
 | 1.6 | Aggregate graph Φ_w | **DONE** | ends {genua, hangzhou} |
-| 1.7 | Merchants: incoming-entry assignability; caravan needs actual steering | **OPEN** | the UI interaction + the caravan condition. Path known: click 0x13CCE80 → dispatch 0x831790 → gate 0x1418E70 → `steer_command` (token 0x2DB9, Execute 0x5DA4F0) |
+| 1.7 | Merchants: incoming-entry assignability; caravan needs actual steering | **PARTIAL** | assignment on either link end works in the model (`assign.h`, merged into routing, keyed by link END so flips leave it alone). The engine's own `steer_command` cannot express it — it writes an INDEX into the node's outgoing list, and a Φ_w-incoming link has no index there. Remaining: the click gate `0x1418E70` (the click already reaches the assignment dispatcher `0x831790`) and the caravan condition |
 | 1.8 | Collection/transfer, per-good eligibility, steering, sinks | **LIVE** | routing reads the real merchant field (1369 power entries, 330 steering in 1448) |
 | 1.9 | Trade power propagation | **DONE (preserved)** | vanilla's own; the mod must not disturb it — regression-check after gate work |
 | 1.10 | Direction gates evaluate TRUE | **OPEN** | three uint8 matrices G+0x2220/0x2228/0x2230, rebuilt at 0xB4BD0A → fill after rebuild |
@@ -43,7 +43,7 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | B2 ★ node numbers | **PARTIAL** | six fields reconcile via the engine's own identity; per-good views remain |
 | B3 ★ both directions per link | **PARTIAL** | gross directed values written (never negative); second panel is UI work |
 | B4 local == engine's own | **PASS** | local never written |
-| C1–C5 ★ merchant on any link end | **OPEN** | reading the merchant field works; the assignment interaction is the gap |
+| C1–C5 ★ merchant on any link end | **PARTIAL** | the MODEL half works: `assign.h` holds assignments keyed by (country, link END) and merges them into routing, so a merchant on a Φ_w-**incoming** edge steers the goods oriented away from that node — verified live at `baltic_sea → lubeck`, an edge the engine has no index for. Keyed by END, so it survives a flip untouched (spec 1.7). Remaining: opening the click gate `0x1418E70` so the node window can set it |
 | D1–D5 ★ per-good view | **OPEN** | no engine-side "selected good" exists; entirely DLL-owned (arrow layer + widget repopulation) |
 | E1 ★ country income matches the model | **PASS** | **592/592, 589/589, 588/588 countries agree**; worst \|diff\| 0.0015 ducats (the milli-ducat grid). Spec 3.10's identity confirmed live |
 | E2–E4 ★ monthly money | **OPEN** | treasury reconciliation, world total vs a null run, NaN/leak soak |

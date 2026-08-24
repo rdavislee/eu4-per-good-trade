@@ -35,6 +35,7 @@
 #include "shock.h"
 #include "relink.h"
 #include "viewmode.h"
+#include "assign.h"
 #include "../src/economy.h"
 
 namespace ticklive {
@@ -215,6 +216,14 @@ inline int apply(uintptr_t mgr) {
     auto inject = install::gather_inject(sim, g_plan.names, gc, matched);
     std::map<int, std::vector<int>> collect_nodes;
     auto st = install::read_standings_field(sim, g_plan.names, g_plan.link_targets, collect_nodes);
+    // spec 1.7: merchants assigned to a link END the engine has no index for (a link drawn INTO
+    // this node) live in our own table and are merged on top of the engine's own assignments.
+    assign::poll(g_log);
+    int assigned = assign::merge(st, g_plan.names);
+    if (assigned && (g_ticks.load() % 12) == 0) {
+        std::ofstream la(g_log, std::ios::app);
+        la << "  [assign] " << assigned << " DLL-owned merchant assignments active\n";
+    }
 
     std::vector<econ::GoodFlow> per_good;
     std::vector<std::vector<double>> inj_field;

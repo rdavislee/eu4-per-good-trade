@@ -184,6 +184,17 @@ wrong destination, silently. Effect of the fix (live): steer entries resolved 29
 Rule: read link order, link targets and node identity from LIVE MEMORY
 (`install::live_link_targets`, definitions at `ptr@0x242BE48`), never from a file.
 
+
+## TRAP: a rewritten rel32 must reach its target (x64 hooking)
+Redirecting a 5-byte `call rel32` to your own code only works if that code sits within **±2GB** of
+the call site. `VirtualAlloc(nullptr, ...)` can return anything in the 64-bit space; when it lands
+further away the displacement truncates and the call jumps to garbage. Symptom observed here:
+`EXCEPTION_ACCESS_VIOLATION at 0x7FF6A7C40000` — EU4's own **image base**, i.e. execution landed on
+the DOS header, with a stack of unnamed `eu4.exe` frames. The game died the moment it unpaused.
+Fix: allocate the thunk near the site (probe `VirtualAlloc` at increasing offsets from the call
+site, allocation-granularity aligned) and assert the displacement fits in int32 before writing.
+Note `detour.h` is immune: it jumps via `jmp [rip+0]; dq target`, an absolute 64-bit pointer.
+
 ## Tools
 - Debug-log triples (__FILE__/__LINE__/msg): `re/logmap.txt` (1197 rows). Token table: `re/tokens.txt`
   (6648 rows) — `mov edx,<id>` in serializers gives field-offset ↔ save-key. RTTI is stripped (/GR-).

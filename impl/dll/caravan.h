@@ -23,6 +23,7 @@
 #pragma once
 #include <windows.h>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -76,8 +77,35 @@ inline bool install(std::string* err) {
         if (err) *err = "call does not reach ComputeCaravanPower (patched binary?)";
         return false;
     }
-    g_thunk = (uint8_t*)VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (!g_thunk) { if (err) *err = "thunk alloc failed"; return false; }
+    // The thunk MUST live within +/-2GB of the call site, because we reach it by rewriting a
+    // 5-byte rel32. A plain VirtualAlloc(nullptr, ...) can land anywhere in the 64-bit address
+    // space; when it does, the displacement truncates and the call lands on garbage. That is
+    // exactly what happened here -- EU4 died with EXCEPTION_ACCESS_VIOLATION at 0x7FF6A7C40000,
+    // its own image base, i.e. execution jumped into the DOS header. So allocate NEAR the site.
+    g_thunk = nullptr;
+    {
+        SYSTEM_INFO si{};
+        GetSystemInfo(&si);
+        const uintptr_t gran = si.dwAllocationGranularity ? si.dwAllocationGranularity : 0x10000;
+        for (int64_t delta = (int64_t)gran; delta < 0x60000000 && !g_thunk; delta += gran) {
+            for (int dir = 0; dir < 2 && !g_thunk; dir++) {
+                uintptr_t probe = dir ? (site - (uintptr_t)delta) : (site + (uintptr_t)delta);
+                probe &= ~(uintptr_t)(gran - 1);
+                if (!probe) continue;
+                g_thunk = (uint8_t*)VirtualAlloc((void*)probe, 64, MEM_COMMIT | MEM_RESERVE,
+                                                 PAGE_EXECUTE_READWRITE);
+            }
+        }
+    }
+    if (!g_thunk) { if (err) *err = "thunk alloc failed (no free page within 2GB)"; return false; }
+    {   // prove the displacement really fits before we write it
+        int64_t d = (int64_t)((intptr_t)g_thunk - (intptr_t)(site + 5));
+        if (d < INT32_MIN || d > INT32_MAX) {
+            if (err) *err = "thunk out of rel32 range";
+            VirtualFree(g_thunk, 0, MEM_RELEASE); g_thunk = nullptr;
+            return false;
+        }
+    }
     uint8_t* p = g_thunk;
     *p++ = 0x4D; *p++ = 0x89; *p++ = 0xF0;              // mov r8, r14      (the node)
     *p++ = 0x49; *p++ = 0x89; *p++ = 0xF9;              // mov r9, rdi      (tagIndex*8)

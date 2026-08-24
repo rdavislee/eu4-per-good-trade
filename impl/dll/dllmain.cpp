@@ -28,6 +28,7 @@
 #include "arrows.h"
 #include "clickgate.h"
 #include "caravan.h"
+#include "money.h"
 #include "tickhook.h"
 #include "ticklive.h"
 #include "../src/attach.h"
@@ -317,6 +318,14 @@ static void run_install(const std::string& logpath) {
                 // The click already reaches the assignment dispatcher; only its gate refuses,
                 // and the gate's graph test is the upstream/downstream predicate that spec 1.10
                 // says must evaluate true at the call site.
+                {
+                    std::string merr;
+                    if (money::install_exact(logpath, &merr))
+                        log << "  E2 instrument installed at eu4.exe+0xB4BF44 (samples the "
+                               "treasury inside the same monthly update)\n";
+                    else
+                        log << "  E2 instrument NOT installed: " << merr << "\n";
+                }
                 if (livetrade::marker_present("CARAVAN")) {
                     std::string kerr;
                     if (caravan::install(&kerr))

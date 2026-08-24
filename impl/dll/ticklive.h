@@ -37,6 +37,7 @@
 #include "viewmode.h"
 #include "assign.h"
 #include "caravan.h"
+#include "money.h"
 #include "../src/economy.h"
 
 namespace ticklive {
@@ -289,6 +290,8 @@ inline int apply(uintptr_t mgr) {
             pool_monthly[fn] = livetrade::fi(sim[it->second].obj + 0xB0) / 1000.0;
         }
         predict_income(sim, g_plan.names, pool_monthly);
+        money::sample_before(sim);      // E2: accumulator before the collector division
+        money::g_pass10_total = (int)sim.size();   // so the wrapper knows when the pass ends
         g_verify_pending = true;      // the verifier samples rec.total after pass 10 finishes
     }
     // per-country shares of the pool, so the engine's own pass 10 pays out the model's income.
@@ -359,7 +362,8 @@ inline void verify_worker() {
             auto sim = livetrade::read_sim_nodes();
             if (!sim.empty()) {
                 std::ofstream lg(g_log, std::ios::app);
-                verify_income(sim, lg);
+                verify_income(sim, lg);                 // E1
+                money::check_e4(sim, lg, g_ticks.load()); // E4
             }
         }
         Sleep(120);

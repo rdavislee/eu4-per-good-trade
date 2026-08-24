@@ -106,6 +106,46 @@ inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
     return wrote;
 }
 
+// Read the engine's live per-node per-country standings into the routing model's form
+// (spec 1.8: P_collect / P_transfer(g), steering targets, per-good eligibility).
+//
+//   power        = min(val, max(0, max_pow*max_demand/1000)) + t_in - t_out   [the engine's own]
+//   collects     = has_trader ? (type==0) : has_capital
+//   steer target = the outgoing-link index at +0xA8, resolved to a destination FIELD index
+//
+// `link_targets[node_field]` must list that node's outgoing link destinations in the engine's
+// own link order, so a steer index can be turned into a destination node.
+inline std::vector<econ::NodeStandings> read_standings_field(
+        const std::vector<livetrade::SimNode>& sim,
+        const std::vector<std::string>& field_names,
+        const std::vector<std::vector<int>>& link_targets,
+        std::map<int, std::vector<int>>& collect_nodes_out) {
+    auto byname = live_by_name(sim);
+    int N = (int)field_names.size();
+    std::vector<econ::NodeStandings> st(N);
+    collect_nodes_out.clear();
+    for (int fn = 0; fn < N; fn++) {
+        auto it = byname.find(field_names[fn]);
+        if (it == byname.end()) continue;
+        for (auto& c : livetrade::read_standings(sim[it->second].obj)) {
+            econ::Standing s{};
+            s.country = c.tag_index;
+            double capped = std::max(0.0, c.max_pow * c.max_demand / 1000.0);
+            s.power = std::min(c.val, capped > 0 ? capped : c.val) + c.t_in - c.t_out;
+            if (s.power < 0) s.power = 0;
+            s.collects = c.has_trader ? (c.type == 0) : c.has_capital;
+            s.steer_to = -1;
+            if (c.has_trader && c.type == 1 && c.steer_link >= 0 &&
+                fn < (int)link_targets.size() &&
+                c.steer_link < (int)link_targets[fn].size())
+                s.steer_to = link_targets[fn][c.steer_link];
+            if (s.collects) collect_nodes_out[s.country].push_back(fn);
+            st[fn].entries.push_back(s);
+        }
+    }
+    return st;
+}
+
 // Write the per-link realized values into the engine's incoming-link records (spec 2.6's
 // "per-link value": net Σ_g realized flow in the installed Phi_w direction). Each record at
 // node+0xF0[i] carries the source node's DEFINITION at +0x18; the definition's node index sits at

@@ -22,9 +22,9 @@ check, no engine needed), **OPEN**. Evidence is the log line, screenshot or dump
 | B2 node numbers = per-good economy | **PARTIAL PASS** | Sevilla node window reads Incoming +2.93, Local +7.18, Outgoing -9.16, **Total 0.94** — the engine's identity `total = local + Σincoming − outgoing` closes on the model's numbers; 80 nodes + **159 link values** written per install. Per-good (D) views still open. |
 | B3 both directions on every link | **partial** | link values are written as GROSS directed flows (never negative, spec 1.12); the second directional panel per link is the remaining UI work |
 | B4 local value equals the engine's own | **PASS** | local (+0xB4) is never written; the node window shows the engine's own +7.18 while the model drives pool/outgoing/links. Model annual local 3919.44/12 = 326.6 vs engine 337.9 monthly = the recorded 3.4% reference-side gap (spec 2.8), not a mod defect |
-| C1–C5 merchant on any link end | OPEN | merchant object model (RE in progress) |
+| C1–C5 merchant on any link end | **partial** | the mod now READS the live merchant field: 1134 country-node power entries, 707 collecting, 171 steering, with each steerer's target link resolved — routing uses real steering (spec 1.8), not the even split. Assignment-on-incoming-entry (the UI change) still open |
 | D1–D5 per-good view | OPEN | UI hook |
-| E1–E4 monthly money | OPEN | needs collector division write path |
+| E1–E4 monthly money | OPEN | path identified and coded: pool → node+0xB0 and per-country power_fraction → rec+0x2C, consumed by the engine's own pass 10 (`rec.total = current*pf/1000`, `money`, `AddDelayedIncome(country, 2)`). Needs the tick hook at 0xB4BF09 to land inside the pass |
 | F1–F6 | OPEN (F2 PASS harness: razed hangzhou → `{genua, gulf_of_siam}`) | live inputs needed for F1/F3/F4/F5 |
 | G1–G4 | OPEN | AI wiring |
 | H1 determinism | **PASS (harness)** | 3 re-solves identical fingerprint; live repeat pending |

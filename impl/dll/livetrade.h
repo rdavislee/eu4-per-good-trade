@@ -362,6 +362,72 @@ inline bool write_ui_incoming(uintptr_t node, double d) { return write_fixed(nod
 inline bool write_ui_outgoing(uintptr_t node, double d) { return write_fixed(node, 0x164, d); }
 inline bool write_ui_total(uintptr_t node, double d)    { return write_fixed(node, 0x16C, d); }
 
+// ---------------------------------------------------------------------------------------
+// PER-NODE PER-COUNTRY RECORDS (spec 1.8's powershare, 1.9's propagation, 3.14's AI inputs).
+// Array at node+0x18, count at node+0x24, stride 0xC0, indexed by country tag index.
+// Offsets proved by the engine's own Entry::Save at 0xB5E320 (see OFFSETS.md).
+struct CountryStanding {
+    uintptr_t rec;
+    int tag_index;
+    double province_power, ship_power, val, max_pow, max_demand;
+    double power_fraction;      // permille share among power holders (+0x2C)
+    double total, money;        // what pass 10 writes back (+0x38, +0x34)
+    double t_in, t_out;         // propagated in/out
+    bool has_trader, has_capital;
+    int type;                   // 0 = collect, 1 = steer
+    int steer_link;             // outgoing-link index this country steers toward (+0xA8)
+};
+
+inline int country_record_count(uintptr_t node) {
+    int32_t n = ri(node + 0x24);
+    return (n > 0 && n < 4096) ? n : 0;
+}
+
+inline std::vector<CountryStanding> read_standings(uintptr_t node) {
+    std::vector<CountryStanding> out;
+    uintptr_t base = rq(node + 0x18);
+    int n = country_record_count(node);
+    if (!base || !n) return out;
+    for (int i = 0; i < n; i++) {
+        uintptr_t r = base + (uintptr_t)i * 0xC0;
+        int32_t valid = 0;
+        if (!safe_read(r + 0x17, &valid, 1)) continue;
+        CountryStanding c{};
+        c.rec = r;
+        c.tag_index = ri(r + 0x14);
+        c.province_power = ri(r + 0x28) / 1000.0;
+        c.ship_power     = ri(r + 0x1C) / 1000.0;
+        c.power_fraction = ri(r + 0x2C) / 1000.0;
+        c.money          = ri(r + 0x34) / 1000.0;
+        c.total          = ri(r + 0x38) / 1000.0;
+        c.max_demand     = ri(r + 0x44) / 1000.0;
+        c.val            = ri(r + 0x48) / 1000.0;
+        c.max_pow        = ri(r + 0x4C) / 1000.0;
+        c.t_out          = ri(r + 0x50) / 1000.0;
+        c.t_in           = ri(r + 0x54) / 1000.0;
+        c.steer_link     = ri(r + 0xA8);
+        uint8_t ty = 0, hc = 0, ht = 0;
+        safe_read(r + 0xAC, &ty, 1); safe_read(r + 0xAD, &hc, 1); safe_read(r + 0xAE, &ht, 1);
+        c.type = ty; c.has_capital = hc != 0; c.has_trader = ht != 0;
+        if (c.val <= 0 && c.province_power <= 0 && !c.has_trader && !c.has_capital) continue;
+        out.push_back(c);
+    }
+    return out;
+}
+
+// Write a country's share of the collectible pool (permille). Pass 10 computes
+// rec.total = node.current * power_fraction/1000, then money from it -- so this is the lever
+// that makes the engine's OWN collector division pay out the model's per-country income.
+inline bool write_power_fraction(uintptr_t rec, double frac) {
+    int32_t v = (int32_t)(frac * 1000.0 + 0.5);
+    if (v < 0) v = 0; if (v > 1000) v = 1000;
+    DWORD old = 0;
+    if (!VirtualProtect((void*)(rec + 0x2C), 4, PAGE_READWRITE, &old)) return false;
+    *(int32_t*)(rec + 0x2C) = v;
+    VirtualProtect((void*)(rec + 0x2C), 4, old, &old);
+    return true;
+}
+
 // One incoming-link record (node+0xF0 vector, stride 0x20). value at +0x10 (signed int32 x1000).
 // The source-node reference offset is what we resolve here by dumping.
 struct InLink { uintptr_t rec; int32_t value_raw; uintptr_t words[4]; };

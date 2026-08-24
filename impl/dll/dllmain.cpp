@@ -155,6 +155,33 @@ static void run_install(const std::string& logpath) {
         auto inject = install::gather_inject(sim, tn.order, goods_count, matched);
         log << "  matched " << matched << "/" << f.N << " live nodes to solver nodes by name\n";
 
+        // LIVE per-country standings (spec 1.8): the engine's own trade power, collect/steer
+        // intent and steering targets, so routing uses the real merchant field rather than the
+        // no-merchant even split. Steer indices are engine outgoing-link indices, so build each
+        // node's outgoing destination list in the engine's own link order first.
+        std::vector<std::vector<int>> link_targets(f.N);
+        {
+            std::map<std::string, int> fidx;
+            for (int i = 0; i < f.N; i++) fidx[tn.order[i]] = i;
+            for (int i = 0; i < f.N; i++)
+                for (const auto& og : tn.nodes[i].outgoing) {
+                    auto d = fidx.find(og.name);
+                    link_targets[i].push_back(d == fidx.end() ? -1 : d->second);
+                }
+        }
+        std::map<int, std::vector<int>> collect_nodes;
+        auto live_st = install::read_standings_field(sim, tn.order, link_targets, collect_nodes);
+        {
+            int with_power = 0, traders = 0, steerers = 0;
+            for (auto& ns : live_st) for (auto& e : ns.entries) {
+                if (e.power > 0) with_power++;
+                if (e.collects) traders++;
+                if (e.steer_to >= 0) steerers++;
+            }
+            log << "  live standings: " << with_power << " country-node power entries, "
+                << traders << " collecting, " << steerers << " steering\n";
+        }
+
         static std::vector<std::vector<std::pair<int, int>>> s_graphs;
         static std::vector<int> s_slots;
         static std::vector<double> s_prices;
@@ -176,8 +203,7 @@ static void run_install(const std::string& logpath) {
             double price = field::price_of(f.goods[gi], sd.current_prices, prices);
             std::vector<double> inj(f.N, 0.0);
             if (slot < goods_count) for (int n = 0; n < f.N; n++) inj[n] = inject[slot][n] * price;
-            std::vector<econ::NodeStandings> st(f.N);   // no live power yet -> no-merchant baseline
-            econ::GoodFlow F = econ::route(f.N, r.directed, inj, st, {}, 0.05);
+            econ::GoodFlow F = econ::route(f.N, r.directed, inj, live_st, collect_nodes, 0.05);
             per_good.push_back(F);
             inj_field.push_back(inj);
             s_graphs.push_back(r.directed);

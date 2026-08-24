@@ -26,6 +26,7 @@
 #include "liveworld.h"
 #include "resolver.h"
 #include "arrows.h"
+#include "clickgate.h"
 #include "tickhook.h"
 #include "ticklive.h"
 #include "../src/attach.h"
@@ -311,6 +312,18 @@ static void run_install(const std::string& logpath) {
                 resolver::g_st.ready = true;
                 resolver::start(logpath);
                 arrows::g_log = logpath;
+                // spec 1.7 / C1: let an INCOMING link entry accept a merchant assignment.
+                // The click already reaches the assignment dispatcher; only its gate refuses,
+                // and the gate's graph test is the upstream/downstream predicate that spec 1.10
+                // says must evaluate true at the call site.
+                if (livetrade::marker_present("CLICKGATE")) {
+                    std::string cerr;
+                    if (clickgate::open_gate(&cerr))
+                        log << "  click gate OPEN at eu4.exe+0x8317EF: incoming link entries now "
+                               "accept a merchant assignment (spec 1.7)\n";
+                    else
+                        log << "  click gate NOT opened: " << cerr << "\n";
+                }
                 // warm the definition cache HERE (worker thread): it is a heap scan, far too
                 // slow to run inside the monthly tick (spec H3).
                 if (livetrade::marker_present("DEFDUMP")) arrows::dump_definition_layout(logpath, 3);

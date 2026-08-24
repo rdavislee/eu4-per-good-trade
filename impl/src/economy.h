@@ -92,15 +92,22 @@ inline std::vector<int> topo_order(int N, const std::vector<std::vector<int>>& o
 // Route one good. `directed` is g's orientation; `inject[n]` the engine's produced value of g at
 // n (annual); `standings[n]` the engine's per-country power/intent at n; `collect_nodes[c]` the
 // nodes where country c collects (for the reachability leg of eligibility).
+//
+// `precomputed_reach` (optional) is this good's reachability matrix. It depends only on the
+// orientation, so when the orientation is cached across ticks the matrix can be too -- which is
+// what keeps the tick hook's cost off the game thread (spec H3).
 inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
                       const std::vector<double>& inject,
                       const std::vector<NodeStandings>& standings,
                       const std::map<int, std::vector<int>>& collect_nodes,
-                      double added_value_modifier) {
+                      double added_value_modifier,
+                      const std::vector<std::vector<char>>* precomputed_reach = nullptr) {
     std::vector<std::vector<int>> outs(N);
     for (auto& [u, v] : directed) outs[u].push_back(v);
     for (auto& o : outs) std::sort(o.begin(), o.end());
-    auto R = reach_sets(N, outs);
+    std::vector<std::vector<char>> R_local;
+    if (!precomputed_reach) R_local = reach_sets(N, outs);
+    const std::vector<std::vector<char>>& R = precomputed_reach ? *precomputed_reach : R_local;
     GoodFlow F;
     F.value.assign(N, 0.0); F.incoming.assign(N, 0.0); F.collected_share.assign(N, 0.0);
     F.collected.assign(N, 0.0); F.outgoing.assign(N, 0.0);

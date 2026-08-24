@@ -24,11 +24,12 @@ check, no engine needed), **OPEN**. Evidence is the log line, screenshot or dump
 | B4 local value equals the engine's own | **PASS** | local (+0xB4) is never written; the node window shows the engine's own +7.18 while the model drives pool/outgoing/links. Model annual local 3919.44/12 = 326.6 vs engine 337.9 monthly = the recorded 3.4% reference-side gap (spec 2.8), not a mod defect |
 | C1–C5 merchant on any link end | **partial** | the mod now READS the live merchant field: 1134 country-node power entries, 707 collecting, 171 steering, with each steerer's target link resolved — routing uses real steering (spec 1.8), not the even split. Assignment-on-incoming-entry (the UI change) still open |
 | D1–D5 per-good view | OPEN | UI hook |
-| E1–E4 monthly money | OPEN | path identified and coded: pool → node+0xB0 and per-country power_fraction → rec+0x2C, consumed by the engine's own pass 10 (`rec.total = current*pf/1000`, `money`, `AddDelayedIncome(country, 2)`). Needs the tick hook at 0xB4BF09 to land inside the pass |
+| E1–E4 monthly money | **in progress** | the tick hook now lands the write inside the engine's monthly update (0xB4BF09, before the collector division), so the engine's own pass 10 divides the MODEL's pool. Observed live: Σ power_fraction ≈ 1.0 per node and nonzero only for collectors, and `total = current × pf` — which is spec 3.10's factorisation, so writing the pool alone is sufficient and power_fraction must NOT be overwritten. Remaining: read the ledger over 12 months and reconcile (E1/E2/E3) |
 | F1–F6 | OPEN (F2 PASS harness: razed hangzhou → `{genua, gulf_of_siam}`) | live inputs needed for F1/F3/F4/F5 |
 | G1–G4 | OPEN | AI wiring |
 | H1 determinism | **PASS (harness)** | 3 re-solves identical fingerprint; live repeat pending |
-| H2–H4 | OPEN | |
+| **H3 tick cost** | **PASS** | the inline hook at eu4.exe+0xB4BF09 costs **11–12 ms** per monthly update, measured in-game over 16 months (Nov 1444 → Mar 1446), game responsive throughout. An earlier build cost ~10 **seconds** (a VirtualQuery syscall per field, reported by the user watching the game); batching validation per structure and caching each good's reachability fixed it — ~860× |
+| H2, H4 | OPEN | |
 
 ## §2.7 probes
 

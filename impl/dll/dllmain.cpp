@@ -24,6 +24,7 @@
 #include "install.h"
 #include "nodemap.h"
 #include "tickhook.h"
+#include "ticklive.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
 #include "../src/save.h"
@@ -147,6 +148,7 @@ static void run_install(const std::string& logpath) {
             auto it = nm.id_to_name.find(s.index);
             if (it != nm.id_to_name.end()) s.name = it->second;
         }
+        install::g_id_to_name = nm.id_to_name;
         log << "  named live nodes by goods-signature: " << nm.matched << " matched ("
             << nm.exact << " exact), " << nm.spurious << " spurious/unnamed\n";
 
@@ -180,6 +182,8 @@ static void run_install(const std::string& logpath) {
             }
             log << "  live standings: " << with_power << " country-node power entries, "
                 << traders << " collecting, " << steerers << " steering\n";
+            if (livetrade::marker_present("STANDDUMP"))
+                install::dump_standings(logpath, sim, {"sevilla", "genua", "english_channel"});
         }
 
         static std::vector<std::vector<std::pair<int, int>>> s_graphs;
@@ -242,6 +246,34 @@ static void run_install(const std::string& logpath) {
             int wrote = install::install_aggregate(sim, tn.order, agg);
             log << "  INSTALLED pool+outgoing on " << wrote << " nodes, " << links
                 << " link values (local left intact per B4)\n";
+            // THE TICK HOOK (spec 2.6): land the write inside the engine's own monthly
+            // update, between the value pass and the collector division. Preferred over the
+            // polling loop -- it is the point spec 2.6 names, and pass 10 then divides OUR pool.
+            if (livetrade::marker_present("TICKHOOK")) {
+                ticklive::g_log = logpath;
+                ticklive::g_plan.graphs = s_graphs;
+                ticklive::g_plan.slots = s_slots;
+                ticklive::g_plan.prices = s_prices;
+                ticklive::g_plan.names = tn.order;
+                ticklive::g_plan.link_targets = link_targets;
+                ticklive::g_plan.phi_w = phi_w;
+                ticklive::g_plan.N = f.N;
+                // precompute each good's reachability once: it depends only on the orientation,
+                // so the tick hook never pays for it (spec H3)
+                ticklive::g_plan.reach.clear();
+                for (auto& gr : s_graphs) {
+                    std::vector<std::vector<int>> outs(f.N);
+                    for (auto& e : gr) outs[e.first].push_back(e.second);
+                    ticklive::g_plan.reach.push_back(econ::reach_sets(f.N, outs));
+                }
+                ticklive::g_plan.ready = true;
+                std::string herr;
+                if (ticklive::install_hook(&herr))
+                    log << "  TICK HOOK installed at eu4.exe+0xB4BF09 (writes land inside the "
+                           "engine's monthly update, before the collector division)\n";
+                else
+                    log << "  tick hook NOT installed: " << herr << "\n";
+            }
             if (livetrade::marker_present("MONTHLY")) {
                 static std::string s_log = logpath;
                 static volatile bool s_stop = false;

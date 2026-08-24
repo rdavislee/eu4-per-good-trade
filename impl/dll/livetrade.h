@@ -56,6 +56,29 @@ inline bool safe_read(uintptr_t p, void* out, size_t n) {
 inline uintptr_t rq(uintptr_t p) { uintptr_t v = 0; safe_read(p, &v, 8); return v; }
 inline int32_t ri(uintptr_t p) { int32_t v = 0; safe_read(p, &v, 4); return v; }
 
+// ---------------------------------------------------------------------------------------
+// FAST PATH (spec H3: the tick hook's added cost must be imperceptible).
+// safe_read() issues a VirtualQuery per field, which is the right thing for exploratory scans
+// but far too slow inside the monthly update: naming + standings + links touch on the order of
+// 10^5 fields, and a syscall each turns a millisecond of arithmetic into seconds of stall (a
+// hitch measured in the running game). validate_region() checks a whole contiguous structure
+// once; after that the fields inside it are read directly.
+inline bool validate_region(uintptr_t p, size_t n) {
+    MEMORY_BASIC_INFORMATION mbi{};
+    uintptr_t end = p + n;
+    while (p < end) {
+        if (!VirtualQuery((void*)p, &mbi, sizeof(mbi))) return false;
+        if (mbi.State != MEM_COMMIT) return false;
+        DWORD prot = mbi.Protect & 0xFF;
+        if (prot == PAGE_NOACCESS || (mbi.Protect & PAGE_GUARD)) return false;
+        p = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+    }
+    return true;
+}
+inline int32_t fi(uintptr_t p) { return *(const int32_t*)p; }       // validated region only
+inline uintptr_t fq(uintptr_t p) { return *(const uintptr_t*)p; }   // validated region only
+inline uint8_t fb(uintptr_t p) { return *(const uint8_t*)p; }       // validated region only
+
 // Walk our own committed PRIVATE regions and hand each to fn(base, size).
 // Bounded: only MEM_PRIVATE read/write data (the heap -- where game objects live), skipping
 // images/mapped files and huge reserved spans, and stopping at the 128 GB user-space mark.
@@ -291,31 +314,26 @@ inline std::vector<SimNode> read_sim_nodes(int max_nodes = 100) {
     if (!safe_read(mgr + 0x18, &nodes_base, 8)) return out;     // MGR_NODES_PTR
     if (!safe_read(mgr + 0x24, &count, 4)) return out;          // MGR_NODES_COUNT
     if (!nodes_base || count <= 0 || count > 4096) return out;
-    for (int i = 0; i < count && i < max_nodes; i++) {
+    // validate the whole node array once; then read fields directly (spec H3 -- a VirtualQuery
+    // per field made the tick hook stall the game for seconds).
+    int take = (count < max_nodes) ? count : max_nodes;
+    if (!validate_region(nodes_base, (size_t)take * 0x138)) return out;
+    out.reserve(take);
+    for (int i = 0; i < take; i++) {
         uintptr_t n = nodes_base + (uintptr_t)i * 0x138;        // NODE_STRIDE
         SimNode s{};
         s.obj = n;
-        int32_t loc = 0, outg = 0, ret = 0, gross = 0, id = 0;
-        if (!safe_read(n + 0xB4, &loc, 4)) continue;            // SIM_LOCAL_VALUE
-        safe_read(n + 0xBC, &outg, 4);                          // SIM_OUTGOING_VALUE
-        safe_read(n + 0xB8, &ret, 4);                           // SIM_RETENTION
-        safe_read(n + 0xB0, &gross, 4);                         // SIM_GROSS_LOCAL
-        safe_read(n + 0x120, &id, 4);                           // SIM_NODE_ID
-        s.index = id;
-        s.local_value = loc / 1000.0;
-        s.outgoing_value = outg / 1000.0;
-        s.retention = ret / 1000.0;
-        s.gross_local = gross / 1000.0;
-        s.name = def_name_of(n);
+        s.index          = fi(n + 0x120);                       // SIM_NODE_ID
+        s.local_value    = fi(n + 0xB4) / 1000.0;               // SIM_LOCAL_VALUE
+        s.outgoing_value = fi(n + 0xBC) / 1000.0;               // SIM_OUTGOING_VALUE
+        s.retention      = fi(n + 0xB8) / 1000.0;               // permille
+        s.gross_local    = fi(n + 0xB0) / 1000.0;               // `current` = the pool
         // per-good produced quantities: vector<int32> at +0x108 / +0x110
-        uintptr_t gb = 0, ge = 0;
-        if (safe_read(n + 0x108, &gb, 8) && safe_read(n + 0x110, &ge, 8) &&
-            gb && ge > gb && (ge - gb) <= 4096) {
+        uintptr_t gb = fq(n + 0x108), ge = fq(n + 0x110);
+        if (gb && ge > gb && (ge - gb) <= 4096 && validate_region(gb, ge - gb)) {
             size_t ng = (ge - gb) / 4;
-            for (size_t k = 0; k < ng; k++) {
-                int32_t q = 0;
-                if (safe_read(gb + 4 * k, &q, 4)) s.goods.push_back(q);
-            }
+            s.goods.resize(ng);
+            memcpy(s.goods.data(), (const void*)gb, ng * 4);
         }
         out.push_back(std::move(s));
     }
@@ -388,27 +406,28 @@ inline std::vector<CountryStanding> read_standings(uintptr_t node) {
     uintptr_t base = rq(node + 0x18);
     int n = country_record_count(node);
     if (!base || !n) return out;
+    // validate the WHOLE record array once, then read its fields directly (spec H3)
+    if (!validate_region(base, (size_t)n * 0xC0)) return out;
+    out.reserve(n);
     for (int i = 0; i < n; i++) {
         uintptr_t r = base + (uintptr_t)i * 0xC0;
-        int32_t valid = 0;
-        if (!safe_read(r + 0x17, &valid, 1)) continue;
         CountryStanding c{};
         c.rec = r;
-        c.tag_index = ri(r + 0x14);
-        c.province_power = ri(r + 0x28) / 1000.0;
-        c.ship_power     = ri(r + 0x1C) / 1000.0;
-        c.power_fraction = ri(r + 0x2C) / 1000.0;
-        c.money          = ri(r + 0x34) / 1000.0;
-        c.total          = ri(r + 0x38) / 1000.0;
-        c.max_demand     = ri(r + 0x44) / 1000.0;
-        c.val            = ri(r + 0x48) / 1000.0;
-        c.max_pow        = ri(r + 0x4C) / 1000.0;
-        c.t_out          = ri(r + 0x50) / 1000.0;
-        c.t_in           = ri(r + 0x54) / 1000.0;
-        c.steer_link     = ri(r + 0xA8);
-        uint8_t ty = 0, hc = 0, ht = 0;
-        safe_read(r + 0xAC, &ty, 1); safe_read(r + 0xAD, &hc, 1); safe_read(r + 0xAE, &ht, 1);
-        c.type = ty; c.has_capital = hc != 0; c.has_trader = ht != 0;
+        c.tag_index = fi(r + 0x14);
+        c.province_power = fi(r + 0x28) / 1000.0;
+        c.ship_power     = fi(r + 0x1C) / 1000.0;
+        c.power_fraction = fi(r + 0x2C) / 1000.0;
+        c.money          = fi(r + 0x34) / 1000.0;
+        c.total          = fi(r + 0x38) / 1000.0;
+        c.max_demand     = fi(r + 0x44) / 1000.0;
+        c.val            = fi(r + 0x48) / 1000.0;
+        c.max_pow        = fi(r + 0x4C) / 1000.0;
+        c.t_out          = fi(r + 0x50) / 1000.0;
+        c.t_in           = fi(r + 0x54) / 1000.0;
+        c.steer_link     = fi(r + 0xA8);
+        c.type = fb(r + 0xAC);
+        c.has_capital = fb(r + 0xAD) != 0;
+        c.has_trader  = fb(r + 0xAE) != 0;
         if (c.val <= 0 && c.province_power <= 0 && !c.has_trader && !c.has_capital) continue;
         out.push_back(c);
     }
@@ -436,11 +455,12 @@ inline std::vector<InLink> read_incoming(uintptr_t node) {
     std::vector<InLink> out;
     uintptr_t begin = rq(node + 0xF0), end = rq(node + 0xF8);
     if (!begin || end <= begin || (end - begin) > 0x20 * 512) return out;
+    if (!validate_region(begin, end - begin)) return out;   // validate once (spec H3)
     for (uintptr_t p = begin; p + 0x20 <= end; p += 0x20) {
         InLink l{};
         l.rec = p;
-        l.value_raw = ri(p + 0x10);
-        for (int w = 0; w < 4; w++) l.words[w] = rq(p + w * 8);
+        l.value_raw = fi(p + 0x10);
+        for (int w = 0; w < 4; w++) l.words[w] = fq(p + w * 8);
         out.push_back(l);
     }
     return out;

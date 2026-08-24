@@ -155,6 +155,23 @@ price(i)  = *(char**)(*(void**)(G+0x25D0)+8) + i*0x38      count at pricevec+0x1
   (c) shipped files define **32** goods but the live tgs vector has **33** slots — read the count at
   runtime from `(db[0x18]-db[0x10])/8`, never hardcode.
 
+
+## OBSERVED in the running game: power_fraction semantics (settles spec 3.10)
+Dumped from the live records at sevilla / genua / english_channel (Castile 1444):
+- `Σ power_fraction` per node = **0.995–0.998**, and it is **nonzero only for collectors**
+  (every steering record, type=1 with a nonzero steer_link, has pf = 0).
+- `rec.total = node.current × pf` reproduces exactly (sevilla tag#…401: pf 0.556, total 3.127 →
+  current 5.62); `rec.money = total × (1 + trade efficiency)` (3.127 → 3.345).
+- **Consequence: the mod must NOT overwrite power_fraction.** Spec 3.10's factorisation is
+  literally how the engine is built — a good-independent share among collectors multiplying the
+  collectible pool. Writing the model's pool into `+0xB0` is therefore *sufficient*: the engine's
+  own division then pays every country `engine_powershare × model_pool`, which is exactly test
+  E1's identity. `install_power_shares()` exists but stays behind the `pgt.INCOME` marker and is
+  off by default.
+- Caution recorded: the engine's collector set is not exactly `has_trader ? type==0 : has_capital`
+  — genua shows records with trader=1/type=0/capital=0 carrying pf=0 (merchant likely in transit).
+  Preserving the engine's own collector set is the reason not to invent shares.
+
 ## Tools
 - Debug-log triples (__FILE__/__LINE__/msg): `re/logmap.txt` (1197 rows). Token table: `re/tokens.txt`
   (6648 rows) — `mov edx,<id>` in serializers gives field-offset ↔ save-key. RTTI is stripped (/GR-).

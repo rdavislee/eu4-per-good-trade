@@ -23,6 +23,10 @@
 
 namespace install {
 
+// The authoritative engine-node-id -> node-name map, resolved once at attach (nodemap::resolve)
+// and keyed by the STABLE engine id, so every later read can name its nodes without rematching.
+inline std::map<int, std::string> g_id_to_name;
+
 // name -> live SimNode index (engine array position). Built once per read.
 inline std::map<std::string, int> live_by_name(const std::vector<livetrade::SimNode>& sim) {
     std::map<std::string, int> m;
@@ -185,6 +189,78 @@ inline int install_links(const std::vector<livetrade::SimNode>& sim,
         }
     }
     return wrote;
+}
+
+// Write each country's share of the collectible pool into the engine's own power_fraction
+// (rec+0x2C, permille), so the engine's pass 10 -- rec.total = node.current * power_fraction/1000,
+// rec.money, AddDelayedIncome(country, 2 /*trade*/) -- pays out the MODEL's income with no
+// second income path of our own (spec 2.6 / 3.10).
+//
+// spec 3.10's factorisation: whether a country collects is a merchant-or-home property with no
+// good dependence, so a good-independent share multiplies a per-good sum and the sum collapses
+// to one scalar. The share is therefore over COLLECTORS only: a country that steers takes none
+// of the pool (its value was already forwarded).
+inline int install_power_shares(const std::vector<livetrade::SimNode>& sim,
+                                const std::vector<std::string>& field_names,
+                                const std::vector<econ::NodeStandings>& st) {
+    auto byname = live_by_name(sim);
+    int wrote = 0;
+    for (int fn = 0; fn < (int)field_names.size() && fn < (int)st.size(); fn++) {
+        auto it = byname.find(field_names[fn]);
+        if (it == byname.end()) continue;
+        double collector_power = 0;
+        for (auto& e : st[fn].entries) if (e.collects && e.power > 0) collector_power += e.power;
+        auto recs = livetrade::read_standings(sim[it->second].obj);
+        for (auto& r : recs) {
+            // find this country's modelled standing
+            double share = 0;
+            if (collector_power > 0)
+                for (auto& e : st[fn].entries)
+                    if (e.country == r.tag_index && e.collects && e.power > 0) {
+                        share = e.power / collector_power;
+                        break;
+                    }
+            if (livetrade::write_power_fraction(r.rec, share)) wrote++;
+        }
+    }
+    return wrote;
+}
+
+// Diagnostic: dump the engine's OWN per-country standings at a few named nodes, so the meaning
+// of power_fraction (share among all holders vs among collectors) can be READ rather than
+// assumed before anything overwrites it.
+inline void dump_standings(const std::string& logpath,
+                           const std::vector<livetrade::SimNode>& sim,
+                           const std::vector<std::string>& want) {
+    std::ofstream log(logpath, std::ios::app);
+    log << "--- engine per-country standings (rec = node+0x18 + 0xC0*i) ---\n";
+    auto byname = live_by_name(sim);
+    for (const std::string& nm : want) {
+        auto it = byname.find(nm);
+        if (it == byname.end()) continue;
+        auto recs = livetrade::read_standings(sim[it->second].obj);
+        double pf_sum = 0, pf_coll = 0, pow_all = 0, pow_coll = 0;
+        for (auto& r : recs) {
+            bool collects = r.has_trader ? (r.type == 0) : r.has_capital;
+            pf_sum += r.power_fraction;
+            pow_all += r.val;
+            if (collects) { pf_coll += r.power_fraction; pow_coll += r.val; }
+        }
+        log << "  " << nm << ": " << recs.size() << " records, Σpower_fraction=" << pf_sum
+            << " (collectors only " << pf_coll << "), Σval=" << pow_all
+            << " (collectors " << pow_coll << ")\n";
+        int shown = 0;
+        for (auto& r : recs) {
+            if (r.val <= 0 && !r.has_trader) continue;
+            bool collects = r.has_trader ? (r.type == 0) : r.has_capital;
+            log << "     tag#" << r.tag_index << " val=" << r.val << " pf=" << r.power_fraction
+                << " total=" << r.total << " money=" << r.money
+                << " trader=" << (int)r.has_trader << " type=" << r.type
+                << " capital=" << (int)r.has_capital << " steer_link=" << r.steer_link
+                << (collects ? "  [COLLECTS]" : "") << "\n";
+            if (++shown >= 8) break;
+        }
+    }
 }
 
 // legacy signature retained for the older call path (writes routed totals to local); superseded

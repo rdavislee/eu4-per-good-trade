@@ -1,0 +1,162 @@
+# EU4 1.37.5 (build 835bfdf8) live-memory map — consolidated
+
+All values are RVAs into `eu4.exe` (image base 0x140000000); add the live module base. A patch is a
+new binary (spec 2.5) — re-derive on any update. Recovered by static disassembly (capstone/Ghidra)
+plus live probing. Sources: the four RE passes in `scratchpad/re/{flowpass,merchants,ui,gates}.md`.
+
+## Singletons / manager
+- Game singleton `G = *(void**)(base+0x233FE78)`.
+- `CTradeManager mgr = G+0x2198`. Node array: base `*(void**)(mgr+0x18)`, count `*(int32*)(mgr+0x24)`,
+  stride **0x138**. Calc-order vector `*(mgr+0x30)`, count `*(int32*)(mgr+0x3c)`, stride 8.
+- In-game interface `IGI = *(void**)(G+0x1E00)`; `IGI+0x2C` = map mode (**trade == 4**);
+  `IGI+0x1228` = `CTradeNodeInterface` (`+0xF8` sim node, `+0xA0` window).
+
+## CTradeNode (0x138 bytes) — sim fields, int32 fixed-point ×1000 unless noted
+**Corrected by the flow-pass RE (supersedes earlier guesses):**
+- **+0xB0 `current` = the node's collectible POOL** (NOT "gross local") · **+0xB4 local_value**
+- **+0xB8 retention — PERMILLE** (`1000 − pull*1000/(pull+retain)`) · **+0xBC outgoing_value**
+- +0xC4 `pirate_hunt` (privateer total is **+0xE8**) · **+0xCC `p_pow`** (NOT an accumulated total)
+- +0xD0/+0xD4 collector_power (with/without pirates) · +0xDC/+0xE0 pull/retain power
+- **+0x120 node id (== array index)** · +0x124 dirty · +0xA8 **CTradeNodeDefinition***
+- +0xF0/+0xF8/+0x100 **incoming-link vector**, stride 0x20, built only at 0xB54C42:
+  +0x00 vptr(0x1CE9258) · +0x08 0x165 · **+0x10 value (signed)** · **+0x14 `add` (steering extra)** ·
+  **+0x18 source node's DEFINITION** (saved as `def->+0xD8`)
+- +0x108/+0x110/+0x118 **vector<int32> trade_goods_size** (quantity ×1000; slot k ↔
+  00_tradegoods.txt index k−1; inject_g = quantity × current price, spec 1.8)
+- per-link runtime state: **`node+0x88[i]` share (permille)**, **`node+0x70[i]` enabled**
+- **per-country record array**: `rec = *(char**)(node+0x18) + 0xC0*countryTagIdx`,
+  count `*(int32*)(node+0x24)`; tag idx `(int16)(*(u64*)(country+0x20)>>32)`.
+  Offsets proved by `Entry::Save` @0xB5E320:
+  +0x10 tag (idx +0x14, valid byte +0x17) · +0x18 light_ship · +0x1C ship_power ·
+  +0x20 privateer_mission · +0x24 privateer_money · +0x28 province_power ·
+  **+0x2C power_fraction** · +0x34 **money** · +0x38 **total** · +0x3C potential · +0x40 prev ·
+  +0x44 max_demand · **+0x48 val (trade power)** · +0x4C max_pow · +0x50 t_out · +0x54 t_in ·
+  +0x58 add · +0x5C already_sent · +0x60/+0x78/+0x90 lists ·
+  **+0xA8 steer target LINK INDEX** · **+0xAC type (0 collect / 1 steer)** ·
+  **+0xAD has_capital** · **+0xAE has_trader** · +0xAF has_subject · +0xB0 trading_policy · +0xB8 policy date
+
+## The engine's own value math (so the mod can substitute at the right point)
+```
+power           = min(val, max(0, max_pow*max_demand/1000)) + t_in − t_out
+collect-eligible= has_trader ? (type==0) : has_capital
+retention       = 1000 − pull*1000/(pull+retain)            [permille]
+outgoing        = (1000 − retention) * (local + Σ incoming) / 1000
+PushValue(0xB54670): share[i]*value_added_outgoing/1000 * (1000+Σ merchant bonuses)/1000
+                     -> destination node's +0xB0, and appends the incoming record
+pass 10 (0xB584F0):  rec.total = node.current * rec.power_fraction/1000
+                     rec.money = rec.total * (1000 + trade_eff + [merchant? TRADE_MERCHANT_PRESENT])/1000
+                     CCountry::AddDelayedIncome(country, 2, &money)   [0x338A90; category 2 = TRADE]
+                     -> country+0x68 and ledger at country+0x760
+```
+- `value_added_outgoing == outgoing` always, because its multiplier global 0x2458F38 is a BSS dword
+  **nothing in the image ever writes**. `power_fraction_push (+0x30)` is a dead field.
+- Real save serializer is **0xB5A5B0** (the 0x13CF*/0x13D2* sites are tradeinterface.cpp widget names).
+
+## THE HOOK POINTS (spec 2.6)
+- **0xB4BF09** — after the whole calc-order loop, before the pass-10 loop; `rsi` = mgr. Every node's
+  `+0xB0` (pool) and every `rec+0x2C` (power_fraction) are final and nothing recomputes them.
+  Overwrite there => the engine's own collector division, ledger, AI readers and UI all consume the
+  model's numbers. **This is where spec 2.6's write belongs.**
+- 0xB4BF00 — per node, right after its own 0xB52160; downstream nodes not yet run, so their incoming
+  records and +0xB0 are still editable.
+- Each pass has exactly ONE E8 call site (all 5-byte detours): 0xB4BEFB→0xB52160, 0xB530A0→PushValue,
+  0xB52C52→shares, 0xB52C6F→retention, 0xB4BF44→pass 10.
+- Validated arithmetically on 4 saves: `val=max_pow*max_demand/1000` 1319/1319; `power_fraction`
+  656/656; `total=current*power_fraction/1000` 656/656; `outgoing` 261/262; `current` 271/274.
+- UI caches (display side, rewritten every frame from 0x814F99 while window open): +0x160 incoming,
+  +0x164 outgoing, +0x168 local, +0x16C total, +0x170 our_from_this, +0x180 goods_produced.
+- **No stored "total"**: node window (0x13CFC02), map box (0x1336656), tooltip (0x13D3D04) and the
+  value pass (0xB52DCC) each recompute `local(+0xB4) + Σ incoming[i](+0x10) − outgoing(+0xBC)`.
+  => writing local/link-values/outgoing drives the whole aggregate display with NO UI hooks.
+
+## CTradeNodeDefinition
+- vtable 0x1C439D0; name inline std::string at +0x10.
+- +0x80/+0x88 incoming defs · +0x98/+0xA0 **outgoing link entries** (stride 0x78, target def at +0x30,
+  drawn polyline at +0x58/+0x60) · +0xD8 node index · +0xDC location province ·
+  +0xE5 `end` / +0xE6 `inland` (LIKELY).
+
+## Monthly update / value pass
+- Driver `fn 0xB4BA90(mgr)`, called from 0x75D7DE. Passes: 4 = 0xB51360 (clear/resize tgs),
+  5 = 0xB51500 (fill tgs + local), 9 = 0xB52160 (flow/value). Write-back point 0xB4BF00 (rbx=node,
+  rsi=mgr). Tick chain DailyTick 0xB79520 → 0x758430 → 0x75D690 → 0xB4BA90.
+- Quantisation (probe 16): **in the simulation** — every value field is int32 ×1000 in live memory.
+
+## Direction gates (spec 1.10) — THREE uint8 matrices on the manager
+- A `G+0x2220` (BFS 0xB4D0D0, seed trade capital) · B `G+0x2228` (+every merchant node) ·
+  C `G+0x2230` (gated BFS 0xB4D530). Size `G+0x2238`, stride `*(i32*)(G+0x21BC)`,
+  index `countryIdx*stride + node->[0x120]`. Rebuilt each tick at **0xB4BD0A** inside the manager Update.
+- Make every nation-pair gate TRUE: fill the matrices with 1 after each rebuild (detour at 0xB4BD0A).
+- Out-of-line predicates: `IsNodeUpstreamOfCountry` 0xB4E020 (matrix B, 2 callers), treasure-fleet gate
+  0x3E1D30 (matrix A, 3 callers). 21 gate sites total (see gates.md). Trade-conflict CB 0x38D8C0 does
+  NO direction test (pure threshold — matches §1.10). No scripted is_upstream trigger exists.
+- **Treasure fleets** `CCountry::SendTreasureFleet 0x3E1EC0`: walks outgoing lists greedily, first hop
+  satisfying matrix A (0x3E23D5), privateer skim per node at `node.countries[c][0x20]/node[0xC8]`
+  (0x3E2200). If gate forced true WITHOUT fixing matrix A, router finds no hop and teleports with zero
+  skim — must detour the router (0x3E2358), not just fill the table (spec 3.12).
+
+## Merchants / envoys / AI
+- Merchants: `((CEnvoyContainer**)(country+0x1480))[1]`, vector<CEnvoy*> at +0x20/+0x28.
+- CEnvoy (0x48 B, vtable 0x1CAC2F0): +0x10 CMerchantConstruction*, +0x18 action (0 free/1 travel/2 posted),
+  +0x20 std::string name, +0x40 type (1=merchant), +0x44 id.
+- CMerchantConstruction (0xA0 B, vtable 0x1C4B160): +0x38 dest prov, +0x40 country, +0x48 envoy,
+  +0x80 node, +0x88/+0x90 from/to prov, +0x20..+0x30 travel dates/progress, +0x98 direction, +0x9C type.
+- Node record mutators: SetTrader 0xB596E0, SetTraderFlags 0xB5E290, ClearTrader 0xB59B50.
+- Commands (fill struct + call Execute, or post via 0xBFE50):
+  - **send_merchant** token 0x27A0, Execute 0x274180, payload {country@0x50, CProvince*@0x58, envoyId@0x60, type@0x64}
+  - **steer_command** token 0x2DB9, Execute **0x5DA4F0**, payload {country@0x50, linkIndex@0x58, nodeIndex@0x5C}
+  - cancel_merchant token 0x2AC4, Execute 0x274870
+- AI trade subsystem: vtable 0x1C43690 slot +0x60 = 0x1B82B0; driver OnDailyUpdate 0xE4890
+  (`if(--[this+0x20]==0) update()`), **cadence hard-coded 10 + rng()%15 days (10–24, mean 17)**, no define.
+  Manager 0x1BC1E0: re-steers at 0x1BCE6C (emit steer_command), does nothing while any merchant travels
+  (0x1BCED0), places/relocates via evaluator 0x1BD6C0 with **×1.5 hysteresis** (0x1BD206) vs worst
+  existing placement. => vanilla's own AI is already a computed-gain test with a 1.5× threshold + a
+  de-facto dwell floor (travel + 10–24d tick), matching the user's §3.14 prior.
+
+## UI hooks (spec 1.12)
+- Node-window refresh 0x13CFB60 (callers: per-frame HUD 0x814F99, open path 0x13CD6AE). Format /1000 two
+  decimals (helpers FormatMilli 0x1703850/0x1703C40, SetText 0x152AE10/0x152AD90).
+- Listboxes 0x13D5560 built from the DEFINITION graph, carry NO value — per-entry additive.
+- Link click 0x13CCE80 (both lists identical — probe 14). 0x831790 already two-way: with a merchant in
+  placement mode tail-calls 0x1419470(nodeIdx) if 0x1418E70(nodeIdx) approves. So incoming-entry
+  assignment = gate 0x1418E70 + per-entry data.
+- Arrow layer (probe 7: SEPARATE from economic link) built by **0x10AFA70** from the definition file only,
+  clears+rebuilds whole layer (callable on demand for a per-good view). Visibility zoom-only
+  (DRAW_TRADEROUTES_CUTOFF at 0x233E9E8). No engine "selected trade good" state — fully DLL-owned.
+- Probe 4 consumers of the signed incoming value: node total 0x13CFC23, map icon 0x1336663, map tooltip
+  0x11C4EB7, entry tooltip 0x13D3D04 (has an explicit minus branch). Protect-trade/arrow-render consumers
+  not found statically (open).
+
+## Provinces, trade goods, prices (spec 1.3 / 1.8 live inputs)
+```
+provinces = *(char**)(G+0x1CA8)      INLINE array, stride 0x2E10, subscript == province id (id>=1)
+nprov     = (G[0x1CB0]-G[0x1CA8])/0x2E10
+goodsdb   = *(void**)(base+0x242BE70)      good(i) = goodsdb[0x10][i];  n = (db[0x18]-db[0x10])/8
+price(i)  = *(char**)(*(void**)(G+0x25D0)+8) + i*0x38      count at pricevec+0x14
+```
+- CProvince (ints ×1000): +0x20 id · **+0xE8 CTradeNode*** · +0x2E0 state (prosperity at state+0x18,
+  may be NULL) · +0x3E0/+0x3E4/+0x3E8 base_manpower/tax/production · +0x3F8 colonysize ·
+  +0x428 local_autonomy · +0x42C devastation · **+0x458 CTradeGood*** · +0x468 owner · +0x470 controller ·
+  +0x890 trade_power · +0x958 bit 0x10 = is_city · +0x998 modifier set.
+- Country handles are 8 bytes: index `(int16)(h>>32)`, **byte 7 = validity** → `*(u8*)(prov+0x46F)!=0`
+  means "has an owner".
+- CTradeGood: **+0x7C base price**, **+0x18 std::string name**, +0x78 id. Price entry: **+4 current price**,
+  +0x00 world supply (LIKELY). `change_price`: `current = base × max(10, 1000+Σ mod[+0x14])/1000` (0xD359A0).
+- `GetGoodsProduced` **0xA112A0**:
+  `out = max(0, (prov_mod(0x14)+ctry_mod(0x1EB)+add) × (1000 + max(-1000, prov_mod(0x15)+ctry_mod(0xB8)+pct))/1000)`
+  `GetTradeValue` **0xA13FD0** = `goods_produced × current_price / 1000` (annual).
+- Pass 5 (0xB51500, `this` = CTradeNode): trade power → **controller +0x470**, gated on owner validity
+  +0x46F; `trade_goods_size[g] += goods_produced`; +0xB0/+0xB4 accumulate trade value then ×1000/12000
+  = **÷12**. This is exactly spec's `Σ_g tgs(n,g)×price(g)÷12`; the residual is per-province vs per-good
+  truncation.
+- **TRAPS**: (a) the four condition modifiers (devastation/prosperity/under_siege/occupied) reach goods
+  produced ONLY through the accumulator at prov+0x998 as modifier ids 0x14/0x15 — reading +0x42C as well
+  DOUBLE-COUNTS devastation; (b) 0xA112A0 includes the owner's global_trade_goods_size (ids 0x1EB/0xB8)
+  which spec §1.3 excludes — for owner-agnostic wealth read prov_mod(0x14)/(0x15) directly;
+  (c) shipped files define **32** goods but the live tgs vector has **33** slots — read the count at
+  runtime from `(db[0x18]-db[0x10])/8`, never hardcode.
+
+## Tools
+- Debug-log triples (__FILE__/__LINE__/msg): `re/logmap.txt` (1197 rows). Token table: `re/tokens.txt`
+  (6648 rows) — `mov edx,<id>` in serializers gives field-offset ↔ save-key. RTTI is stripped (/GR-).
+- Ghidra project: `C:\re\proj` (eu4 imported+analysed). `impl/tools/disasm.py`, `scratchpad/dumpfn.py`,
+  `scratchpad/callxref.py`, `scratchpad/eu4re.py`.

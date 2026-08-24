@@ -22,6 +22,7 @@
 #include "hooks.h"
 #include "livetrade.h"
 #include "install.h"
+#include "nodemap.h"
 #include "tickhook.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
@@ -82,19 +83,46 @@ static void solver_self_test(const std::string& root) {
 //   the shipped DRAIN operator over the same install data the reference uses -> route each
 //   good's injected value along its own graph -> write the routed totals back into the engine's
 //   node fields, so the game's own numbers become the model's numbers (Goal 7).
+#include "../src/economy.h"
+
+// Solve + route + (optionally) install, NAME-KEYED so live nodes and solver-field nodes line up
+// regardless of file order (spec 1.8 -> 2.6). Returns the field, its node names and the per-good
+// graphs so the monthly loop can re-route without re-solving.
+struct Installed {
+    field::Field f;
+    std::vector<std::string> names;                     // field index -> node name
+    std::vector<std::vector<std::pair<int,int>>> graphs; // per live-good, field-indexed
+    std::vector<int> good_slot;                          // parallel to graphs: engine good slot
+    bool ok = false;
+};
+
 static void run_install(const std::string& logpath) {
     std::ofstream log(logpath, std::ios::app);
-    log << "=== INSTALL: per-good economy -> engine ===\n";
+    log << "=== INSTALL: per-good economy -> engine (name-keyed) ===\n";
 
-    auto sim = livetrade::read_sim_nodes();
+    // WAIT FOR LIVE TRADE DATA. The engine populates each node's trade_goods_size and
+    // local_value in the monthly value pass; a DLL injected before the first pass (or while a
+    // campaign is still loading) sees an all-zero trade state, and installing on that would
+    // route nothing and destroy the naming match. Poll until the world carries value.
+    std::vector<livetrade::SimNode> sim;
+    double world_local = 0;
+    for (int attempt = 0; attempt < 120; attempt++) {          // up to ~60s
+        sim = livetrade::read_sim_nodes();
+        world_local = 0;
+        for (auto& s : sim) world_local += s.local_value;
+        if (!sim.empty() && world_local > 0.0) break;
+        Sleep(500);
+    }
     if (sim.empty()) { log << "  no live nodes; aborting install\n"; return; }
-    int N = (int)sim.size();
-    int goods_count = 0;
-    auto inject = install::read_inject(sim, goods_count);
-    log << "  live: " << N << " nodes, " << goods_count << " good slots\n";
+    if (world_local <= 0.0) {
+        log << "  live trade state still empty after waiting (is a campaign running?); "
+               "aborting install rather than writing zeros\n";
+        return;
+    }
+    int named = 0; for (auto& s : sim) if (!s.name.empty()) named++;
+    log << "  live: " << sim.size() << " nodes, world local=" << world_local
+        << " (monthly), " << named << " named from memory\n";
 
-    // Solve the model's graphs from the install + start save (the same inputs, and the same
-    // DRAIN code, the reference implementation uses -- spec 2.8's cross-implementation basis).
     std::string root = install_dir();
     std::string save = std::string(getenv("USERPROFILE") ? getenv("USERPROFILE") : "") +
         "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV"
@@ -104,77 +132,128 @@ static void run_install(const std::string& logpath) {
             root + "/common/tradenodes/00_tradenodes.txt");
         gamedata::StaticMods sm = gamedata::load_static_mods(root);
         auto prices = gamedata::load_prices(root);
+        auto goods_order = gamedata::load_goods_order(root);   // slot k <-> goods_order[k-1] (1-based)
+        std::map<std::string, int> good_slot;                  // good name -> engine tgs slot
+        for (int k = 0; k < (int)goods_order.size(); k++) good_slot[goods_order[k]] = k + 1;
         save::SaveData sd = save::load(save);
         field::Field f = field::build(tn, sm, sd, prices);
         drain::Graph g; g.N = f.N; g.und = tn.und; g.edges_und = tn.edges_und;
 
-        // route every live good along its own graph
-        std::vector<double> routed(N, 0.0);
-        std::vector<std::vector<std::pair<int, int>>> graphs;   // per live good, in slot order
+        // NAME the live nodes authoritatively: the engine node-array order is a permutation of
+        // both the file order and the save order, so match each live node to a save node by its
+        // stable trade_goods_size production vector (nearest L1, 1-to-1), keyed by engine id.
+        nodemap::Map nm = nodemap::resolve(sim, sd.nodes);
+        for (auto& s : sim) {
+            auto it = nm.id_to_name.find(s.index);
+            if (it != nm.id_to_name.end()) s.name = it->second;
+        }
+        log << "  named live nodes by goods-signature: " << nm.matched << " matched ("
+            << nm.exact << " exact), " << nm.spurious << " spurious/unnamed\n";
+
+        // gather live inject into FIELD index order, BY NAME (the index-mismatch fix)
+        int goods_count = 0, matched = 0;
+        auto inject = install::gather_inject(sim, tn.order, goods_count, matched);
+        log << "  matched " << matched << "/" << f.N << " live nodes to solver nodes by name\n";
+
+        static std::vector<std::vector<std::pair<int, int>>> s_graphs;
+        static std::vector<int> s_slots;
+        static std::vector<double> s_prices;
+        static std::vector<std::string> s_names;
+        static field::Field s_field;
+        s_graphs.clear(); s_slots.clear(); s_prices.clear();
+        std::vector<econ::GoodFlow> per_good;
+        std::vector<std::vector<double>> inj_field;   // per live good, field-indexed
         int solved = 0;
         for (int gi = 0; gi < (int)f.goods.size(); gi++) {
             if (!f.live[gi]) continue;
             std::vector<double> b(f.N), s = f.S[gi], c = f.C[gi];
             for (int n = 0; n < f.N; n++) b[n] = s[n] - c[n];
             drain::Result r = drain::run(g, b, f.tie_cost_edge, f.node_wealth, s, c);
-            // the engine's good slot for this model good: slot k <-> good index k-1 (spec 1.8)
-            int slot = gi + 1;
-            if (slot >= goods_count) continue;
-            // keep the graph indexed by (slot-1) so the monthly loop can re-route without
-            // re-solving: the orientation only changes when the world state does.
-            if ((int)graphs.size() < slot) graphs.resize(slot);
-            graphs[slot - 1] = r.directed;
+            // engine tgs slot for THIS good by name (sorted good order != tradegoods file order),
+            // and inject VALUE = live produced quantity x current price (spec 1.8).
+            auto slotit = good_slot.find(f.goods[gi]);
+            int slot = slotit != good_slot.end() ? slotit->second : (gi + 1);
+            double price = field::price_of(f.goods[gi], sd.current_prices, prices);
             std::vector<double> inj(f.N, 0.0);
-            for (int n = 0; n < f.N && n < N; n++) inj[n] = inject[slot][n];
-            auto collected = install::route_good(f.N, r.directed, inj);
-            for (int n = 0; n < f.N && n < N; n++) routed[n] += collected[n];
+            if (slot < goods_count) for (int n = 0; n < f.N; n++) inj[n] = inject[slot][n] * price;
+            std::vector<econ::NodeStandings> st(f.N);   // no live power yet -> no-merchant baseline
+            econ::GoodFlow F = econ::route(f.N, r.directed, inj, st, {}, 0.05);
+            per_good.push_back(F);
+            inj_field.push_back(inj);
+            s_graphs.push_back(r.directed);
+            s_slots.push_back(slot);
+            s_prices.push_back(price);
             solved++;
         }
-        double total = 0;
-        for (double v : routed) total += v;
-        log << "  solved+routed " << solved << " goods; routed world value = " << total << "\n";
+        auto agg = econ::aggregate(f.N, per_good, inj_field);
+        double world_total = 0, world_local = 0, world_pool = 0;
+        for (auto& a : agg) { world_total += a.total; world_local += a.local; world_pool += a.pool; }
+        log << "  solved+routed " << solved << " goods; world total=" << world_total
+            << " local=" << world_local << " collectible=" << world_pool << " (annual)\n";
+        s_names = tn.order; s_field = f;
+
+        // Phi_w (the installed/drawn orientation) and the per-link net realized flows (spec 2.6)
+        std::vector<std::pair<int, int>> phi_w;
+        {
+            std::vector<double> bagg = field::b_aggregate(f);
+            std::vector<double> sw(f.N, 1.0 / f.N), cw(f.N);
+            for (int n = 0; n < f.N; n++) cw[n] = sw[n] - bagg[n];
+            drain::Result rw = drain::run(g, bagg, f.tie_cost_edge, f.node_wealth, sw, cw);
+            phi_w = rw.directed;
+        }
+        // GROSS directed flows are what the engine's incoming records hold (non-negative, spec 1.12).
+        auto net_links = econ::gross_link_flows(per_good);
+        auto signed_net = econ::net_link_flows(phi_w, per_good);   // measured, for the 2.8 report
+        static std::map<std::pair<int, int>, double> s_netlinks;
+        static std::map<int, std::string> s_id2name;
+        s_netlinks = net_links; s_id2name = nm.id_to_name;
 
         if (livetrade::marker_present("INSTALL")) {
-            int wrote = install::install_economy(sim, routed);
-            log << "  INSTALLED into the engine: wrote " << wrote << " node values\n";
-
-            // ---- stay installed: re-apply on every monthly trade tick (spec 2.6) ----
-            // The engine rebuilds its node values each month; without this the mod's economy
-            // would be overwritten after one tick. The loop detects a completed monthly update
-            // and re-installs immediately after it, which is where spec 2.6 puts the write.
+            // LINKS FIRST: install_aggregate derives each node's outgoing from what the node
+            // actually holds (engine local + the incoming records), so the model's arrivals must
+            // already be in those records when it runs.
+            int links = install::install_links(sim, tn.order, net_links, nm.id_to_name);
+            int wrote = install::install_aggregate(sim, tn.order, agg);
+            log << "  INSTALLED pool+outgoing on " << wrote << " nodes, " << links
+                << " link values (local left intact per B4)\n";
             if (livetrade::marker_present("MONTHLY")) {
-                static std::vector<std::vector<std::pair<int, int>>> s_graphs;
                 static std::string s_log = logpath;
-                s_graphs = graphs;
                 static volatile bool s_stop = false;
                 CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
                     int ticks = 0;
                     tickhook::run_monthly_loop([&](const std::vector<livetrade::SimNode>& sim2) {
-                        int gc = 0;
-                        auto inj2 = install::read_inject(sim2, gc);
-                        std::vector<double> routed2(sim2.size(), 0.0);
-                        for (size_t gi = 0; gi < s_graphs.size(); gi++) {
-                            int slot = (int)gi + 1;
-                            if (slot >= gc) continue;
-                            std::vector<double> in(sim2.size(), 0.0);
-                            for (size_t n = 0; n < sim2.size(); n++) in[n] = inj2[slot][n];
-                            auto col = install::route_good((int)sim2.size(), s_graphs[gi], in);
-                            for (size_t n = 0; n < sim2.size(); n++) routed2[n] += col[n];
+                        int gc = 0, mm = 0;
+                        auto inj2 = install::gather_inject(sim2, s_names, gc, mm);
+                        std::vector<econ::GoodFlow> pg;
+                        std::vector<std::vector<double>> injf;
+                        for (size_t k = 0; k < s_graphs.size(); k++) {
+                            int slot = s_slots[k];
+                            std::vector<double> in(s_field.N, 0.0);
+                            if (slot < gc) for (int n = 0; n < s_field.N; n++) in[n] = inj2[slot][n] * s_prices[k];
+                            std::vector<econ::NodeStandings> st(s_field.N);
+                            pg.push_back(econ::route(s_field.N, s_graphs[k], in, st, {}, 0.05));
+                            injf.push_back(in);
                         }
-                        int w = install::install_economy(sim2, routed2);
+                        auto ag = econ::aggregate(s_field.N, pg, injf);
+                        int lk = install::install_links(sim2, s_names, s_netlinks, s_id2name);
+                        int w = install::install_aggregate(sim2, s_names, ag);
                         std::ofstream lg(s_log, std::ios::app);
                         lg << "[monthly] tick " << ++ticks << ": re-installed " << w
-                           << " node values\n";
+                           << " nodes, " << lk << " links\n";
                     }, &s_stop);
                     return 0;
                 }, nullptr, 0, nullptr);
-                log << "  MONTHLY loop started: the economy is re-installed every trade tick\n";
+                log << "  MONTHLY loop started: economy re-installed every trade tick\n";
             }
         } else {
             log << "  (dry run -- create pgt.INSTALL next to the DLL to write these values)\n";
-            for (int n = 0; n < 8 && n < N; n++)
-                log << "    node[" << sim[n].index << "] engine local=" << sim[n].local_value
-                    << " -> model routed=" << routed[n] << "\n";
+            auto byname = install::live_by_name(sim);
+            for (int fn = 0; fn < 8 && fn < f.N; fn++) {
+                auto it = byname.find(tn.order[fn]);
+                double eng = it != byname.end() ? sim[it->second].local_value : -1;
+                log << "    " << tn.order[fn] << " engine local=" << eng
+                    << " model total=" << agg[fn].total << " pool=" << agg[fn].pool << "\n";
+            }
         }
     } catch (const std::exception& e) {
         log << "  install failed: " << e.what() << "\n";
@@ -261,6 +340,10 @@ static void attach_main() {
         note("scanning for trade nodes...");
         try {
             livetrade::log_snapshot(s_logpath);
+            if (livetrade::marker_present("LINKDUMP")) {
+                auto sim0 = livetrade::read_sim_nodes();
+                livetrade::dump_incoming(s_logpath, sim0);
+            }
             note("snapshot complete");
             run_install(s_logpath);
         } catch (const std::exception& e) {

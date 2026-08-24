@@ -27,6 +27,7 @@
 #include "analytics.h"
 #include "attach.h"
 #include "fixtures.h"
+#include "econtest.h"
 
 using std::string;
 using std::vector;
@@ -400,6 +401,13 @@ int main(int argc, char** argv) {
             return v.ok ? 0 : 1;
         }
         if (argc >= 3 && !strcmp(argv[1], "zipinfo")) return cmd_zipinfo(argv[2]);
+        if (argc >= 2 && !strcmp(argv[1], "econ")) {
+            printf("economy fixtures (spec 1.8 routing rules, each with a red twin)\n");
+            econtest::Runner R;
+            econtest::run_all(R);
+            printf("RESULT: %d checks, %d failed\n", R.total, R.failed);
+            return R.failed ? 1 : 0;
+        }
         if (argc >= 2 && !strcmp(argv[1], "fixtures")) {
             printf("negative fixtures: every checker must go RED on these\n");
             fixtures::Runner R;

@@ -1,65 +1,163 @@
-// Installing the per-good economy into the engine (spec 1.8, 2.6).
+// Installing the per-good economy into the engine (spec 1.8, 2.6), NAME-KEYED.
 //
-// This is what the mod actually DOES at runtime, in-process:
-//   1. read the engine's own produced quantities -- per node, per good -- from each CTradeNode's
-//      trade_goods_size vector (+0x108), which is exactly spec 1.8's `inject_g(n)` basis;
-//   2. run the shipped DRAIN solver over the model's own orientation inputs to get the per-good
-//      graphs and Phi_w (the same code the reference implementation runs -- spec 2.8 requires
-//      them to agree on orientation exactly);
-//   3. route each good's injected value along its own graph and sum per node;
-//   4. write the routed totals back into the engine's node fields (local/outgoing), so the
-//      game's own displays, ledger and AI read the model's numbers (Goal 7).
+// The critical correctness point: the live engine's node array is in the engine's own node order
+// (which follows the MOD's reordered 00_tradenodes.txt), while the solver's field is indexed by
+// the reference file's node order. Those orders differ, so live node i and field node i are NOT
+// the same place. Everything here maps between them BY NODE NAME, read from engine memory
+// (livetrade::SimNode::name), so routing lands on the right nodes no matter how a file is ordered.
 //
-// Step 4 uses the write path proven in livetrade.h. The ROUTING here is the per-good flow of
-// spec 1.8: at a sink the good is fully collected; elsewhere it splits across the good's
-// outgoing links (evenly in the no-merchant baseline -- merchant steering is the AI layer).
+//   1. read each live node's produced quantities (trade_goods_size) -> inject, gathered into
+//      FIELD index order by name;
+//   2. run the shipped DRAIN solver over the field to get each good's graph and Phi_w;
+//   3. route each good's injected value along its own graph (econ::route -- per-good eligibility,
+//      steering, sink collection); aggregate to the spec 2.6 node fields;
+//   4. write the aggregate back into the engine's node TOTAL field (local is left untouched so
+//      spec test B4 -- "local equals the engine's own" -- still holds), by name.
 #pragma once
 #include <cmath>
 #include <map>
 #include <string>
 #include <vector>
 #include "livetrade.h"
+#include "../src/economy.h"
 
 namespace install {
 
-struct GoodRoute {
-    // per-good directed graph over node indices, from the solver
-    std::vector<std::pair<int, int>> directed;
-    std::vector<int> sinks;
-};
-
-// Route one good's injected values along its graph. inject[n] is the engine's produced value at
-// node n for this good; returns the value arriving/collected at each node (spec 1.8's realized
-// flow under the no-merchant even split).
-inline std::vector<double> route_good(int N, const std::vector<std::pair<int, int>>& directed,
-                                      const std::vector<double>& inject) {
-    std::vector<std::vector<int>> outs(N);
-    std::vector<int> indeg(N, 0);
-    for (auto& [u, v] : directed) { outs[u].push_back(v); indeg[v]++; }
-    // topological order (the graph is acyclic by construction -- spec 1.1)
-    std::vector<int> order;
-    std::vector<int> ind = indeg;
-    std::vector<int> q;
-    for (int i = 0; i < N; i++) if (ind[i] == 0) q.push_back(i);
-    while (!q.empty()) {
-        int x = q.back(); q.pop_back();
-        order.push_back(x);
-        for (int y : outs[x]) if (--ind[y] == 0) q.push_back(y);
-    }
-    std::vector<double> carried(N, 0.0), collected(N, 0.0);
-    for (int n = 0; n < N; n++) carried[n] = inject[n];
-    for (int n : order) {
-        if (outs[n].empty()) {                 // sink for this good: fully collected here
-            collected[n] += carried[n];
-            continue;
-        }
-        double share = carried[n] / outs[n].size();
-        for (int m : outs[n]) carried[m] += share;
-    }
-    return collected;
+// name -> live SimNode index (engine array position). Built once per read.
+inline std::map<std::string, int> live_by_name(const std::vector<livetrade::SimNode>& sim) {
+    std::map<std::string, int> m;
+    for (int i = 0; i < (int)sim.size(); i++) if (!sim[i].name.empty()) m[sim[i].name] = i;
+    return m;
 }
 
-// Read the engine's per-node, per-good produced values (spec 1.8's inject).
+// Gather live inject into FIELD index order, by name. field_names[fn] is the node name at field
+// index fn (the reference file's order). Returns inject[good_slot][field_index] in annual ducats.
+// good slot k <-> model good index k-1 (spec 1.8); slot 0 is unused/gold.
+inline std::vector<std::vector<double>> gather_inject(
+        const std::vector<livetrade::SimNode>& sim,
+        const std::vector<std::string>& field_names, int& goods_count,
+        int& matched) {
+    auto byname = live_by_name(sim);
+    goods_count = 0;
+    for (auto& s : sim) goods_count = std::max<int>(goods_count, (int)s.goods.size());
+    int N = (int)field_names.size();
+    std::vector<std::vector<double>> inject(goods_count, std::vector<double>(N, 0.0));
+    matched = 0;
+    for (int fn = 0; fn < N; fn++) {
+        auto it = byname.find(field_names[fn]);
+        if (it == byname.end()) continue;
+        matched++;
+        const auto& g = sim[it->second].goods;
+        for (int k = 0; k < (int)g.size() && k < goods_count; k++) inject[k][fn] = g[k] / 1000.0;
+    }
+    return inject;
+}
+
+// Route one good (no-merchant baseline; econ::route with empty standings). Kept for callers that
+// only need collected-at-node totals.
+inline std::vector<double> route_good(int N, const std::vector<std::pair<int, int>>& directed,
+                                      const std::vector<double>& inject) {
+    std::vector<econ::NodeStandings> st(N);
+    auto F = econ::route(N, directed, inject, st, {}, 0.05);
+    return F.collected;
+}
+
+// Write the aggregate node economy back into the engine, BY NAME. Writes the node TOTAL
+// (+0xCC accum) and the UI total cache; leaves local untouched (spec B4). Returns nodes written.
+inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
+                             const std::vector<std::string>& field_names,
+                             const std::vector<econ::NodeAggregate>& agg) {
+    auto byname = live_by_name(sim);
+    int wrote = 0;
+    for (int fn = 0; fn < (int)field_names.size() && fn < (int)agg.size(); fn++) {
+        auto it = byname.find(field_names[fn]);
+        if (it == byname.end()) continue;
+        uintptr_t node = sim[it->second].obj;
+        // annual -> monthly twelfth at the engine-write boundary (spec 2.6).
+        //   pool  -> +0xB0 `current`  (pass 10 divides THIS among collectors: the money)
+        //   outgoing -> +0xBC
+        // local (+0xB4) is left as the engine's own (spec B4). The UI recomputes
+        // total = local + Σ incoming − outgoing, so no total field needs writing.
+        // The engine (and every UI consumer) recomputes total = local + Σ incoming − outgoing.
+        // `local` stays the ENGINE's own (spec B4) while the model's local is its own annual
+        // inject; the two differ by the recorded reference-side gap (spec 2.8, ~3.4%). So the
+        // model's absolute outgoing cannot be written raw -- it would exceed local+incoming and
+        // drive `total` negative, which spec 1.12 forbids ever displaying.
+        //
+        // What is invariant is the SPLIT: the fraction of everything a node holds that it
+        // forwards, outgoing/value, which is exactly 1 - collected_share aggregated over goods.
+        // Applying that fraction to what the node actually holds here reproduces the model's
+        // economy in the engine's own units and keeps the identity non-negative by construction.
+        double model_value = agg[fn].total;                       // annual, model units
+        double fwd = model_value > 0 ? agg[fn].outgoing / model_value : 0.0;
+        if (fwd < 0) fwd = 0; if (fwd > 1) fwd = 1;
+        double engine_local = sim[it->second].local_value;        // monthly, engine's own
+        double engine_in = 0;
+        for (auto& l : livetrade::read_incoming(sim[it->second].obj)) engine_in += l.value_raw / 1000.0;
+        double held = engine_local + engine_in;                   // monthly
+        double out = held * fwd;
+        if (out < 0) out = 0;
+        if (out > held) out = held;                               // total >= 0 always (spec 1.12)
+        livetrade::write_outgoing(node, out);
+        // the collectible pool is what is NOT forwarded (spec 2.6): pass 10 divides this
+        bool a = livetrade::write_pool(node, held - out);
+        if (a) wrote++;
+    }
+    return wrote;
+}
+
+// Write the per-link realized values into the engine's incoming-link records (spec 2.6's
+// "per-link value": net Σ_g realized flow in the installed Phi_w direction). Each record at
+// node+0xF0[i] carries the source node's DEFINITION at +0x18; the definition's node index sits at
+// def+0xD8, which is the engine node id -- so a record identifies (source_id -> this node).
+// `net[(u,v)]` is keyed by FIELD indices, so we translate through name<->id maps.
+// Returns the number of link records written.
+inline int install_links(const std::vector<livetrade::SimNode>& sim,
+                         const std::vector<std::string>& field_names,
+                         const std::map<std::pair<int, int>, double>& net_annual,
+                         const std::map<int, std::string>& id_to_name) {
+    // field index by name, for translating an engine id to a field index
+    std::map<std::string, int> fidx;
+    for (int i = 0; i < (int)field_names.size(); i++) fidx[field_names[i]] = i;
+    auto field_of_id = [&](int id) -> int {
+        auto n = id_to_name.find(id);
+        if (n == id_to_name.end()) return -1;
+        auto f = fidx.find(n->second);
+        return f == fidx.end() ? -1 : f->second;
+    };
+    int wrote = 0;
+    for (auto& s : sim) {
+        int dst_f = field_of_id(s.index);
+        if (dst_f < 0) continue;
+        for (auto& l : livetrade::read_incoming(s.obj)) {
+            uintptr_t src_def = l.words[3];              // +0x18 = source definition
+            if (!src_def) continue;
+            int src_id = livetrade::ri(src_def + 0xD8);  // def+0xD8 = node index
+            int src_f = field_of_id(src_id);
+            if (src_f < 0) continue;
+            // GROSS directed flow src->dst: the value that actually arrives here. Never negative
+            // (spec 1.12: no negative is ever displayed); a link carrying nothing this way is 0.
+            auto it = net_annual.find({src_f, dst_f});
+            double v = (it != net_annual.end()) ? it->second : 0.0;
+            if (v < 0) v = 0;
+            livetrade::write_link_value(l.rec, v / 12.0);         // annual -> monthly (spec 2.6)
+            wrote++;
+        }
+    }
+    return wrote;
+}
+
+// legacy signature retained for the older call path (writes routed totals to local); superseded
+// by install_aggregate. Kept so nothing calling it breaks.
+inline int install_economy(const std::vector<livetrade::SimNode>& sim,
+                           const std::vector<double>& routed_total) {
+    int wrote = 0;
+    for (size_t n = 0; n < sim.size() && n < routed_total.size(); n++)
+        if (livetrade::write_local_value(sim[n].obj, routed_total[n])) wrote++;
+    return wrote;
+}
+
+// old read_inject (array-position keyed) kept for the monthly loop's transitional use.
 inline std::vector<std::vector<double>> read_inject(const std::vector<livetrade::SimNode>& sim,
                                                     int& goods_count) {
     goods_count = 0;
@@ -69,16 +167,6 @@ inline std::vector<std::vector<double>> read_inject(const std::vector<livetrade:
         for (size_t k = 0; k < sim[n].goods.size(); k++)
             inject[k][n] = sim[n].goods[k] / 1000.0;
     return inject;
-}
-
-// Install: write each node's routed total into the engine's local_value field.
-// Returns the number of nodes written.
-inline int install_economy(const std::vector<livetrade::SimNode>& sim,
-                           const std::vector<double>& routed_total) {
-    int wrote = 0;
-    for (size_t n = 0; n < sim.size() && n < routed_total.size(); n++)
-        if (livetrade::write_local_value(sim[n].obj, routed_total[n])) wrote++;
-    return wrote;
 }
 
 } // namespace install

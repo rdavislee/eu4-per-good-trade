@@ -237,7 +237,43 @@ struct SimNode {
     int index;
     double local_value, outgoing_value, retention, gross_local;
     std::vector<int32_t> goods;     // trade_goods_size, indexed by trade-good id
+    std::string name;               // authoritative: read from the node's definition in memory
 };
+
+// The AUTHORITATIVE name of a sim node: a CTradeNode holds a pointer to its CTradeNodeDefinition
+// (whose inline std::string name sits at +0x10). Scan the node's own 0x138 bytes for a qword
+// that points to an object whose first qword is the definition vtable, then read that name.
+// This is what makes the engine node-array index -> node-name mapping ground truth, independent
+// of any file's declaration order (which a mod reorders -- the source of an index-mismatch bug).
+inline std::string def_name_of(uintptr_t node) {
+    uintptr_t defvt = module_base() + 0x1C439D0;   // TRADENODE_DEF_VTABLE
+    for (int off = 0; off < 0x138; off += 8) {
+        uintptr_t p = rq(node + off);
+        if (!p || (p & 7)) continue;
+        uintptr_t vt = rq(p);
+        if (vt != defvt) continue;
+        char nm[17] = {0};
+        if (!safe_read(p + 0x10, nm, 16)) continue;   // inline std::string (SSO)
+        size_t len = strnlen(nm, 16);
+        std::string s(nm, len);
+        bool ok = !s.empty();
+        for (char c : s) if (!((c >= 'a' && c <= 'z') || c == '_' || (c >= '0' && c <= '9'))) ok = false;
+        if (ok) return s;
+        // long std::string: the buffer is a pointer at +0x10, size at +0x18
+        uintptr_t buf = rq(p + 0x10);
+        int32_t sz = ri(p + 0x18);
+        if (buf && sz > 0 && sz < 64) {
+            char big[65] = {0};
+            if (safe_read(buf, big, sz)) {
+                std::string b(big, sz);
+                bool ok2 = true;
+                for (char c : b) if (!((c >= 'a' && c <= 'z') || c == '_' || (c >= '0' && c <= '9'))) ok2 = false;
+                if (ok2) return b;
+            }
+        }
+    }
+    return "";
+}
 
 inline uintptr_t trade_manager() {
     uintptr_t base = module_base();
@@ -270,6 +306,7 @@ inline std::vector<SimNode> read_sim_nodes(int max_nodes = 100) {
         s.outgoing_value = outg / 1000.0;
         s.retention = ret / 1000.0;
         s.gross_local = gross / 1000.0;
+        s.name = def_name_of(n);
         // per-good produced quantities: vector<int32> at +0x108 / +0x110
         uintptr_t gb = 0, ge = 0;
         if (safe_read(n + 0x108, &gb, 8) && safe_read(n + 0x110, &ge, 8) &&
@@ -289,13 +326,83 @@ inline std::vector<SimNode> read_sim_nodes(int max_nodes = 100) {
 // WRITE PATH (spec 2.6). Writing a node's local_value proves the DLL owns the engine's own
 // numbers -- the game recomputes displays from these fields, so a write shows up in the node
 // window. This is the same store the mod uses to install the per-good economy.
-inline bool write_local_value(uintptr_t node, double ducats) {
+// write an int32 fixed-point (ducats x1000) at node+off, guarded by VirtualProtect.
+inline bool write_fixed(uintptr_t node, int off, double ducats) {
     int32_t v = (int32_t)(ducats * 1000.0 + (ducats >= 0 ? 0.5 : -0.5));
     DWORD old = 0;
-    if (!VirtualProtect((void*)(node + 0xB4), 4, PAGE_READWRITE, &old)) return false;
-    *(int32_t*)(node + 0xB4) = v;      // SIM_LOCAL_VALUE
-    VirtualProtect((void*)(node + 0xB4), 4, old, &old);
+    if (!VirtualProtect((void*)(node + off), 4, PAGE_READWRITE, &old)) return false;
+    *(int32_t*)(node + off) = v;
+    VirtualProtect((void*)(node + off), 4, old, &old);
     return true;
+}
+inline bool write_local_value(uintptr_t node, double ducats) { return write_fixed(node, 0xB4, ducats); }
+// spec 2.6's writes, on the CONFIRMED field map (flow-pass RE):
+//   +0xB0 `current` = the node's COLLECTIBLE POOL -- what pass 10 divides among collectors
+//                     (rec.total = current * power_fraction/1000), i.e. spec 2.6's "collectible pool"
+//   +0xBC outgoing_value
+//   local (+0xB4) is deliberately NOT written: spec test B4 requires it to stay the engine's own.
+// (NOTE: +0xCC is p_pow, NOT a total -- writing it corrupts trade power. Never write it here.)
+inline bool write_pool(uintptr_t node, double ducats)     { return write_fixed(node, 0xB0, ducats); }
+inline bool write_outgoing(uintptr_t node, double ducats) { return write_fixed(node, 0xBC, ducats); }
+// retention is PERMILLE (1000 - pull*1000/(pull+retain)), not a ducat value
+inline bool write_retention_permille(uintptr_t node, double frac_retained) {
+    int32_t v = (int32_t)(frac_retained * 1000.0 + 0.5);
+    if (v < 0) v = 0; if (v > 1000) v = 1000;
+    DWORD old = 0;
+    if (!VirtualProtect((void*)(node + 0xB8), 4, PAGE_READWRITE, &old)) return false;
+    *(int32_t*)(node + 0xB8) = v;
+    VirtualProtect((void*)(node + 0xB8), 4, old, &old);
+    return true;
+}
+// one incoming-link record's value (+0x10) and steering add (+0x14), both signed int32 x1000
+inline bool write_link_value(uintptr_t rec, double ducats) { return write_fixed(rec, 0x10, ducats); }
+inline bool write_link_add(uintptr_t rec, double ducats)   { return write_fixed(rec, 0x14, ducats); }
+// UI caches on the same object (display side), int32 x1000
+inline bool write_ui_incoming(uintptr_t node, double d) { return write_fixed(node, 0x160, d); }
+inline bool write_ui_outgoing(uintptr_t node, double d) { return write_fixed(node, 0x164, d); }
+inline bool write_ui_total(uintptr_t node, double d)    { return write_fixed(node, 0x16C, d); }
+
+// One incoming-link record (node+0xF0 vector, stride 0x20). value at +0x10 (signed int32 x1000).
+// The source-node reference offset is what we resolve here by dumping.
+struct InLink { uintptr_t rec; int32_t value_raw; uintptr_t words[4]; };
+
+inline std::vector<InLink> read_incoming(uintptr_t node) {
+    std::vector<InLink> out;
+    uintptr_t begin = rq(node + 0xF0), end = rq(node + 0xF8);
+    if (!begin || end <= begin || (end - begin) > 0x20 * 512) return out;
+    for (uintptr_t p = begin; p + 0x20 <= end; p += 0x20) {
+        InLink l{};
+        l.rec = p;
+        l.value_raw = ri(p + 0x10);
+        for (int w = 0; w < 4; w++) l.words[w] = rq(p + w * 8);
+        out.push_back(l);
+    }
+    return out;
+}
+
+// Dump the incoming-link records of the first few sim nodes so the record layout (which word is
+// the source node) can be identified against the known graph. Behind the LINKDUMP marker.
+inline void dump_incoming(const std::string& logpath, const std::vector<SimNode>& sim) {
+    std::ofstream log(logpath, std::ios::app);
+    log << "--- incoming-link records (node+0xF0 vector, stride 0x20) ---\n";
+    uintptr_t base = module_base();
+    int shown = 0;
+    for (auto& s : sim) {
+        auto links = read_incoming(s.obj);
+        if (links.empty()) continue;
+        log << "  node[" << s.index << "] " << (s.name.empty() ? "?" : s.name)
+            << " has " << links.size() << " incoming records:\n";
+        for (auto& l : links) {
+            log << "     rec@0x" << std::hex << l.rec << " val=" << std::dec
+                << (l.value_raw / 1000.0);
+            for (int w = 0; w < 4; w++) {
+                log << "  [+0x" << std::hex << (w * 8) << "]=0x" << l.words[w];
+                // annotate if the word looks like a sim-node pointer (in the node array range)
+            }
+            log << std::dec << "\n";
+        }
+        if (++shown >= 4) break;
+    }
 }
 
 // log a snapshot of live trade state to a file next to eu4.exe
@@ -381,60 +488,29 @@ inline void log_snapshot(const std::string& logpath) {
                     << (ok ? "  [OK]" : "  [FAILED]") << "\n";
             }
 
-            // ---- name the nodes: the node array is in the same order as the definitions the
-            // engine loaded from 00_tradenodes.txt, so index i names node i. Cross-check by
-            // writing a machine-readable dump the harness can diff against the reference solve.
+            // ---- name the nodes AUTHORITATIVELY: each sim node carries a pointer to its
+            // CTradeNodeDefinition, whose name we read from memory (def_name_of). This is ground
+            // truth for the engine node-array index -> node-name mapping, independent of any
+            // file's declaration order (a mod reorders it, which silently mis-indexes routing).
             {
                 std::ofstream dump(logpath + ".nodes.tsv", std::ios::trunc);
-                dump << "index\tname\tlocal_value\toutgoing\tretention";
+                dump << "index\tname\tid\tlocal_value\toutgoing\tretention";
                 for (int k = 0; k < 33; k++) dump << "\tg" << k;
                 dump << "\n";
-                // Node index == the order the engine loaded 00_tradenodes.txt, so the names come
-                // from that file's declaration order -- NOT from heap-scan order, which is
-                // allocation order and does not correspond. Parse the loaded file directly.
-                std::vector<std::string> ordered;
-                {
-                    // the active file is the mod's if enabled, else vanilla; try mod first
-                    const char* candidates[] = {
-                        nullptr,   // filled below with the mod path
-                        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Europa Universalis IV"
-                        "\\common\\tradenodes\\00_tradenodes.txt"
-                    };
-                    std::string modpath;
-                    {
-                        const char* up = getenv("USERPROFILE");
-                        if (up) modpath = std::string(up) +
-                            "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV"
-                            "\\mod\\pgt\\common\\tradenodes\\00_tradenodes.txt";
-                    }
-                    candidates[0] = modpath.empty() ? nullptr : modpath.c_str();
-                    for (const char* path : candidates) {
-                        if (!path) continue;
-                        std::ifstream f(path, std::ios::binary);
-                        if (!f) continue;
-                        std::string line;
-                        while (std::getline(f, line)) {
-                            size_t eq = line.find("={");
-                            if (eq == std::string::npos || eq == 0) continue;
-                            if (line[0] == '\t' || line[0] == ' ' || line[0] == '#') continue;
-                            std::string nm = line.substr(0, eq);
-                            bool ok = !nm.empty();
-                            for (char c : nm) if (!((c >= 'a' && c <= 'z') || c == '_')) ok = false;
-                            if (ok) ordered.push_back(nm);
-                        }
-                        if (!ordered.empty()) break;
-                    }
-                }
+                int named = 0;
                 for (size_t i = 0; i < sim.size(); i++) {
                     const SimNode& s = sim[i];
-                    dump << s.index << "\t"
-                         << (i < ordered.size() ? ordered[i] : std::string("?")) << "\t"
+                    if (!s.name.empty()) named++;
+                    dump << i << "\t"
+                         << (s.name.empty() ? std::string("?") : s.name) << "\t"
+                         << s.index << "\t"
                          << s.local_value << "\t" << s.outgoing_value << "\t" << s.retention;
                     for (int k = 0; k < 33; k++)
                         dump << "\t" << (k < (int)s.goods.size() ? s.goods[k] / 1000.0 : 0.0);
                     dump << "\n";
                 }
-                log << "  wrote node dump: " << logpath << ".nodes.tsv\n";
+                log << "  wrote node dump: " << logpath << ".nodes.tsv ("
+                    << named << "/" << sim.size() << " named from memory)\n";
             }
         }
 

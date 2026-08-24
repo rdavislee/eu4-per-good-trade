@@ -1,0 +1,268 @@
+// The per-good economy (spec 1.8, 2.6, 3.14): what the network ROUTES, given the orientation.
+//
+// For one good g over its DRAIN graph, with the engine's own inject_g(n) as origination and the
+// engine's per-node per-country modified trade power + merchant intent as the power inputs:
+//
+//   collected_share(n,g) = 1                                 if n is a sink for g
+//                        = P_collect / (P_collect + P_transfer(g))   otherwise
+//   P_transfer(g) counts a country's power only if it steers g at n, or collects at some node
+//   reachable from n in g's graph (per-good eligibility, spec 1.8 / 3.7); inert otherwise.
+//   Remainder: if anyone steers g at n, split across outgoing links in proportion to the power
+//   steering TOWARD each link (unsteered links get nothing; a lone steerer takes all); else an
+//   even split across g's outgoing links. At a sink there is no remainder.
+//   Steering adds value: TRADE_ADDED_VALUE_MODIFER per steering merchant on the link (the
+//   engine's own "value_added_outgoing"); the boost lands on the downstream node's incoming.
+//
+// Everything is in the document's ANNUAL basis; the engine-write boundary divides by 12
+// (spec 2.6). Orientation is an input here and is never touched -- this file moves money, not
+// arrows (spec 1.8: "a manufactory moves inject and with it the money; it does not move the
+// arrows").
+#pragma once
+#include <algorithm>
+#include <cmath>
+#include <deque>
+#include <map>
+#include <vector>
+
+namespace econ {
+
+// One country's standing at one node, as the engine holds it (node-wide, good-independent).
+struct Standing {
+    int country;        // engine country index
+    double power;       // modified trade power at this node (merchant bonuses etc. included)
+    bool collects;      // collecting here: home node, or a merchant collecting
+    int steer_to;       // link end this country's merchant steers toward (node index), or -1
+};
+
+struct NodeStandings { std::vector<Standing> entries; };
+
+// Result of routing one good.
+struct GoodFlow {
+    std::vector<double> value;            // value_g(n) = inject + incoming (annual)
+    std::vector<double> incoming;         // Σ realized inflow incl. steering bonus
+    std::vector<double> collected_share;  // spec 1.8
+    std::vector<double> collected;        // value * collected_share  (the collectible pool, per good)
+    std::vector<double> outgoing;         // value * (1 - collected_share)
+    std::vector<double> p_collect, p_transfer;   // the two power sums used
+    std::vector<std::map<int, double>> flow;     // flow[n][m] = realized value leaving n toward m (pre-bonus)
+    std::vector<std::map<int, double>> bonus;    // bonus[n][m] = steering value added on that link
+    std::vector<std::map<int, int>> steerers;    // steerers[n][m] = number of merchants steering n->m
+    std::vector<bool> is_sink;
+    std::vector<int> topo;                       // the order used
+};
+
+// steering value bonus for k merchants on one link: the first adds the full modifier, each
+// further merchant half of the previous (the engine's diminishing "value added" -- the exact
+// engine schedule is a flow-pass fact the live comparison pins; the modifier itself is the
+// define TRADE_ADDED_VALUE_MODIFER = 0.05).
+inline double steer_bonus(int k, double modifier) {
+    double b = 0, step = modifier;
+    for (int i = 0; i < k; i++) { b += step; step *= 0.5; }
+    return b;
+}
+
+// reachability: reach[n] = set of nodes reachable from n (including n) over `directed`
+inline std::vector<std::vector<char>> reach_sets(int N, const std::vector<std::vector<int>>& outs) {
+    std::vector<std::vector<char>> R(N, std::vector<char>(N, 0));
+    for (int s = 0; s < N; s++) {
+        std::vector<int> st{s};
+        R[s][s] = 1;
+        while (!st.empty()) {
+            int x = st.back(); st.pop_back();
+            for (int y : outs[x]) if (!R[s][y]) { R[s][y] = 1; st.push_back(y); }
+        }
+    }
+    return R;
+}
+
+inline std::vector<int> topo_order(int N, const std::vector<std::vector<int>>& outs) {
+    std::vector<int> indeg(N, 0);
+    for (int u = 0; u < N; u++) for (int v : outs[u]) indeg[v]++;
+    std::deque<int> q;
+    for (int i = 0; i < N; i++) if (indeg[i] == 0) q.push_back(i);
+    std::vector<int> order;
+    while (!q.empty()) {
+        int x = q.front(); q.pop_front();
+        order.push_back(x);
+        for (int y : outs[x]) if (--indeg[y] == 0) q.push_back(y);
+    }
+    return order;
+}
+
+// Route one good. `directed` is g's orientation; `inject[n]` the engine's produced value of g at
+// n (annual); `standings[n]` the engine's per-country power/intent at n; `collect_nodes[c]` the
+// nodes where country c collects (for the reachability leg of eligibility).
+inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
+                      const std::vector<double>& inject,
+                      const std::vector<NodeStandings>& standings,
+                      const std::map<int, std::vector<int>>& collect_nodes,
+                      double added_value_modifier) {
+    std::vector<std::vector<int>> outs(N);
+    for (auto& [u, v] : directed) outs[u].push_back(v);
+    for (auto& o : outs) std::sort(o.begin(), o.end());
+    auto R = reach_sets(N, outs);
+    GoodFlow F;
+    F.value.assign(N, 0.0); F.incoming.assign(N, 0.0); F.collected_share.assign(N, 0.0);
+    F.collected.assign(N, 0.0); F.outgoing.assign(N, 0.0);
+    F.p_collect.assign(N, 0.0); F.p_transfer.assign(N, 0.0);
+    F.flow.assign(N, {}); F.bonus.assign(N, {}); F.steerers.assign(N, {});
+    F.is_sink.assign(N, false);
+    F.topo = topo_order(N, outs);
+    std::vector<double> carried(N, 0.0);
+    for (int n = 0; n < N; n++) carried[n] = inject[n];
+
+    for (int n : F.topo) {
+        F.value[n] = carried[n];
+        const auto& S = standings[n].entries;
+        if (outs[n].empty()) {                       // sink for g: no remainder
+            F.is_sink[n] = true;
+            F.collected_share[n] = 1.0;
+            F.collected[n] = F.value[n];
+            for (auto& s : S) if (s.collects) F.p_collect[n] += s.power;
+            continue;
+        }
+        // power sums, per-good eligibility
+        double pc = 0, pt = 0;
+        std::map<int, double> steer_power;       // link end -> power steering toward it
+        std::map<int, int> steer_count;
+        for (auto& s : S) {
+            if (s.power <= 0) continue;
+            if (s.collects) { pc += s.power; continue; }
+            bool steers_g = false;
+            if (s.steer_to >= 0 &&
+                std::find(outs[n].begin(), outs[n].end(), s.steer_to) != outs[n].end()) {
+                steers_g = true;
+                steer_power[s.steer_to] += s.power;
+                steer_count[s.steer_to] += 1;
+            }
+            bool reaches_collector = false;
+            if (!steers_g) {
+                auto it = collect_nodes.find(s.country);
+                if (it != collect_nodes.end())
+                    for (int H : it->second) if (H >= 0 && H < N && R[n][H]) { reaches_collector = true; break; }
+            }
+            if (steers_g || reaches_collector) pt += s.power;   // else inert for g
+        }
+        F.p_collect[n] = pc; F.p_transfer[n] = pt;
+        double cs = (pc + pt > 0) ? pc / (pc + pt) : 0.0;
+        // nobody holds any power: vanilla forwards nothing collectible; the remainder still
+        // moves (even split) so value is never lost -- conservation is asserted per tick.
+        F.collected_share[n] = cs;
+        F.collected[n] = F.value[n] * cs;
+        F.outgoing[n] = F.value[n] - F.collected[n];
+        // split the remainder
+        if (!steer_power.empty()) {
+            double tot = 0; for (auto& [m, p] : steer_power) tot += p;
+            for (auto& [m, p] : steer_power) {
+                double f = F.outgoing[n] * (p / tot);
+                int k = steer_count[m];
+                double b = f * steer_bonus(k, added_value_modifier);
+                F.flow[n][m] = f; F.bonus[n][m] = b; F.steerers[n][m] = k;
+                carried[m] += f + b;
+                F.incoming[m] += f + b;
+            }
+            // unsteered links receive nothing (spec 1.8, load-bearing)
+        } else {
+            double share = F.outgoing[n] / (double)outs[n].size();
+            for (int m : outs[n]) {
+                F.flow[n][m] = share; F.bonus[n][m] = 0.0;
+                carried[m] += share;
+                F.incoming[m] += share;
+            }
+        }
+    }
+    return F;
+}
+
+// Survival table S[n][H] for one good under the CURRENT merchant field (spec 3.14): the fraction
+// of a unit of g at n that is collected at H, multiplying through collected_share, the steering
+// shares and the per-link bonus. Row sums exceed 1 only by the steering bonus (value is added).
+inline std::vector<std::vector<double>> survival(int N, const GoodFlow& F,
+                                                 const std::vector<std::pair<int, int>>& directed) {
+    std::vector<std::vector<int>> outs(N);
+    for (auto& [u, v] : directed) outs[u].push_back(v);
+    std::vector<std::vector<double>> S(N, std::vector<double>(N, 0.0));
+    for (auto it = F.topo.rbegin(); it != F.topo.rend(); ++it) {
+        int n = *it;
+        S[n][n] += F.collected_share[n];
+        if (F.is_sink[n]) continue;
+        double rem = 1.0 - F.collected_share[n];
+        if (rem <= 0) continue;
+        // link shares as realized (steered proportions, or even split)
+        double out_total = F.outgoing[n];
+        for (int m : outs[n]) {
+            double share;
+            auto fi = F.flow[n].find(m);
+            if (out_total > 0 && fi != F.flow[n].end()) share = fi->second / out_total;
+            else if (F.flow[n].empty()) share = 1.0 / outs[n].size();
+            else share = (fi == F.flow[n].end()) ? 0.0 : (1.0 / outs[n].size());
+            if (share <= 0) continue;
+            int k = 0; auto ki = F.steerers[n].find(m); if (ki != F.steerers[n].end()) k = ki->second;
+            double mult = 1.0 + (k > 0 ? steer_bonus(k, 0.05) : 0.0);
+            for (int H = 0; H < N; H++) S[n][H] += rem * share * mult * S[m][H];
+        }
+    }
+    return S;
+}
+
+// The engine-facing aggregate of all goods at a node (spec 2.6's table), annual.
+struct NodeAggregate {
+    double total = 0;        // Σ_g value_g(n)
+    double pool = 0;         // Σ_g value_g(n) * collected_share(n,g)
+    double local = 0;        // Σ_g inject_g(n)   (must equal the engine's own local, spec B4)
+    double incoming = 0;     // Σ_g incoming_g(n)
+    double outgoing = 0;     // Σ_g outgoing_g(n)
+};
+
+// DIRECTED gross realized flow on every ordered pair actually carrying value:
+// gross[(u,v)] = Σ_g (flow_g(u->v) + bonus_g(u->v)) >= 0.
+// This -- not the signed net -- is what the engine's incoming-link record for v must hold: the
+// value that actually ARRIVES at v along that link. Both directions of a physical link can carry
+// value at once (different goods, spec 1.12), and each is reported as its own non-negative figure,
+// which is also what keeps a negative from ever reaching the UI (spec 1.12/3.9).
+inline std::map<std::pair<int, int>, double> gross_link_flows(
+        const std::vector<GoodFlow>& per_good) {
+    std::map<std::pair<int, int>, double> gross;
+    for (auto& F : per_good)
+        for (int u = 0; u < (int)F.flow.size(); u++)
+            for (auto& [v, val] : F.flow[u]) {
+                double b = 0;
+                auto bi = F.bonus[u].find(v);
+                if (bi != F.bonus[u].end()) b = bi->second;
+                gross[{u, v}] += val + b;
+            }
+    return gross;
+}
+
+// per-link net realized flow in the installed Phi_w direction (u->v): Σ_g flow(u->v) - flow(v->u)
+inline std::map<std::pair<int, int>, double> net_link_flows(
+        const std::vector<std::pair<int, int>>& phi_w, const std::vector<GoodFlow>& per_good) {
+    std::map<std::pair<int, int>, double> net;
+    for (auto& [u, v] : phi_w) {
+        double f = 0;
+        for (auto& F : per_good) {
+            auto a = F.flow[u].find(v); if (a != F.flow[u].end()) f += a->second + F.bonus[u].at(v);
+            auto b = F.flow[v].find(u); if (b != F.flow[v].end()) f -= b->second + F.bonus[v].at(u);
+        }
+        net[{u, v}] = f;
+    }
+    return net;
+}
+
+inline std::vector<NodeAggregate> aggregate(int N, const std::vector<GoodFlow>& per_good,
+                                            const std::vector<std::vector<double>>& inject) {
+    std::vector<NodeAggregate> A(N);
+    for (size_t g = 0; g < per_good.size(); g++) {
+        const auto& F = per_good[g];
+        for (int n = 0; n < N; n++) {
+            A[n].total += F.value[n];
+            A[n].pool += F.collected[n];
+            A[n].local += inject[g][n];
+            A[n].incoming += F.incoming[n];
+            A[n].outgoing += F.outgoing[n];
+        }
+    }
+    return A;
+}
+
+} // namespace econ

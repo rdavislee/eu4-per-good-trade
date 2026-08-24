@@ -26,6 +26,12 @@ Step "A5 cross-implementation orientation equality" {
 }
 Step "per-tick assertion battery" { (& $exe checks $eu4 $save | Select-String "RESULT") | Out-Host }
 Step "negative fixtures (each checker goes RED)" { (& $exe fixtures | Select-String "RESULT") | Out-Host }
+Step "economy fixtures (spec 1.8 routing, each with a red twin)" { (& $exe econ | Select-String "RESULT") | Out-Host }
+Step "inline-hook machinery self-test (detour.h)" {
+  $sc = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+  & g++ -O2 -std=c++17 -o "$sc\detourtest.exe" "$impl\dll\detourtest.cpp" 2>&1 | Select-Object -First 4 | Out-Host
+  (& "$sc\detourtest.exe" | Select-String "RESULT") | Out-Host
+}
 Step "reachability census + survival skeleton" { & $exe census $eu4 $save | Out-Host }
 Step "determinism (H1)" { & $exe determinism $eu4 $save | Out-Host }
 Step "razed China (F2 / 2.8)" { & $exe shock $eu4 $save hangzhou | Out-Host }

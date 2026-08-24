@@ -36,6 +36,7 @@
 #include "relink.h"
 #include "viewmode.h"
 #include "assign.h"
+#include "caravan.h"
 #include "../src/economy.h"
 
 namespace ticklive {
@@ -247,6 +248,28 @@ inline int apply(uintptr_t mgr) {
     if (viewmode::per_good() && viewmode::g_selected < (int)per_good.size()) {
         shown.assign(1, per_good[viewmode::g_selected]);
         shown_inj.assign(1, inj_field[viewmode::g_selected]);
+    }
+    // spec 1.7 / C5: caravan power only where a merchant actually steers a good on its link.
+    // A country is "steering" at a node if any live good's graph orients an edge from that node
+    // toward the link end the merchant sits on.
+    {
+        std::set<std::pair<int, int>> steering;
+        std::map<std::string, int> nid;
+        for (auto& [id, nm] : install::g_id_to_name) nid[nm] = id;
+        for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++) {
+            auto ni = nid.find(g_plan.names[fn]);
+            if (ni == nid.end()) continue;
+            for (auto& e : st[fn].entries) {
+                if (e.steer_to < 0) continue;
+                bool carries = false;
+                for (auto& F : per_good) {
+                    auto it = F.flow[fn].find(e.steer_to);
+                    if (it != F.flow[fn].end() && it->second > 0) { carries = true; break; }
+                }
+                if (carries) steering.insert({e.country, ni->second});
+            }
+        }
+        caravan::g_steering.swap(steering);
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);
     auto gross = econ::gross_link_flows(shown);

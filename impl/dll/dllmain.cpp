@@ -27,6 +27,7 @@
 #include "resolver.h"
 #include "arrows.h"
 #include "clickgate.h"
+#include "caravan.h"
 #include "tickhook.h"
 #include "ticklive.h"
 #include "../src/attach.h"
@@ -316,6 +317,14 @@ static void run_install(const std::string& logpath) {
                 // The click already reaches the assignment dispatcher; only its gate refuses,
                 // and the gate's graph test is the upstream/downstream predicate that spec 1.10
                 // says must evaluate true at the call site.
+                if (livetrade::marker_present("CARAVAN")) {
+                    std::string kerr;
+                    if (caravan::install(&kerr))
+                        log << "  caravan condition ACTIVE at eu4.exe+0xB53CC5: a merchant that "
+                               "steers no good on its link gets no caravan power (spec 1.7)\n";
+                    else
+                        log << "  caravan condition NOT installed: " << kerr << "\n";
+                }
                 if (livetrade::marker_present("CLICKGATE")) {
                     std::string cerr;
                     if (clickgate::open_gate(&cerr))

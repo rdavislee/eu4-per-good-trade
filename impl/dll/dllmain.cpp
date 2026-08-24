@@ -199,16 +199,12 @@ static void run_install(const std::string& logpath) {
         // intent and steering targets, so routing uses the real merchant field rather than the
         // no-merchant even split. Steer indices are engine outgoing-link indices, so build each
         // node's outgoing destination list in the engine's own link order first.
-        std::vector<std::vector<int>> link_targets(f.N);
-        {
-            std::map<std::string, int> fidx;
-            for (int i = 0; i < f.N; i++) fidx[tn.order[i]] = i;
-            for (int i = 0; i < f.N; i++)
-                for (const auto& og : tn.nodes[i].outgoing) {
-                    auto d = fidx.find(og.name);
-                    link_targets[i].push_back(d == fidx.end() ? -1 : d->second);
-                }
-        }
+        // from LIVE MEMORY, never from a file: the steer index indexes the ENGINE's own list,
+        // and the vanilla file disagrees with the loaded mod file on 69 of 80 nodes.
+        int live_links = 0;
+        std::vector<std::vector<int>> link_targets =
+            install::live_link_targets(tn.order, nm.id_to_name, live_links);
+        log << "  link targets from live memory: " << live_links << " links\n";
         std::map<int, std::vector<int>> collect_nodes;
         auto live_st = install::read_standings_field(sim, tn.order, link_targets, collect_nodes);
         {

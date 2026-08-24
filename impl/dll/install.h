@@ -20,6 +20,7 @@
 #include <vector>
 #include "livetrade.h"
 #include "../src/economy.h"
+#include "arrows.h"
 
 namespace install {
 
@@ -113,6 +114,53 @@ inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
         if (a) wrote++;
     }
     return wrote;
+}
+
+
+// Build `link_targets` from LIVE MEMORY -- the engine's own per-definition outgoing lists -- and
+// NEVER from a tradenodes file.
+//
+// This was a real defect. The DLL was reading the vanilla
+// `common/tradenodes/00_tradenodes.txt` while the running game had loaded the MOD's emitted file.
+// Both declare the same 159 undirected edges (test A3 guarantees that), but the emitter reorders
+// declarations and reverses directions: measured, 69 of 80 nodes have a DIFFERENT outgoing list
+// and 77 links are declared the opposite way round. Since a merchant's steer target is stored as
+// an INDEX into the engine's own outgoing list (rec+0xA8), resolving that index through the
+// vanilla file pointed most steering at the wrong destination -- silently, with no error.
+//
+// Reading the engine's own lists removes the whole class of bug: the index is resolved against
+// exactly the array it indexes.
+inline std::vector<std::vector<int>> live_link_targets(
+        const std::vector<std::string>& field_names,
+        const std::map<int, std::string>& id_to_name,
+        int& links_seen) {
+    std::map<std::string, int> fidx;
+    for (int i = 0; i < (int)field_names.size(); i++) fidx[field_names[i]] = i;
+    std::vector<std::vector<int>> lt(field_names.size());
+    links_seen = 0;
+    for (uintptr_t def : arrows::definitions()) {
+        int src_id = livetrade::fi(def + 0xD8);
+        auto sn = id_to_name.find(src_id);
+        if (sn == id_to_name.end()) continue;
+        auto sf = fidx.find(sn->second);
+        if (sf == fidx.end()) continue;
+        uintptr_t ob = livetrade::fq(def + 0x98), oe = livetrade::fq(def + 0xA0);
+        if (!ob || oe <= ob) continue;
+        for (uintptr_t e = ob; e + 0x78 <= oe; e += 0x78) {
+            uintptr_t tdef = livetrade::fq(e + 0x30);
+            int dst_f = -1;
+            if (tdef && livetrade::validate_region(tdef + 0xD8, 4)) {
+                auto dn = id_to_name.find(livetrade::fi(tdef + 0xD8));
+                if (dn != id_to_name.end()) {
+                    auto df = fidx.find(dn->second);
+                    if (df != fidx.end()) dst_f = df->second;
+                }
+            }
+            lt[sf->second].push_back(dst_f);
+            links_seen++;
+        }
+    }
+    return lt;
 }
 
 // Read the engine's live per-node per-country standings into the routing model's form

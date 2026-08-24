@@ -172,6 +172,18 @@ Dumped from the live records at sevilla / genua / english_channel (Castile 1444)
   — genua shows records with trader=1/type=0/capital=0 carrying pf=0 (merchant likely in transit).
   Preserving the engine's own collector set is the reason not to invent shares.
 
+
+## TRAP: never resolve engine indices through a tradenodes FILE
+A merchant's steer target is stored as an **index into the engine's own outgoing-link list**
+(`rec+0xA8`). The DLL was resolving that index through the vanilla
+`common/tradenodes/00_tradenodes.txt`, while the running game had loaded the MOD's emitted file.
+Measured difference between the two files: same 159 undirected edges (test A3 holds), but the
+declaration order differs, **69 of 80 nodes have a different outgoing list**, and **77 links are
+declared the opposite way round**. Resolving through the wrong file pointed most steering at the
+wrong destination, silently. Effect of the fix (live): steer entries resolved 298 -> **425**.
+Rule: read link order, link targets and node identity from LIVE MEMORY
+(`install::live_link_targets`, definitions at `ptr@0x242BE48`), never from a file.
+
 ## Tools
 - Debug-log triples (__FILE__/__LINE__/msg): `re/logmap.txt` (1197 rows). Token table: `re/tokens.txt`
   (6648 rows) — `mov edx,<id>` in serializers gives field-offset ↔ save-key. RTTI is stripped (/GR-).

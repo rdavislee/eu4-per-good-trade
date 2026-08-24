@@ -31,6 +31,7 @@
 #include "livetrade.h"
 #include "install.h"
 #include "resolver.h"
+#include "arrows.h"
 #include "../src/economy.h"
 
 namespace ticklive {
@@ -133,6 +134,31 @@ inline int apply(uintptr_t mgr) {
             g_plan.reach  = o.reach;
             g_plan.phi_w  = o.phi_w;
             g_plan.generation = o.generation;
+            // Redraw the map arrows to the new Phi_w (spec 1.12: Phi_w is the drawn direction).
+            // Runs here because the layer rebuild touches render objects and must be on the
+            // game thread. Field indices -> engine node ids via the authoritative name map.
+            if (livetrade::marker_present("ARROWS")) {
+                std::map<std::string, int> name_to_id;
+                for (auto& [id, nm] : install::g_id_to_name) name_to_id[nm] = id;
+                std::set<std::pair<int, int>> desired;
+                for (auto& [u, v] : o.phi_w) {
+                    if (u >= (int)g_plan.names.size() || v >= (int)g_plan.names.size()) continue;
+                    auto a = name_to_id.find(g_plan.names[u]);
+                    auto b = name_to_id.find(g_plan.names[v]);
+                    if (a == name_to_id.end() || b == name_to_id.end()) continue;
+                    desired.insert({a->second, b->second});
+                }
+                int flipped = arrows::set_directions(desired);
+                bool rebuilt = flipped > 0 ? arrows::rebuild() : true;
+                std::ofstream lg2(g_log, std::ios::app);
+                lg2 << "[arrows] re-oriented " << flipped << " drawn routes, layer rebuild "
+                    << (rebuilt ? "OK" : "SKIPPED (map renderer not captured yet)")
+                    << " | desired=" << desired.size() << " defs=" << arrows::g_defs_seen
+                    << " entries=" << arrows::g_entries_seen
+                    << " fwd=" << arrows::g_matched_fwd << " rev=" << arrows::g_matched_rev
+                    << " unmatched=" << arrows::g_unmatched
+                    << " src=" << arrows::g_def_source << "\n";
+            }
             std::ofstream lg(g_log, std::ios::app);
             lg << "[tick] adopted orientation gen " << o.generation << "\n";
         }

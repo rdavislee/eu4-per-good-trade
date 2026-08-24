@@ -25,6 +25,7 @@
 #include "nodemap.h"
 #include "liveworld.h"
 #include "resolver.h"
+#include "arrows.h"
 #include "tickhook.h"
 #include "ticklive.h"
 #include "../src/attach.h"
@@ -313,6 +314,22 @@ static void run_install(const std::string& logpath) {
                 resolver::g_st.graph = g;
                 resolver::g_st.ready = true;
                 resolver::start(logpath);
+                arrows::g_log = logpath;
+                // warm the definition cache HERE (worker thread): it is a heap scan, far too
+                // slow to run inside the monthly tick (spec H3).
+                if (livetrade::marker_present("DEFDUMP")) arrows::dump_definition_layout(logpath, 3);
+                {
+                    auto defs = arrows::definitions();
+                    log << "  arrow definitions cached: " << defs.size()
+                        << " (" << arrows::g_def_source << ")\n";
+                }
+                {
+                    std::string aerr;
+                    if (arrows::install_capture(&aerr))
+                        log << "  arrow-layer capture installed at eu4.exe+0x10AFA70\n";
+                    else
+                        log << "  arrow-layer capture NOT installed: " << aerr << "\n";
+                }
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))
                     log << "  TICK HOOK installed at eu4.exe+0xB4BF09 (writes land inside the "

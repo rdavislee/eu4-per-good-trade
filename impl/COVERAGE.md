@@ -9,9 +9,9 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 |---|---|---|---|
 | 1.1 | Trade direction = DRAIN (peel → HHI → b-flow → sweep) | **DONE** | `drain.h`; exact parity with the reference, 30/30 graphs |
 | 1.2 | Supply | **DONE** | `field.h` |
-| 1.3 | Demand, owner-agnostic wealth | **DONE** | `field.h`; 2472 provinces, world wealth 10607.40 |
+| 1.3 | Demand, owner-agnostic wealth | **LIVE** | `field.h` + `liveworld.h`: read from the live province table each month (2483 provinces / 10724.7 at 1452 vs 2472 / 10607.4 at 1444) |
 | 1.4 | Market concentration α | **DONE** | `field.h` |
-| 1.5 | Goods without a graph (latent) | **DONE** (solver) | live re-check when a latent good activates → folded into the monthly re-solve |
+| 1.5 | Goods without a graph (latent) | **LIVE** | the monthly re-solve rebuilds the live-good set from live production each month, so a good activating mid-campaign gets its graph that month |
 | 1.6 | Aggregate graph Φ_w | **DONE** | ends {genua, hangzhou} |
 | 1.7 | Merchants: incoming-entry assignability; caravan needs actual steering | **OPEN** | the UI interaction + the caravan condition. Path known: click 0x13CCE80 → dispatch 0x831790 → gate 0x1418E70 → `steer_command` (token 0x2DB9, Execute 0x5DA4F0) |
 | 1.8 | Collection/transfer, per-good eligibility, steering, sinks | **LIVE** | routing reads the real merchant field (1369 power entries, 330 steering in 1448) |
@@ -39,13 +39,14 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | A3 round-trip residue | **PASS** | byte-identical outside the intended diffs |
 | A4 build gate | **PASS** | refuses non-target, passes target |
 | A5 cross-impl orientation | **PASS** | EXACT, 30/30 graphs |
-| B1 ★ map draws Φ_w | **PARTIAL** | arrows ARE Φ_w at load (Tunis→Valencia proven); they do not yet change month over month → needs the monthly re-solve + arrow rebuild (0x10AFA70) |
+| B1 ★ map draws Φ_w | **PARTIAL** | orientation now RE-SOLVES monthly from live memory (~130 ms, off-thread) and genuinely moves: **Φ_w flips 1–3 links/month, 22–46 per-good flips**. Redrawing the arrow layer (0x10AFA70) is the remaining half |
 | B2 ★ node numbers | **PARTIAL** | six fields reconcile via the engine's own identity; per-good views remain |
 | B3 ★ both directions per link | **PARTIAL** | gross directed values written (never negative); second panel is UI work |
 | B4 local == engine's own | **PASS** | local never written |
 | C1–C5 ★ merchant on any link end | **OPEN** | reading the merchant field works; the assignment interaction is the gap |
 | D1–D5 ★ per-good view | **OPEN** | no engine-side "selected good" exists; entirely DLL-owned (arrow layer + widget repopulation) |
-| E1–E4 ★ monthly money | **IN PROGRESS** | pool lands where pass 10 divides it; E1 reconciliation being measured |
+| E1 ★ country income matches the model | **PASS** | **592/592, 589/589, 588/588 countries agree**; worst \|diff\| 0.0015 ducats (the milli-ducat grid). Spec 3.10's identity confirmed live |
+| E2–E4 ★ monthly money | **OPEN** | treasury reconciliation, world total vs a null run, NaN/leak soak |
 | F1 flip honoured end to end | **PARTIAL** | flips now happen monthly and value rebuilds around them; the arrow redraw + the staleness instrumentation remain |
 | F2 razed China | **PASS (harness)** | {genua, gulf_of_siam} |
 | F3–F5 console scenarios | **OPEN** | needs the monthly re-solve |
@@ -58,9 +59,9 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 
 ## Critical path (in order)
 
-1. **Monthly re-solve + arrow rebuild** → unlocks B1, F1, F3, F4, F5, and 1.5's latent-good activation.
+1. ~~Monthly re-solve~~ **DONE** — the orientation moves. **Arrow redraw** (0x10AFA70) remains for B1/F1.
 2. **Merchant on any edge** (§1.7 interaction) → unlocks C1–C5.
-3. **E1–E4** money reconciliation.
+3. ~~E1~~ **PASS**. E2–E4 remain.
 4. **Per-good views** (§1.12) → D1–D5.
 5. **AI wiring** (§3.14) → G1–G3.
 6. **Direction gates + treasure fleets** (§1.10, §1.11) → G4.

@@ -30,9 +30,12 @@
 #include "detour.h"
 #include "livetrade.h"
 #include "install.h"
+#include "resolver.h"
 #include "../src/economy.h"
 
 namespace ticklive {
+
+inline std::atomic<bool> g_verify_pending;
 
 // what the handler needs, precomputed at attach
 struct Plan {
@@ -44,6 +47,7 @@ struct Plan {
     std::vector<std::pair<int, int>> phi_w;                // the installed orientation
     std::vector<std::vector<std::vector<char>>> reach;      // per good, precomputed reachability
     int N = 0;
+    int generation = 0;
     bool ready = false;
 };
 
@@ -53,10 +57,88 @@ inline std::atomic<int> g_ticks{0};
 inline std::atomic<bool> g_inside{false};
 inline detour::Hook g_hook;
 
+// ---------------------------------------------------------------------------------------
+// TEST E1 (spec 2.6 / 3.10): "ledger trade income = powershare_C(n) . collect_pool(n) summed
+// over the country's collecting nodes, to the ducat".
+//
+// We write collect_pool(n) into node+0xB0 and leave the engine's own powershare (rec+0x2C)
+// alone, so the engine's pass 10 computes rec.total = pool x powershare for every collector.
+// The check is therefore: predict Sigma_n pool(n) x pf(C,n) at tick N (right after our write,
+// before pass 10 runs), then at tick N+1 read what pass 10 actually stored in rec.total and
+// compare. Agreement to the milli-ducat proves the engine is dividing the MODEL's economy.
+inline std::map<int, double> g_predicted;     // country index -> predicted Sigma total
+inline int g_predict_tick = -1;
+
+inline void predict_income(const std::vector<livetrade::SimNode>& sim,
+                           const std::vector<std::string>& names,
+                           const std::vector<double>& pool_written_monthly) {
+    g_predicted.clear();
+    auto byname = install::live_by_name(sim);
+    for (int fn = 0; fn < (int)names.size() && fn < (int)pool_written_monthly.size(); fn++) {
+        auto it = byname.find(names[fn]);
+        if (it == byname.end()) continue;
+        double pool = pool_written_monthly[fn];
+        for (auto& rec : livetrade::read_standings(sim[it->second].obj)) {
+            if (rec.power_fraction <= 0) continue;          // engine pays only its collectors
+            g_predicted[livetrade::country_index_of(rec.tag_index)] += pool * rec.power_fraction;
+        }
+    }
+}
+
+// read back what pass 10 actually stored, and report the reconciliation
+inline void verify_income(const std::vector<livetrade::SimNode>& sim, std::ofstream& lg) {
+    if (g_predicted.empty()) return;
+    std::map<int, double> actual;
+    for (auto& s : sim)
+        for (auto& rec : livetrade::read_standings(s.obj)) {
+            if (rec.total == 0) continue;
+            actual[livetrade::country_index_of(rec.tag_index)] += rec.total;
+        }
+    int checked = 0, agree = 0;
+    double worst = 0; int worst_c = -1;
+    for (auto& [c, pred] : g_predicted) {
+        auto a = actual.find(c);
+        double got = (a == actual.end()) ? 0.0 : a->second;
+        double d = std::fabs(got - pred);
+        checked++;
+        if (d <= 0.002 + 0.001 * checked) agree++;       // milli-ducat grid, per-node rounding
+        if (d > worst) { worst = d; worst_c = c; }
+    }
+    lg << "[E1] engine-divided income vs model prediction: " << agree << "/" << checked
+       << " countries agree; worst |diff| = " << worst << " ducats (country #" << worst_c << ")\n";
+    // a few named samples
+    int shown = 0;
+    for (auto& [c, pred] : g_predicted) {
+        auto a = actual.find(c);
+        double got = (a == actual.end()) ? 0.0 : a->second;
+        if (pred < 0.5) continue;
+        lg << "     country#" << c << " predicted=" << pred << " engine=" << got
+           << " diff=" << (got - pred) << "\n";
+        if (++shown >= 6) break;
+    }
+}
+
 // The whole model write, driven from live memory. Called on the game's own thread inside the
 // monthly update. Returns the number of nodes written.
 inline int apply(uintptr_t mgr) {
     if (!g_plan.ready) return 0;
+    // Adopt a newly published orientation, if the background solver produced one since the last
+    // tick. The swap is whole-orientation: a tick never mixes old and new graphs.
+    {
+        resolver::Orientation o = resolver::snapshot();
+        if (!o.graphs.empty() && o.generation != g_plan.generation) {
+            g_plan.graphs = o.graphs;
+            g_plan.slots  = o.slots;
+            g_plan.prices = o.prices;
+            g_plan.reach  = o.reach;
+            g_plan.phi_w  = o.phi_w;
+            g_plan.generation = o.generation;
+            std::ofstream lg(g_log, std::ios::app);
+            lg << "[tick] adopted orientation gen " << o.generation << "\n";
+        }
+    }
+    // ask the background solver to recompute for next month (never blocks the game thread)
+    resolver::request();
     auto sim = livetrade::read_sim_nodes();
     if (sim.empty()) return 0;
     // name the live nodes by engine id (the map was resolved at attach and keyed by stable id)
@@ -89,6 +171,20 @@ inline int apply(uintptr_t mgr) {
     // links first: install_aggregate derives outgoing from what each node actually holds
     install::install_links(sim, g_plan.names, gross, install::g_id_to_name);
     int wrote = install::install_aggregate(sim, g_plan.names, agg);
+
+    // predict this month's per-country division: pool (what we just wrote) x the engine's own
+    // powershare. Recompute the monthly pool exactly as install_aggregate did.
+    {
+        auto byname = install::live_by_name(sim);
+        std::vector<double> pool_monthly(g_plan.N, 0.0);
+        for (int fn = 0; fn < g_plan.N; fn++) {
+            auto it = byname.find(g_plan.names[fn]);
+            if (it == byname.end()) continue;
+            pool_monthly[fn] = livetrade::fi(sim[it->second].obj + 0xB0) / 1000.0;
+        }
+        predict_income(sim, g_plan.names, pool_monthly);
+        g_verify_pending = true;      // the verifier samples rec.total after pass 10 finishes
+    }
     // per-country shares of the pool, so the engine's own pass 10 pays out the model's income.
     // Behind a marker until the engine's own power_fraction semantics are observed (see the
     // standings dump): overwriting it blind could disturb displays that read the same field.
@@ -143,5 +239,29 @@ inline bool install_hook(std::string* err) {
 }
 
 inline void remove_hook() { detour::remove(g_hook); }
+
+// E1 VERIFIER THREAD. The handler runs BEFORE pass 10, so reading rec.total there samples
+// records the engine has already reset for the new month -- which is why an in-handler read
+// reported zeros. The division we want to check happens microseconds after the handler returns,
+// so a worker samples shortly after each tick instead, off the game thread (spec H3).
+inline std::atomic<bool> g_verify_stop{false};
+
+inline void verify_worker() {
+    while (!g_verify_stop) {
+        if (g_verify_pending.exchange(false)) {
+            Sleep(400);                        // let pass 10 finish
+            auto sim = livetrade::read_sim_nodes();
+            if (!sim.empty()) {
+                std::ofstream lg(g_log, std::ios::app);
+                verify_income(sim, lg);
+            }
+        }
+        Sleep(120);
+    }
+}
+
+inline void start_verifier() {
+    CreateThread(nullptr, 0, [](LPVOID) -> DWORD { verify_worker(); return 0; }, nullptr, 0, nullptr);
+}
 
 } // namespace ticklive

@@ -23,6 +23,8 @@
 #include "livetrade.h"
 #include "install.h"
 #include "nodemap.h"
+#include "liveworld.h"
+#include "resolver.h"
 #include "tickhook.h"
 #include "ticklive.h"
 #include "../src/attach.h"
@@ -139,6 +141,41 @@ static void run_install(const std::string& logpath) {
         save::SaveData sd = save::load(save);
         field::Field f = field::build(tn, sm, sd, prices);
         drain::Graph g; g.N = f.N; g.und = tn.und; g.edges_und = tn.edges_und;
+
+        // ---- LIVE WORLD READ (spec 2.2: the DLL reads live memory, never a save) ----
+        // Build the same field from the running game's province table and compare. At the 1444
+        // start the two must agree; from then on only the LIVE field tracks the campaign, which
+        // is what lets the orientation move month to month (F1/F3/F4/F5).
+        {
+            liveworld::WorldRead w = liveworld::read_world();
+            log << "  live world read: " << w.provinces_seen << " provinces seen, " << w.owned
+                << " owned, " << w.with_good << " with a trade good, "
+                << w.sd.current_prices.size() << " prices\n";
+            if (w.ok) {
+                try {
+                    field::Field lf = field::build(tn, sm, w.sd, prices);
+                    log << "    live field: " << lf.rows.size() << " counted provinces, world wealth "
+                        << lf.world_wealth << "  (save field: " << f.rows.size() << " / "
+                        << f.world_wealth << ")\n";
+                    // solve Phi_w on the live field and report its ends
+                    std::vector<double> lb = field::b_aggregate(lf);
+                    std::vector<double> ls(lf.N, 1.0 / lf.N), lc(lf.N);
+                    for (int n = 0; n < lf.N; n++) lc[n] = ls[n] - lb[n];
+                    drain::Result lr = drain::run(g, lb, lf.tie_cost_edge, lf.node_wealth, ls, lc);
+                    std::vector<int> od(lf.N, 0);
+                    for (auto& e : lr.directed) od[e.first]++;
+                    std::string ends;
+                    for (int i = 0; i < lf.N; i++) if (od[i] == 0) ends += tn.order[i] + " ";
+                    log << "    live Phi_w ends { " << ends << "}\n";
+                    if (livetrade::marker_present("LIVEFIELD")) {
+                        f = lf;                     // the live field becomes the model's field
+                        log << "    USING THE LIVE FIELD (orientation now tracks the campaign)\n";
+                    }
+                } catch (const std::exception& e) {
+                    log << "    live field build failed: " << e.what() << "\n";
+                }
+            }
+        }
 
         // NAME the live nodes authoritatively: the engine node-array order is a permutation of
         // both the file order and the save order, so match each live node to a save node by its
@@ -268,6 +305,15 @@ static void run_install(const std::string& logpath) {
                 }
                 ticklive::g_plan.ready = true;
                 std::string herr;
+                // the background solver: statics once, then a re-solve per month
+                resolver::g_st.tn = tn;
+                resolver::g_st.sm = sm;
+                resolver::g_st.base_prices = prices;
+                resolver::g_st.good_slot = good_slot;
+                resolver::g_st.graph = g;
+                resolver::g_st.ready = true;
+                resolver::start(logpath);
+                ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))
                     log << "  TICK HOOK installed at eu4.exe+0xB4BF09 (writes land inside the "
                            "engine's monthly update, before the collector division)\n";

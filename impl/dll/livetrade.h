@@ -447,6 +447,36 @@ inline bool write_power_fraction(uintptr_t rec, double frac) {
     return true;
 }
 
+// ---------------------------------------------------------------------------------------
+// COUNTRIES (spec 2.6's "country trade income", test E1/E2).
+// vector<CCountry*> at G+0x1d08 (count int32 at G+0x1d14). A per-node record's country index is
+// the low 16 bits of the tag dword at rec+0x14. Income: CCountry::AddDelayedIncome(country, 2)
+// adds to the monthly accumulator at country+0x68 and to the ledger object at country+0x760
+// (category 2 = trade) -- 0x338A90, named by its own assert string "AddDelayedIncome, %s, %d, %d".
+inline int country_index_of(int tag_dword) { return tag_dword & 0xFFFF; }
+
+inline uintptr_t game_singleton() {
+    uintptr_t g = 0;
+    safe_read(module_base() + 0x233FE78, &g, 8);
+    return g;
+}
+
+inline uintptr_t country_at(int index) {
+    uintptr_t g = game_singleton();
+    if (!g) return 0;
+    uintptr_t vec = rq(g + 0x1d08);
+    int32_t n = ri(g + 0x1d14);
+    if (!vec || index < 0 || index >= n || n > 8192) return 0;
+    if (!validate_region(vec + (uintptr_t)index * 8, 8)) return 0;
+    return fq(vec + (uintptr_t)index * 8);
+}
+
+// the country's accumulating monthly income (all categories), int32 x1000
+inline double country_income_accum(uintptr_t country) {
+    if (!country || !validate_region(country + 0x68, 4)) return 0;
+    return fi(country + 0x68) / 1000.0;
+}
+
 // One incoming-link record (node+0xF0 vector, stride 0x20). value at +0x10 (signed int32 x1000).
 // The source-node reference offset is what we resolve here by dumping.
 struct InLink { uintptr_t rec; int32_t value_raw; uintptr_t words[4]; };

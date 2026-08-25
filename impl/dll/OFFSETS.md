@@ -238,3 +238,48 @@ swap survives only until a graph rebuild. Also: `CalcSteerPower`'s zeroing loop 
 Outgoing ORDER is load-bearing beyond drawing: `country+0xA8`, the parallel `node+0x88`
 array, and BOTH directions of serialisation are positional. Reordering silently re-points
 every steering merchant in the node.
+
+## CTradeNode complete layout (static RE, agent a5bc7660, 2026-08-24)
+
+Derived from `CTradeNode::Save` `0xB5A5B0` / `Load` `0xB59BB0` plus the ctor `0xB50FA0`,
+move-ctor `0x785DD0` and dtor `0x7860E0` (which walk all 0x138 bytes, so padding and strides are
+proven). Token names came from a static table at RVA **`0x1FD8660`** (6645 entries, stride
+`0x208`, `{i32 id; char name[]}`) copied to `0x242B888` by `0x170D250` -- that table makes any
+future save-format RE in this binary mechanical.
+
+New fields this DLL did not have:
+
+- **`+0x70/0x78/0x80` = `link_enabled`, one BYTE per outgoing link.** Resized to the link count
+  every month by `0xB513B5`. Read UNBOUNDED at `0xB550A4` (the fallback even split). We do not
+  extend `def->outgoing`, so this stays consistent -- but any future code that does must resize
+  `+0x70` as well as `+0x88`.
+- `+0x58/0x60/0x68` an unserialised `vector<T*>` cleared monthly (privateer share).
+- `+0x124` is the calc-order **DFS visited flag**, not a dirty bit (set `0xB4B183`, cleared for
+  all nodes at `0xB4BEC0`).
+- `+0xC8 total` is total trade POWER, `+0xD0`/`+0xD4` are
+  `collector_power_including_pirates` / `collector_power`.
+
+Invariants measured across all 80 nodes of a save -- these are the ones our writes must not break:
+
+| Invariant | Verified | Violated => |
+|---|---|---|
+| `current == local + SUM incoming.value - outgoing` | 80/80 | the user's own rule; a negative total |
+| `outgoing == (1000-retention) * (local + SUM incoming.value) / 1000` | 80/80 | |
+| `value_added_outgoing == outgoing` | 80/80 | splitting them creates or destroys value |
+| `retention` in `[0,1000]` | | `>1000` => **negative `outgoing`** at `0xB52E84` |
+| **`total != 0` whenever any country record exists** | | `0xB52B93` sets `power_fraction = -1`, which yields **negative income in pass 10** |
+| `len(steer_power) >= outgoing link count` | | OOB at `0xB547F9`, `0xB5654D`, `0x13FC24D` |
+
+`steer_power` does **not** always sum to 1000 -- measured sums are {0, 998, 999, 1000}, because
+the normaliser at `0xB55014` truncates. Sum > 1000 duplicates value; sum < 1000 leaks it.
+
+Unchecked accesses confirmed (all read `node+0x88` with no bound test): `0xB547F9` PushValue,
+`0xB5654D`, `0x13FC24D`, `0xB556FF` (UI). And one unchecked **write**: `0xB54FBA` in
+UpdateSteerPower -- its clamp at `0xB54FA5` only fires when `index > count-1`, so an EMPTY
+`steer_power` (count-1 == -1) skips the clamp and writes out of bounds for any index >= 0.
+Carrying slack in `+0x88` (which `outlinks.h` does) defuses all of these.
+
+At our hook `0xB4BF09` the driver does only `for each valid node: 0xB584F0(node)`, and pass 10
+writes NO CTradeNode field. So everything we write survives to the UI and to a save; only
+`+0xB0 current`, `+0xD0`, `+0xE8` and the country records at `+0x18` are consumed afterwards.
+Every scalar is wiped at the START of the next month by `0xB51290`/`0xB51360`.

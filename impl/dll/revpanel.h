@@ -51,7 +51,8 @@ inline bool g_active = false;
 inline uint64_t g_added = 0;
 inline int g_logged = 0;
 inline std::string g_log;
-inline size_t g_last_forward = 0;   // forward count at our last injection
+inline size_t g_last_forward = 0;
+inline int g_measured = 0;      // how many forward anchors we have measured, for the log
 
 using FnInit  = void*  (__fastcall*)(uintptr_t, int, uintptr_t, uintptr_t, void*);
 using FnLookup= uintptr_t (__fastcall*)(uintptr_t, void*);
@@ -102,6 +103,46 @@ constexpr uintptr_t ENGINE_FREE = 0x17394F0; // operator delete(p, n)
 using FnGrow = void (__fastcall*)(void*, void*, void**);
 using FnFree = void (__fastcall*)(void*, size_t);
 
+
+// --- vanilla's own panel placement, read out of 0x13F9CE0 -----------------------------------
+// The engine walks the tessellated ribbon from its START accumulating segment length, and takes
+// as the anchor the FIRST vertex past a fixed threshold:
+//
+//   0x13F9F18  movss  xmm8, [0x1DC184C]      ; the threshold == 25.0f
+//   0x13FA967  addss  xmm9, xmm10            ; accumulate this segment's length
+//   0x13FA96C  test   r14b, r14b             ; already captured?
+//   0x13FA975  comiss xmm9, xmm8             ; accumulated > 25.0 ?
+//   0x13FA979  jbe    ...                    ; no -> keep walking
+//   0x13FA97F  mov    r14b, 1                ; yes -> capture this vertex pair
+//
+// So the distance is ABSOLUTE, not a fraction of the link: every vanilla panel sits the same
+// arc length from the node it belongs to, however long or short the link is. That is exactly why
+// mirroring the forward panel's distance looked wrong -- on gulf_of_st_lawrence -> north_sea the
+// forward panel is far from gulf_of_st_lawrence, so the mirror put the reverse panel that same
+// long way from north_sea's end, i.e. nearly on top of north_sea.
+//
+// Applying the same rule from the FAR end gives the reverse panel the same 25.0 spacing from its
+// own node. ARC_LEN is left as the measured constant so the log can confirm it against what the
+// engine actually did to the forward views.
+constexpr double ARC_LEN = 25.0;
+
+// walk `p3` (x,y,z triples) from one end, return the index of the first vertex past ARC_LEN
+inline int arc_index(const float* p3, int np, bool from_end) {
+    auto seg = [&](int i) {
+        double dx = p3[i * 3 + 0] - p3[(i - 1) * 3 + 0];
+        double dy = p3[i * 3 + 1] - p3[(i - 1) * 3 + 1];
+        double dz = p3[i * 3 + 2] - p3[(i - 1) * 3 + 2];
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    };
+    double acc = 0;
+    if (!from_end) {
+        for (int i = 1; i < np; i++) { acc += seg(i); if (acc > ARC_LEN) return i; }
+        return np - 1;
+    }
+    for (int i = np - 1; i >= 1; i--) { acc += seg(i); if (acc > ARC_LEN) return i - 1; }
+    return 0;
+}
+
 inline int add_reverse(std::ofstream* lg) {
     uintptr_t ctl = controller();
     if (!ctl) return -1;
@@ -137,27 +178,79 @@ inline int add_reverse(std::ofstream* lg) {
         uintptr_t nlv = make(type);
         if (!nlv) continue;
 
-        // Let VANILLA place it. 0x13F9CE0 walks the ribbon a FIXED arc length from its START,
-        // applies a side offset, and REJECTS an anchor that lands too close to one already in the
-        // scratch vector (0x13FAB80..0x13FACED). Computing a position ourselves -- mirroring the
-        // forward panel's distance -- looks wrong on short or lopsided links (gulf_of_st_lawrence
-        // -> north_sea ended up nearly on top of north_sea). So instead REVERSE the ribbon, run the
-        // engine's own placement, then put the ribbon back: the anchor is then chosen from the far
-        // end by exactly the algorithm that placed the forward panels.
+        // Build the ribbon from the FORWARD polyline, unmodified. The strip is offset to one
+        // side of the path, so reversing the points (tried, reverted) flips the offset side and
+        // the engine draws a SECOND, visibly displaced ribbon with its own arrow chevrons all
+        // over the map. Fed the forward points the geometry lands exactly on top of the existing
+        // ribbon and is invisible -- the reverse view contributes only its panel.
+        init(nlv, 0, srcdef, entry, &scratch);
+
+        // PLACE IT THE WAY VANILLA PLACED THE FORWARD ONE, mirrored to the other end.
         //
-        // The scratch vector is shared across the whole pass so our anchors also de-duplicate
-        // against each other, the way vanilla's do within one rebuild.
+        // Measured, not assumed: dumping where the engine actually put six forward anchors
+        // relative to their own ribbons gave
+        //     np=6 len=223.7  anchor at arc 16.2  off-ribbon 21.3
+        //     np=6 len=542.0  anchor at arc 50.8  off-ribbon 23.0
+        //     np=9 len=445.4  anchor at arc 20.3  off-ribbon 24.3
+        //     np=5 len=538.8  anchor at arc 39.7  off-ribbon 51.6
+        // -- so the anchor is NOT a point on the ribbon (it sits 21-52 units off it), and its
+        // arc distance is not a fixed constant either. Reading 0x13F9CE0's threshold as "the
+        // panel is at 25.0 arc length" was wrong; that constant only picks the ribbon vertex the
+        // offset is measured FROM.
+        //
+        // What is stable is the anchor's position RELATIVE TO ITS OWN NODE. So take the forward
+        // anchor's offset from the ribbon start, express it in the local frame there
+        // (along-ribbon, across-ribbon), and rebuild it in the local frame at the far end. The
+        // reverse panel then sits at the same distance from its node, with the same sideways
+        // offset, as the forward panel does from its own -- which is what "select its distance
+        // the same way the outgoing panels do" means. Because each frame is handed off its own
+        // outgoing direction, the two panels land on opposite sides of the shared ribbon and
+        // cannot overlap each other.
         {
-            uintptr_t qb = livetrade::fq(entry + 0x58), qe = livetrade::fq(entry + 0x60);
-            size_t qn = (qb && qe > qb) ? (size_t)((qe - qb) / 8) : 0;
-            if (qn >= 2 && livetrade::validate_region(qb, qe - qb)) {
-                uint64_t* q = (uint64_t*)qb;                    // float2 points, 8 bytes each
-                for (size_t i = 0, j = qn - 1; i < j; i++, j--) std::swap(q[i], q[j]);
-                init(nlv, 0, srcdef, entry, &scratch);
-                for (size_t i = 0, j = qn - 1; i < j; i++, j--) std::swap(q[i], q[j]);   // restore
-            } else {
-                init(nlv, 0, srcdef, entry, &scratch);
+            uintptr_t pb = livetrade::fq(nlv + LV_POLY), pe = livetrade::fq(nlv + LV_POLY + 8);
+            int np = (pb && pe > pb) ? (int)((pe - pb) / 12) : 0;
+            if (np >= 2 && livetrade::validate_region(pb, (size_t)np * 12)) {
+                const float* p3 = (const float*)pb;
+                const float* fa = (const float*)(lv + LV_ANCHOR);
+                int j  = arc_index(p3, np, /*from_end=*/false);   // reference vertex, source end
+                int ri = arc_index(p3, np, /*from_end=*/true);    // reference vertex, target end
+                // outgoing direction at each end, in the XZ plane
+                double d0x = p3[j * 3 + 0] - p3[0], d0z = p3[j * 3 + 2] - p3[2];
+                double d1x = p3[ri * 3 + 0] - p3[(np - 1) * 3 + 0],
+                       d1z = p3[ri * 3 + 2] - p3[(np - 1) * 3 + 2];
+                double n0 = std::sqrt(d0x * d0x + d0z * d0z), n1 = std::sqrt(d1x * d1x + d1z * d1z);
+                if (n0 > 1e-4 && n1 > 1e-4) {
+                    d0x /= n0; d0z /= n0; d1x /= n1; d1z /= n1;
+                    double vx = fa[0] - p3[0], vz = fa[2] - p3[2];
+                    double along  = vx * d0x + vz * d0z;          // component along the ribbon
+                    double across = -vx * d0z + vz * d0x;         // component across it
+                    *(float*)(nlv + LV_ANCHOR + 0) =
+                        (float)(p3[(np - 1) * 3 + 0] + along * d1x - across * d1z);
+                    *(float*)(nlv + LV_ANCHOR + 8) =
+                        (float)(p3[(np - 1) * 3 + 2] + along * d1z + across * d1x);
+                    if (lg && g_measured < 6) {
+                        g_measured++;
+                        *lg << "  [revpanel/place] np=" << np << " forward offset from its node: "
+                            << "along=" << along << " across=" << across
+                            << " -> mirrored to the far end" << (char)10;
+                    }
+                }
             }
+        }
+
+        // OWN THE PANEL FROM THE TARGET NODE'S SIDE.
+        //
+        // The reverse view was built with the forward view's source definition, so the renderer
+        // keyed everything -- culling included -- on the SOURCE node. That is why a reverse panel
+        // only appeared when its forward twin did, and why gulf_of_st_lawrence -> north_sea never
+        // showed one: the two ends cannot be on screen together, so the source is always culled.
+        // The reverse panel belongs to the TARGET node, so point it there. entry+0x30 is the
+        // resolved target definition (Link() writes it at 0xB697AD; NULL if the link never
+        // resolved, hence the guard).
+        {
+            uintptr_t tgtdef = livetrade::fq(entry + 0x30);
+            if (tgtdef && livetrade::validate_region(tgtdef + 0xD8, 4))
+                *(uintptr_t*)(nlv + LV_SRCDEF) = tgtdef;
         }
 
         // append through the ENGINE's own vector, never by repointing it

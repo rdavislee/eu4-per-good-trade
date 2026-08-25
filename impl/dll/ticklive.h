@@ -306,6 +306,84 @@ inline int apply(uintptr_t mgr) {
             econ::route(g_plan.N, g_plan.graphs[k], inj, st, collect_nodes, 0.05, R));
         inj_field.push_back(std::move(inj));
     }
+
+    // ONE-OFF DIAGNOSTIC: the collect/transfer split at north_sea, per good.
+    //
+    // Spec 1.8 says a country's power counts toward P_transfer(g) ONLY if it steers g here or
+    // collects at a node reachable from here in g's graph; anything else is INERT for that good
+    // and is excluded from BOTH sums. For livestock the whole reachable set from north_sea is
+    // empty New World nodes, so every European standing should be inert, P_transfer should be 0,
+    // and collected_share should be 1 -- Scotland (whose trade capital is north_sea) collects all
+    // of it and nothing crosses the Atlantic. Print the actual numbers instead of reasoning about
+    // them, including which countries land in which bucket.
+    static int g_split_ticks = 0;
+    if (g_split_ticks < 6) {
+        g_split_ticks++;
+        std::ofstream lgs(g_log, std::ios::app);
+        int ns = -1;
+        for (int i = 0; i < (int)g_plan.names.size(); i++)
+            if (g_plan.names[i] == "north_sea") { ns = i; break; }
+        if (ns >= 0 && ns < (int)st.size()) {
+            lgs << "  [split] tick " << g_split_ticks
+                << " north_sea standings (power, collects, steer_to):" << (char)10;
+            for (auto& e : st[ns].entries) {
+                if (e.power <= 0) continue;
+                std::string tgt = "-";
+                if (e.steer_to >= 0 && e.steer_to < (int)g_plan.names.size())
+                    tgt = g_plan.names[e.steer_to];
+                lgs << "     country#" << e.country << " power=" << e.power
+                      << " collects=" << (e.collects ? "YES" : "no")
+                    << " steers_to=" << tgt << (char)10;
+            }
+            for (size_t k = 0; k < per_good.size() && k < g_plan.graphs.size(); k++) {
+                const auto& F = per_good[k];
+                if (ns >= (int)F.p_collect.size()) continue;
+                double v = F.value[ns], pc = F.p_collect[ns], pt = F.p_transfer[ns];
+                if (v <= 0 && pc <= 0 && pt <= 0) continue;
+                std::string gname = k < g_plan.good_names.size() ? g_plan.good_names[k] : "?";
+                lgs << "     [" << gname << "] value=" << v
+                      << " P_collect=" << pc << " P_transfer=" << pt
+                      << " collected_share=" << F.collected_share[ns]
+                      << " outgoing=" << F.outgoing[ns];
+                // WHO is transfer-eligible here, and why. Replicates econ::route's own test so
+                // the answer comes from the same inputs the router used.
+                if (F.outgoing[ns] > 0.01 && k < g_plan.reach.size()) {
+                    const auto& R = g_plan.reach[k];
+                    std::vector<int> outs_here;
+                    for (auto& e : g_plan.graphs[k]) if (e.first == ns) outs_here.push_back(e.second);
+                    std::string arcs;
+                    for (int m : outs_here)
+                        arcs += (m < (int)g_plan.names.size() ? g_plan.names[m] : "?") + " ";
+                    lgs << "        out-arcs: " << arcs << (char)10;
+                    for (auto& e : st[ns].entries) {
+                        if (e.power <= 0 || e.collects) continue;
+                        bool steers = false;
+                        for (int m : outs_here) if (m == e.steer_to) { steers = true; break; }
+                        std::string why;
+                        if (steers) why = "steers";
+                        else {
+                            auto cit = collect_nodes.find(e.country);
+                            if (cit != collect_nodes.end())
+                                for (int H : cit->second)
+                                    if (H >= 0 && H < (int)R.size() && ns < (int)R.size() && R[ns][H]) {
+                                        why = "collects at " +
+                                              (H < (int)g_plan.names.size() ? g_plan.names[H] : "?");
+                                        break;
+                                    }
+                        }
+                        if (!why.empty())
+                            lgs << "        ELIGIBLE country#" << e.country
+                                << " power=" << e.power << " (" << why << ")" << (char)10;
+                    }
+                }
+                auto it = F.flow[ns].begin();
+                for (; it != F.flow[ns].end(); ++it)
+                    if (it->second > 0 && it->first < (int)g_plan.names.size())
+                        lgs << "  -> " << g_plan.names[it->first] << "=" << it->second;
+                lgs << (char)10;
+            }
+        }
+    }
     // SWAP-ON-VIEW (spec 1.12): in a per-good view the SAME fields carry that good's numbers
     // alone, so the aggregate is taken over just the selected good.
     viewmode::poll(g_plan.good_names);

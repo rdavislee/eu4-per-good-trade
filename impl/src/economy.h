@@ -146,7 +146,22 @@ inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
             if (!steers_g) {
                 auto it = collect_nodes.find(s.country);
                 if (it != collect_nodes.end())
-                    for (int H : it->second) if (H >= 0 && H < N && R[n][H]) { reaches_collector = true; break; }
+                    for (int H : it->second) {
+                        // H == n is NOT downstream. reach_sets marks every node reachable from
+                        // itself (R[s][s] = 1), so without this guard a country that collects AT n
+                        // counts as transferring value AWAY from n -- the very node it collects at.
+                        // Spec 1.8 means a node reachable from n in g's graph, somewhere the value
+                        // would actually arrive; collecting here is what P_collect is for, and the
+                        // `s.collects` branch above has already taken that case.
+                        //
+                        // Measured cost of the missing guard, at north_sea on a 1444 start: every
+                        // one of the thirteen contributors to P_transfer qualified as "collects at
+                        // north_sea", putting P_transfer at 0.33 against a P_collect of 0.017. The
+                        // collected share fell to 0.049 and 46.9 of 49.4 livestock left the node --
+                        // all of it to st_lawrence, the only out-arc and an empty node in 1444.
+                        if (H == n) continue;
+                        if (H >= 0 && H < N && R[n][H]) { reaches_collector = true; break; }
+                    }
             }
             if (steers_g || reaches_collector) pt += s.power;   // else inert for g
         }

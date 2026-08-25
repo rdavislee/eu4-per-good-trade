@@ -32,6 +32,7 @@
 #include "tickhook.h"
 #include "alledges.h"
 #include "revpanel.h"
+#include "flagfix.h"
 #include "ticklive.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
@@ -387,7 +388,15 @@ static void run_install(const std::string& logpath) {
                     if (revpanel::install(&rerr))
                         log << "  REVERSE MAP PANELS installed (hook on the layer rebuild)\n";
                     else
-                        log << "  reverse panels NOT installed: " << rerr << "\n";
+                        log << "  reverse panels NOT installed: " << rerr << "" << (char)10;
+                    // The reverse panels must not display the engine's merchant shields: a view
+                    // the engine cannot index collapses onto the node's link #0 and wears that
+                    // link's merchants (see flagfix.h).
+                    std::string ferr;
+                    if (flagfix::install(&ferr))
+                        log << "  panel flag row corrected for reverse views" << (char)10;
+                    else
+                        log << "  panel flag fix NOT installed: " << ferr << "" << (char)10;
                 }
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))

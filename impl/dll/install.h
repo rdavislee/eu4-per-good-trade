@@ -206,7 +206,19 @@ inline std::vector<econ::NodeStandings> read_standings_field(
         for (auto& c : livetrade::read_standings(sim[it->second].obj)) {
             econ::Standing s{};
             s.country = c.tag_index;
-            double capped = std::max(0.0, c.max_pow * c.max_demand / 1000.0);
+            // UNITS. read_standings already divides every fixed-point field by 1000, so
+            // c.max_demand is a FRACTION (raw 0x3E8 == 1.0) and c.max_pow is in ducats.
+            // Dividing their product by 1000 a second time made every capped power 1000x
+            // too small. Measured at north_sea: collectors came out at 0.002-0.07 while
+            // the one country whose power arrives through t_in - t_out (which is NOT
+            // capped) sat at 9.9, so P_collect was 0.37 against a P_transfer of 9.99 and
+            // collected_share collapsed to 0.036 -- Scotland held a collecting merchant at
+            // its own home node and still saw ~96% of the value leave.
+            //
+            // The units are pinned independently: the field map verifies node+0xC8 total
+            // == SUM of the per-country val on 77 of 80 nodes, so val is the per-country
+            // trade power in the same ducat units the cap must be in.
+            double capped = std::max(0.0, c.max_pow * c.max_demand);
             s.power = std::min(c.val, capped > 0 ? capped : c.val) + c.t_in - c.t_out;
             if (s.power < 0) s.power = 0;
             s.collects = c.has_trader ? (c.type == 0) : c.has_capital;

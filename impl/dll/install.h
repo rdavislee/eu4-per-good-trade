@@ -94,10 +94,23 @@ inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
         // forwards, outgoing/value, which is exactly 1 - collected_share aggregated over goods.
         // Applying that fraction to what the node actually holds here reproduces the model's
         // economy in the engine's own units and keeps the identity non-negative by construction.
+        // The SPLIT the node applies to everything it holds: the fraction forwarded, which is
+        // 1 - collected_share aggregated over goods. Using a fraction rather than the model's
+        // absolute outgoing keeps the identity in the ENGINE's units, where `local` is the
+        // engine's own and differs from the model's inject by the recorded reference-side gap
+        // (spec 2.8). Applying the split to what the node actually holds reproduces the model's
+        // economy without importing that gap, and keeps total >= 0 by construction.
         double model_value = agg[fn].total;                       // annual, model units
         double fwd = model_value > 0 ? agg[fn].outgoing / model_value : 0.0;
         if (fwd < 0) fwd = 0; if (fwd > 1) fwd = 1;
-        double engine_local = sim[it->second].local_value;        // monthly, engine's own
+        // In a PER-GOOD view `local` is REPLACED below by the selected good's inject, so `held`
+        // must be sized against the value that will actually be there when the UI recomputes
+        // total = local + Sigma incoming - outgoing. Sizing it against the engine's all-goods
+        // local and then writing a much smaller per-good local drove `total` negative -- which
+        // is exactly what showed up on baltic_sea and novgorod in the wool view, and what spec
+        // 1.12 forbids ever displaying.
+        double engine_local = write_local ? (agg[fn].local / 12.0)
+                                          : sim[it->second].local_value;   // monthly
         double engine_in = 0;
         for (auto& l : livetrade::read_incoming(sim[it->second].obj)) engine_in += l.value_raw / 1000.0;
         double held = engine_local + engine_in;                   // monthly
@@ -105,6 +118,12 @@ inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
         if (out < 0) out = 0;
         if (out > held) out = held;                               // total >= 0 always (spec 1.12)
         livetrade::write_outgoing(node, out);
+        // value_added_outgoing. The outgoing TOOLTIP computes each destination's ducats as
+        //     steer_permille[k] * node+0xC0 / 1e6
+        // so leaving +0xC0 at the engine's value made the per-destination lines sum to the
+        // ENGINE's outgoing while the header showed ours. The engine's own invariant is
+        // +0xC0 == +0xBC; keep it.
+        livetrade::write_fixed(node, 0xC0, out);
         // the collectible pool is what is NOT forwarded (spec 2.6): pass 10 divides this
         bool a = livetrade::write_pool(node, held - out);
         // In the AGGREGATE view local is never written: test B4 requires it to stay the engine's

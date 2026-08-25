@@ -256,6 +256,25 @@ inline std::map<std::pair<int, int>, double> net_link_flows(
     return net;
 }
 
+// DIRECTED flow WITHOUT the steering bonus.
+//
+// route() is deliberately asymmetric: `F.outgoing[n] = value - collected` excludes the steering
+// bonus, while `F.incoming[m] += f + b` includes it -- the bonus is value the steerer pulls in at
+// the receiving end, not value the sender parted with. So the two ends of one directed edge carry
+// slightly different figures, and the write-back must use the matching one at each end or the
+// node identity stops closing:
+//   Sigma_over_edges away(n->m)      == agg.outgoing   (use THIS, no bonus)
+//   Sigma_over_edges toward(m->n)+b  == agg.incoming   (use gross_link_flows, with bonus)
+// Mixing them is what put "11" on a map panel beside "3" in the node window.
+inline std::map<std::pair<int, int>, double> directed_flows_no_bonus(
+        const std::vector<GoodFlow>& per_good) {
+    std::map<std::pair<int, int>, double> out;
+    for (auto& F : per_good)
+        for (int u = 0; u < (int)F.flow.size(); u++)
+            for (auto& [v, val] : F.flow[u]) out[{u, v}] += val;
+    return out;
+}
+
 inline std::vector<NodeAggregate> aggregate(int N, const std::vector<GoodFlow>& per_good,
                                             const std::vector<std::vector<double>>& inject) {
     std::vector<NodeAggregate> A(N);

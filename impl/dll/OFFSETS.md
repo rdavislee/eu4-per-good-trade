@@ -200,3 +200,41 @@ Note `detour.h` is immune: it jumps via `jmp [rip+0]; dq target`, an absolute 64
   (6648 rows) — `mov edx,<id>` in serializers gives field-offset ↔ save-key. RTTI is stripped (/GR-).
 - Ghidra project: `C:\re\proj` (eu4 imported+analysed). `impl/tools/disasm.py`, `scratchpad/dumpfn.py`,
   `scratchpad/callxref.py`, `scratchpad/eu4re.py`.
+
+## Trade field map (static RE, agent a112f303, 2026-08-24)
+
+Confirms and corrects the offsets this DLL already uses. Two corrections worth keeping:
+
+- **`definition+0xD8` is 1-BASED.** It is the definition's DB index, and the engine indexes
+  `CTradeNode[def+0xD8]` directly (`0xB54C01`: `test ecx,ecx; jle ->null`), because slot 0 holds
+  the node built from the `"Null"` sentinel definition. In vanilla it runs 1..80 and
+  `node+0x120 == def+0xD8`. `incoming.from` in a save is the file position **+ 1**.
+- **`Castile1444_12_22.eu4` is NOT vanilla** -- its meta names `mod/pgt_permute.mod` (probe B2,
+  reversed declaration order), so its 80 nodes are in reverse `00_tradenodes.txt` order. Any
+  ordering claim must use `VANILLA_start.eu4`.
+
+Structure sizes: definition **0xE8**, outgoing link entry **0x78**, per-country record **0xC0**,
+`CTradeNode` **0x138**.
+
+Link entry (0x78): `+0x10` std::string name, `+0x30` resolved target def*, `+0x38` ordinal (its
+own position at parse time), `+0x40` `path` intrusive list, **`+0x58/0x60/0x68` `control`
+vector<float2>** (the ribbon polyline -- display-only), `+0x70` unknown, never set by the parser.
+
+Country record (0xC0): `+0xA8` `steer_power` is a **bare 0-based position into
+`def->outgoing`**, `+0xAC` type (0 collect / 1 steer). Canonical setter is
+**`0xB5E290 SetTrader(this, bool hasTrader, u8 type)`** -- writes `+0xAC` and `+0xAE` together.
+`+0xA8` readers use SIGNED compares with NO lower bound: a negative ordinal at `0xB54F8F`
+zero-extends into `rax=0xFFFFFFFF` and writes ~16GB past `node+0x88`. Never write a negative;
+a node with zero outgoing links must have `+0xAC == 0`.
+
+Vector ownership (matters to `outlinks.h`): `def->outgoing` and `def->incoming` are real MSVC
+`std::vector`s on the game's CRT heap. Growth (`0xB6AB50`, `0xCC220`) and teardown call
+`operator delete` on OUR buffer if we repointed it. `CTradeSystem::Init` (`0xB4C620`) clears
+every `incoming` (`end = begin`) and refills it via `Link()` (`0xB69710`), so an `incoming`
+swap survives only until a graph rebuild. Also: `CalcSteerPower`'s zeroing loop iterates
+`def->outgoing`'s count but writes into `node+0x88` -- enlarging outgoing without resizing
+`node+0x88` is an immediate heap overflow. (`outlinks.h` already resizes both, with slack.)
+
+Outgoing ORDER is load-bearing beyond drawing: `country+0xA8`, the parallel `node+0x88`
+array, and BOTH directions of serialisation are positional. Reordering silently re-points
+every steering merchant in the node.

@@ -344,6 +344,35 @@ inline int set_directions(const std::set<std::pair<int, int>>& desired) {
 
 // Rebuild the whole layer. MUST run on the game thread (it destroys and creates render objects),
 // so call it from the tick hook, never from a worker.
+// THE ENGINE'S OWN "trade routes are stale" FLAG.
+//
+// BuildTradeRouteLayer is called once at map init -- before we inject -- and then never again
+// during play, which is why the capture detour at 0x10AFA70 sat cold and every monthly
+// re-orientation was invisible on the map while the node window's tabs updated correctly.
+// The map update routine rebuilds the layer when either of two flags is set:
+//
+//   010A6F26  cmp byte ptr [rdx+0x7484], 0
+//   010A6F2D  jne 0x10A6F38                    ; -> rebuild
+//   010A6F2F  cmp byte ptr [rip -> 0233FE9D], 0
+//   010A6F36  je  0x10A6F47                    ; zero -> skip
+//   010A6F38  mov rcx, rdi                     ; rdi = the map renderer
+//   010A6F3B  call 0x10AFA70                   ; REBUILD
+//
+// So a single byte asks the engine to regenerate the ribbons from the definition graph -- which
+// relink.h has already reoriented. It also hands us the map renderer through the capture detour,
+// after which rebuild() can drive the layer directly.
+constexpr uintptr_t ROUTE_DIRTY = 0x233FE9D;
+
+inline void mark_dirty() {
+    uintptr_t at = livetrade::module_base() + ROUTE_DIRTY;
+    if (!livetrade::validate_region(at, 1)) return;
+    DWORD old = 0;
+    if (VirtualProtect((void*)at, 1, PAGE_READWRITE, &old)) {
+        *(volatile uint8_t*)at = 1;
+        VirtualProtect((void*)at, 1, old, &old);
+    }
+}
+
 inline bool rebuild() {
     uintptr_t mr = g_map_renderer.load();
     if (!mr) return false;

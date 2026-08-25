@@ -35,6 +35,10 @@
 
 namespace relink {
 
+// merchants forced from steer to collect because their node has no outgoing link
+// under the installed orientation (a sink). Counted separately from index clamps.
+inline uint64_t g_demoted = 0;
+
 constexpr int D_NAME      = 0x10;   // inline std::string (size +0x20, cap +0x28)
 constexpr int D_IN_BEGIN  = 0x80;   // incoming {begin,end,cap_end}, stride 8 (definition ptrs)
 constexpr int D_IN_END    = 0x88;
@@ -209,6 +213,21 @@ inline int clamp_steer_indices(const std::vector<livetrade::SimNode>& sim) {
         for (int i = 0; i < cnt; i++) {
             uintptr_t rec = base + (uintptr_t)i * 0xC0;
             int32_t idx = livetrade::fi(rec + 0xA8);
+            // A node with NO outgoing link under the active graph is a sink for it. Clamping the
+            // steer index to 0 there is still out of range -- an empty list has no element 0 --
+            // and the trade pass indexes it unguarded, which is an access violation at 0xB5654D
+            // (observed the first time a per-good view made `lubeck` a sink). Nobody can steer
+            // from a sink, so the record is demoted to COLLECT (+0xAC, 0 = collect / 1 = steer),
+            // which is also what spec 1.8 says a sink does: it forwards nothing.
+            if (n == 0) {
+                DWORD old = 0;
+                if (VirtualProtect((void*)(rec + 0xA8), 8, PAGE_READWRITE, &old)) {
+                    if (idx != 0) *(int32_t*)(rec + 0xA8) = 0;
+                    if (*(uint8_t*)(rec + 0xAC) != 0) { *(uint8_t*)(rec + 0xAC) = 0; g_demoted++; }
+                    VirtualProtect((void*)(rec + 0xA8), 8, old, &old);
+                }
+                continue;
+            }
             if (idx >= n || idx < 0) {
                 DWORD old = 0;
                 if (VirtualProtect((void*)(rec + 0xA8), 4, PAGE_READWRITE, &old)) {
@@ -387,8 +406,49 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
     engine_recompute_order_keys();
     engine_rebuild_calc_order();
 
+    // ---- 6. EVERY INCIDENT LINK ALSO APPEARS IN THE OUTGOING LIST (spec 1.7, 1.12) -----------
+    // The node window fills its listboxes from the DEFINITION lists, and `steer_command` names a
+    // link by its index in the node's own OUTGOING list. So a link drawn INTO a node is neither
+    // shown as an outgoing panel nor nameable as a steer target -- exactly the end the per-good
+    // model needs assignable, since the per-good graphs disagree with Phi_w on ~45% of edge-goods
+    // and a link drawn n<-m routinely still carries goods n->m.
+    //
+    // Appending the missing links here -- AFTER the two fixups above -- gives every incident link
+    // an outgoing panel and a steer index, through vanilla's own widgets and command path. The
+    // ORDERING is the whole trick: 0xB67D20's DFS is an unbounded recursion over outgoing links,
+    // so it must see only the acyclic Phi_w graph. It already has -- it ran at step 5. The
+    // incoming lists were rebuilt at step 3, before the append, so nothing duplicates there.
+    int extra = 0;
+    if (livetrade::marker_present("ALLOUT")) {
+        for (auto& [idx, di] : g_defs) {
+            if (idx == 0) continue;
+            std::vector<uint8_t>& stable = g_out_storage[idx];
+            const std::vector<int>& mine = per_node[idx];
+            std::set<int> have(mine.begin(), mine.end());
+            uintptr_t base = (uintptr_t)stable.data();
+            size_t k = mine.size();
+            for (int li : di.incident) {
+                if (have.count(li)) continue;
+                if ((k + 1) * E_STRIDE > stable.size()) break;
+                const Link& L = g_links[li];
+                int other = (L.a == idx) ? L.b : L.a;
+                auto fd = g_defs.find(other);
+                if (fd == g_defs.end() || !fd->second.obj) continue;
+                uintptr_t e = base + k * E_STRIDE;
+                memcpy((void*)e, L.entry.data(), E_STRIDE);
+                *(uintptr_t*)(e + E_TARGET) = fd->second.obj;
+                write_str(e + E_NAME, fd->second.name);
+                *(int32_t*)(e + 0x38) = (int32_t)k;     // its own index -- steer_command uses it
+                k++; extra++;
+            }
+            if (k > mine.size())
+                set_vector(di.obj, D_OUT_BEGIN, base, base + k * E_STRIDE, base + k * E_STRIDE);
+        }
+    }
+
     log << "  [relink] applied: " << reversed_count << " links reversed, "
-        << clamped << " steer indices clamped, calc order rebuilt\n";
+        << clamped << " steer clamped, " << g_demoted << " demoted, "
+        << extra << " reverse ends added as outgoing panels\n";;
     return reversed_count;
 }
 

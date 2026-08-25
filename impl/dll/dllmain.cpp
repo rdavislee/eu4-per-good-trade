@@ -30,6 +30,8 @@
 #include "caravan.h"
 #include "money.h"
 #include "tickhook.h"
+#include "alledges.h"
+#include "revpanel.h"
 #include "ticklive.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
@@ -356,6 +358,34 @@ static void run_install(const std::string& logpath) {
                         log << "  arrow-layer capture installed at eu4.exe+0x10AFA70\n";
                     else
                         log << "  arrow-layer capture NOT installed: " << aerr << "\n";
+                }
+                {
+                    // The per-frame seam: hands us the map renderer on frame one (the layer
+                    // builder itself runs only at map init, long before we attach) and polls the
+                    // console queue even while the game is paused.
+                    std::string ferr;
+                    frame::g_view_poll = &ticklive::frame_view_poll;
+                    if (frame::install(logpath, &ferr))
+                        log << "  FRAME HOOK installed at eu4.exe+0x10A6EC0 (map renderer capture + console while paused)\n";
+                    else
+                        log << "  frame hook NOT installed: " << ferr << "\n";
+                }
+                if (livetrade::marker_present("ALLEDGES")) {
+                    alledges::g_log = logpath;
+                    std::string aeerr;
+                    if (alledges::install(&aeerr))
+                        log << "  ALL-EDGES node view installed (every incident link also appears "
+                               "as an outgoing panel\n";
+                    else
+                        log << "  all-edges NOT installed: " << aeerr << "\n";
+                }
+                if (livetrade::marker_present("REVPANEL")) {
+                    revpanel::g_log = logpath;
+                    std::string rerr;
+                    if (revpanel::install(&rerr))
+                        log << "  REVERSE MAP PANELS installed (hook on the layer rebuild)\n";
+                    else
+                        log << "  reverse panels NOT installed: " << rerr << "\n";
                 }
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))

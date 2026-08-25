@@ -42,6 +42,49 @@ inline uint8_t* alloc_exec(size_t n) {
     return (uint8_t*)VirtualAlloc(nullptr, n, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 }
 
+// Allocate executable memory WITHIN rel32 range of `site`. A plain VirtualAlloc(nullptr, ...) can
+// land anywhere in the 64-bit address space; when a 5-byte rel32 call is then repointed at it, the
+// displacement truncates and execution jumps into garbage. That is not hypothetical -- it killed
+// EU4 with an access violation at its own image base (see OFFSETS.md's rel32 trap). Every
+// call-site redirect in this DLL allocates its thunk through here.
+inline uint8_t* alloc_near(uintptr_t site, size_t n) {
+    SYSTEM_INFO si{};
+    GetSystemInfo(&si);
+    const uintptr_t gran = si.dwAllocationGranularity ? si.dwAllocationGranularity : 0x10000;
+    for (int64_t d = (int64_t)gran; d < 0x60000000; d += (int64_t)gran) {
+        for (int dir = 0; dir < 2; dir++) {
+            uintptr_t probe = (dir ? (site - (uintptr_t)d) : (site + (uintptr_t)d)) & ~(uintptr_t)(gran - 1);
+            if (!probe) continue;
+            uint8_t* p = (uint8_t*)VirtualAlloc((void*)probe, n, MEM_COMMIT | MEM_RESERVE,
+                                                PAGE_EXECUTE_READWRITE);
+            if (!p) continue;
+            int64_t disp = (int64_t)((intptr_t)p - (intptr_t)(site + 5));
+            if (disp >= INT32_MIN && disp <= INT32_MAX) return p;
+            VirtualFree(p, 0, MEM_RELEASE);        // in range for allocation, not for rel32
+        }
+    }
+    return nullptr;
+}
+
+// Repoint an existing `e8 <rel32>` call at `site` to `thunk`, after proving the original really
+// reaches `expect` (spec 2.5: a patched binary is a different binary and must be refused).
+inline bool repoint_call(uintptr_t site, uintptr_t expect, uint8_t* thunk, std::string* err) {
+    if (IsBadReadPtr((void*)site, 5)) { if (err) *err = "call site unreadable"; return false; }
+    if (*(uint8_t*)site != 0xE8) { if (err) *err = "site is not a rel32 call"; return false; }
+    int32_t rel = *(int32_t*)(site + 1);
+    if (site + 5 + rel != expect) { if (err) *err = "call does not reach the expected target"; return false; }
+    int64_t disp = (int64_t)((intptr_t)thunk - (intptr_t)(site + 5));
+    if (disp < INT32_MIN || disp > INT32_MAX) { if (err) *err = "thunk out of rel32 range"; return false; }
+    DWORD old = 0;
+    if (!VirtualProtect((void*)site, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        if (err) *err = "VirtualProtect failed"; return false;
+    }
+    *(int32_t*)(site + 1) = (int32_t)disp;
+    VirtualProtect((void*)site, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), (void*)site, 5);
+    return true;
+}
+
 inline void emit(std::vector<uint8_t>& b, std::initializer_list<uint8_t> bytes) {
     b.insert(b.end(), bytes.begin(), bytes.end());
 }

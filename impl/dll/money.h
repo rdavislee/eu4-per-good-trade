@@ -81,10 +81,21 @@ inline void check_e2(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
 // E4: the visible face of conservation, checked on the engine's own fields.
 inline void check_e4(const std::vector<livetrade::SimNode>& sim, std::ofstream& lg, int tick) {
     int neg_pool = 0, neg_out = 0, neg_link = 0, nan_ct = 0, huge = 0, neg_money = 0;
+    // THE NUMBER THE PLAYER ACTUALLY SEES. The engine stores no total: the node window, the map
+    // box and the tooltip each recompute local(+0xB4) + Sigma incoming(+0x10) - outgoing(+0xBC).
+    // Checking only the stored fields let a negative TOTAL reach the map (baltic_sea, novgorod
+    // in a per-good view) while this check still read CLEAN. Spec 1.12: no negative is ever
+    // displayed, so the displayed quantity is what has to be measured.
+    int neg_total = 0; double worst_total = 0; std::string worst_node;
     double world_pool = 0, world_local = 0, world_links = 0;
     for (auto& s : sim) {
         double pool = livetrade::fi(s.obj + 0xB0) / 1000.0;
-        double outg = s.outgoing_value, loc = s.local_value;
+        // LIVE reads. SimNode caches local/outgoing from read_sim_nodes(), which runs at the
+        // TOP of the tick -- before install_aggregate writes them. Mixing those stale values
+        // with freshly-written incoming records manufactures negatives that are not on screen.
+        // E4's contract is the engine's own fields AFTER the mod has written them.
+        double outg = livetrade::fi(s.obj + 0xBC) / 1000.0;
+        double loc  = livetrade::fi(s.obj + 0xB4) / 1000.0;
         if (!std::isfinite(pool) || !std::isfinite(outg) || !std::isfinite(loc)) nan_ct++;
         if (pool < 0) neg_pool++;
         if (outg < 0) neg_out++;
@@ -97,11 +108,20 @@ inline void check_e4(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
         }
         for (auto& rec : livetrade::read_standings(s.obj))
             if (rec.money < 0) neg_money++;
+        double in_sum = 0;
+        for (auto& l : livetrade::read_incoming(s.obj)) in_sum += l.value_raw / 1000.0;
+        double total = loc + in_sum - outg;
+        if (total < -0.0005) {
+            neg_total++;
+            if (total < worst_total) { worst_total = total; worst_node = s.name; }
+        }
     }
-    bool ok = !neg_pool && !neg_out && !neg_link && !nan_ct && !huge && !neg_money;
+    bool ok = !neg_pool && !neg_out && !neg_link && !nan_ct && !huge && !neg_money && !neg_total;
     lg << "[E4] tick " << tick << ": " << (ok ? "CLEAN" : "VIOLATION")
        << " -- negative pool=" << neg_pool << " outgoing=" << neg_out << " link=" << neg_link
-       << " money=" << neg_money << ", non-finite=" << nan_ct << ", runaway=" << huge
+       << " money=" << neg_money << " DISPLAYED-TOTAL=" << neg_total
+       << (neg_total ? (" (worst " + worst_node + ")") : std::string())
+       << ", non-finite=" << nan_ct << ", runaway=" << huge
        << " | world local=" << world_local << " pool=" << world_pool
        << " links=" << world_links << "\n";
 }

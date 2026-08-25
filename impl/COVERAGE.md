@@ -53,10 +53,13 @@ Status: **DONE** (built and verified) · **LIVE** (running in the game) · **PAR
 | F2 razed China | **PASS (harness)** | {genua, gulf_of_siam} |
 | F3–F5 console scenarios | **OPEN** | needs the monthly re-solve |
 | F6 devastation scaling (probe 18) | **OPEN** | read two windows |
-| G1–G4 ★ AI | **OPEN** | wire `ai.h` to live merchants |
+| G1 ★ AI uses reversed edges | **PASS** | 45 months live: 836 AI placements, **474 (56%) on Φ_w-INCOMING ends** — the tab group vanilla cannot index at all |
+| G2 ★ no oscillation | **PASS** | same run: worst churn on any one (country,node) = **2 target changes in 45 months**; 10 moves refused by the dwell floor (3 mo) + ×1.5 gain test |
+| G3 ★ world still runs | **OPEN** | observer run to 1600 (run with H4) |
+| G4 ★ direction-gated diplomacy | **OPEN** | §1.10 gates + §1.11 treasure fleets |
 | H1 determinism live | **PARTIAL** | harness identical; live save/reload repeat remains |
 | H2 mid-campaign load | **PASS** | 1448 save loaded and installed cleanly |
-| H3 tick cost | **PASS** | 11–12 ms measured over 16 months |
+| H3 tick cost | **PASS** | 61–66 ms per monthly tick over 45 months, incl. the AI pass — inside §2.2's ~0.1 s budget |
 | H4 long-run soak | **OPEN** | 1444→1600 observer run |
 
 ## Critical path (in order)

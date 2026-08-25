@@ -70,7 +70,35 @@ using FnFindChild = void*  (__fastcall*)(void*, void*);
 using FnAddChild  = void*  (__fastcall*)(void*, void*, bool);
 
 // definition -> its CTradeNode, the way 0xB56480 resolves it
+// Definition -> its CTradeNode, THE WAY THE ENGINE DOES IT.
+//
+// This used to go definition -> province id (+0xDC) -> the province array -> province+0xE8, three
+// hops that can each come up empty. When it did, the caller silently treated the link as
+// unresolvable: assert_flows counted the inflow as "no record at the destination" (23 of 259,
+// concentrated in the New World -- st_lawrence, carribean_trade, chesapeake_bay, ohio, james_bay),
+// and out_target() returned 0, which zeroes that link's share in the outgoing slot write. So a
+// resolver failure was showing up as BOTH a missing panel value and a wrong outgoing breakdown.
+//
+// The engine never uses the province route. It indexes the node array directly by the
+// definition's DB index, which is 1-BASED because slot 0 holds the node built from the "Null"
+// sentinel definition (0xB54C01: `movsxd rcx,[rax+0xD8]; test ecx,ecx; jle ->null;
+// cmp ecx,[mgr+0x21BC]; jge ->null; imul rax,rcx,0x138`). Same bounds, same stride, one hop.
 inline uintptr_t node_of_def(uintptr_t def) {
+    if (!def || !livetrade::validate_region(def + 0xD8, 4)) return 0;
+    int idx = livetrade::fi(def + 0xD8);                 // 1-based; 0 is the Null sentinel
+    uintptr_t mgr = livetrade::trade_manager();
+    if (!mgr) return 0;
+    uintptr_t base = livetrade::rq(mgr + 0x18);
+    int32_t count = 0;
+    if (!livetrade::safe_read(mgr + 0x24, &count, 4)) return 0;
+    if (!base || idx <= 0 || idx >= count) return 0;     // exactly the engine's own guard
+    uintptr_t n = base + (uintptr_t)idx * 0x138;
+    if (!livetrade::validate_region(n + 0x120, 4)) return 0;
+    return n;
+}
+
+// the old province route, kept only to cross-check the new one in the log
+inline uintptr_t node_of_def_via_province(uintptr_t def) {
     if (!def || !livetrade::validate_region(def + DEF_PROVINCE, 4)) return 0;
     int pid = livetrade::fi(def + DEF_PROVINCE);
     uintptr_t g = livetrade::game_singleton();

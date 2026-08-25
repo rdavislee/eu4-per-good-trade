@@ -38,6 +38,8 @@ struct Map {
     std::map<int, std::string> id_to_name;   // engine node id -> name
     std::map<std::string, int> name_to_id;   // inverse
     int exact = 0, matched = 0, spurious = 0;
+    int by_key = 0;      // named from the definition key -- the authoritative path
+    int disagree = 0;    // fingerprint match disagreed with the key
 };
 
 inline Map resolve(const std::vector<livetrade::SimNode>& sim,
@@ -56,13 +58,38 @@ inline Map resolve(const std::vector<livetrade::SimNode>& sim,
             pairs.push_back({l1(lv[i], ref[j].goods_size), i, j});
     std::sort(pairs.begin(), pairs.end(), [](const P& a, const P& b) { return a.d < b.d; });
     Map m;
+    // THE ENGINE ALREADY KNOWS EVERY NODE'S NAME. Take it; keep the fingerprint match below only
+    // as a cross-check.
+    //
+    // Fingerprint matching is a guess, and it guessed wrong. The live array has 81 entries, not
+    // 80: slot 0 holds the node built from the "Null" sentinel definition, which is why the engine
+    // indexes CTradeNode[def+0xD8] 1-BASED and rejects <= 0 (0xB54C01). The sentinel's goods
+    // vector is all zeros, so the greedy 1-to-1 match paired it with a real name -- laplata -- and
+    // left the real node at index 1 with NO name at all. Every incoming record naming that node
+    // then resolved to field -1, which surfaced as "directed inflow has no record at the
+    // destination" and as wrong per-destination numbers in the node window.
+    //
+    // The definition's key at +0x10 is the string from 00_tradenodes.txt itself, so it needs no
+    // matching and cannot drift as production changes.
+    for (auto& sn : sim) {
+        std::string k = livetrade::node_key(sn.obj);
+        if (k.empty()) continue;                    // the Null sentinel has no key
+        m.id_to_name[sn.index] = k;
+        m.name_to_id[k] = sn.index;
+        m.by_key++;
+    }
     std::vector<char> usedL(sim.size(), 0), usedR(ref.size(), 0);
     for (auto& p : pairs) {
         if (usedL[p.i] || usedR[p.j]) continue;
         usedL[p.i] = usedR[p.j] = 1;
         int id = sim[p.i].index;             // the stable engine node id
-        m.id_to_name[id] = ref[p.j].name;
-        m.name_to_id[ref[p.j].name] = id;
+        auto have = m.id_to_name.find(id);
+        if (have == m.id_to_name.end()) {
+            m.id_to_name[id] = ref[p.j].name;       // no key (the sentinel): fall back
+            m.name_to_id[ref[p.j].name] = id;
+        } else if (have->second != ref[p.j].name) {
+            m.disagree++;                            // the key wins; count the difference
+        }
         m.matched++;
         if (p.d == 0.0) m.exact++;
     }

@@ -279,6 +279,29 @@ inline uintptr_t reverse_entry(uintptr_t fwd_entry, uintptr_t back_to_def) {
     return (uintptr_t)e;
 }
 
+// --- knowing our own views at runtime ----------------------------------------------------------
+// Anything that wants to correct what a reverse panel DISPLAYS has to recognise one first, and
+// know which direction it stands for. The engine cannot tell us: a reverse view deliberately
+// carries a source definition and a link entry that do not correspond to any declared link, which
+// is why the panel's own ordinal lookup misfires -- it scans the owner node's outgoing list for a
+// link that is not there, falls out of the loop, and lands on a real link's slot. Observed
+// directly: every reverse panel at north_sea shows the merchants assigned to north_sea -> lubeck,
+// its LAST outgoing link.
+//
+// So we keep the mapping ourselves, rebuilt with the views.
+struct RevInfo {
+    uintptr_t owner_def = 0;    // the node the panel belongs to (the declared link's TARGET)
+    uintptr_t other_def = 0;    // the node it points at  (the declared link's SOURCE)
+};
+inline std::map<uintptr_t, RevInfo> g_rev_views;    // LinkView* -> what it represents
+
+inline bool is_reverse(uintptr_t lv) { return g_rev_views.count(lv) != 0; }
+
+inline const RevInfo* reverse_info(uintptr_t lv) {
+    auto it = g_rev_views.find(lv);
+    return it == g_rev_views.end() ? nullptr : &it->second;
+}
+
 inline int add_reverse(std::ofstream* lg) {
     uintptr_t ctl = controller();
     if (!ctl) return -1;
@@ -300,6 +323,8 @@ inline int add_reverse(std::ofstream* lg) {
     // snapshot the forward views first: the vector moves as we append to it
     std::vector<uintptr_t> fwd((const uintptr_t*)b, (const uintptr_t*)e);
     int added = 0;
+    g_rev_views.clear();        // the previous rebuild's views are gone; their pointers are stale
+
     // Every anchor already on the map, ours included as we go. Vanilla rejects an anchor that
     // lands too close to one already placed; without that step two links arriving at a node from
     // similar directions -- the two oceanic routes into english_channel -- get near-identical
@@ -420,6 +445,7 @@ inline int add_reverse(std::ofstream* lg) {
         void* val = (void*)nlv;
         if (ve < vc) { *(uintptr_t*)ve = nlv; *(uintptr_t*)(ctl + VEC_END) = ve + 8; }
         else         { grow((void*)(ctl + VEC_BEGIN), (void*)ve, (void**)&val); }
+        g_rev_views[nlv] = RevInfo{tgtdef_for_lv, srcdef};
         added++;
     }
     if (scratch.first)

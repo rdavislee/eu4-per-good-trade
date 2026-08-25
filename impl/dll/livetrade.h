@@ -305,6 +305,32 @@ inline uintptr_t trade_manager() {
     return g + 0x2198;                                          // TRADE_MANAGER_OFF
 }
 
+// THE NODE'S OWN NAME, straight out of the engine.
+//
+// CTradeNodeDefinition+0x10 is the definition's key -- the very string from
+// common/tradenodes/00_tradenodes.txt ("english_channel", "carribean_trade"). The ctor at
+// 0xB68BE0 takes it as its first argument and the serialiser writes it back out at 0xB5A5DD.
+// MSVC std::string: SSO buffer at +0x00, size at +0x10, capacity at +0x18; the buffer is a heap
+// pointer once capacity reaches 16, which several node keys do ("gulf_of_st_lawrence" is 19).
+inline std::string def_key(uintptr_t def) {
+    if (!def || !validate_region(def + 0x10, 0x20)) return std::string();
+    uint64_t sz = 0, cap = 0;
+    if (!safe_read(def + 0x20, &sz, 8) || !safe_read(def + 0x28, &cap, 8)) return std::string();
+    if (sz == 0 || sz > 128 || cap < sz) return std::string();
+    const char* p = (const char*)(def + 0x10);
+    if (cap >= 16) {
+        uintptr_t hp = rq(def + 0x10);
+        if (!hp || !validate_region(hp, (size_t)sz + 1)) return std::string();
+        p = (const char*)hp;
+    }
+    return std::string(p, (size_t)sz);
+}
+
+inline std::string node_key(uintptr_t node) {
+    if (!node || !validate_region(node + 0xA8, 8)) return std::string();
+    return def_key(rq(node + 0xA8));
+}
+
 inline std::vector<SimNode> read_sim_nodes(int max_nodes = 100) {
     std::vector<SimNode> out;
     uintptr_t mgr = trade_manager();

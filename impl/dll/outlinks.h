@@ -423,7 +423,28 @@ inline int rebuild_incoming(uintptr_t node,
         memcpy(tmpl, (const void*)ob, REC_STRIDE);
         have_tmpl = true;
     }
-    if (!have_tmpl) { g_bail_tmpl++; return -1; }       // nothing anywhere to copy yet
+    if (!have_tmpl) {
+        // Don't give up because THIS node has no record to copy: go and find one. The template is
+        // only ever used for its vtable and the +0x08 class constant, so any node's record serves.
+        //
+        // Relying on encounter order meant the first node processed each session -- patagonia, at
+        // engine index 1, which has two outgoing links and no incoming ones -- was rebuilt before
+        // any template existed, so it got NO records on the first tick and its panels read blank
+        // until the next month. Scanning the node array up front removes the ordering dependence.
+        uintptr_t mgr = livetrade::trade_manager();
+        int32_t cnt = 0;
+        uintptr_t base = mgr ? livetrade::rq(mgr + 0x18) : 0;
+        if (mgr) livetrade::safe_read(mgr + 0x24, &cnt, 4);
+        for (int i = 0; base && i < cnt && i < 4096 && !have_tmpl; i++) {
+            uintptr_t nd = base + (uintptr_t)i * 0x138;
+            uintptr_t tb = livetrade::rq(nd + NODE_IN_BEGIN), te = livetrade::rq(nd + NODE_IN_END);
+            if (tb && te > tb && livetrade::validate_region(tb, REC_STRIDE)) {
+                memcpy(tmpl, (const void*)tb, REC_STRIDE);
+                have_tmpl = true;
+            }
+        }
+    }
+    if (!have_tmpl) { g_bail_tmpl++; return -1; }       // genuinely nothing anywhere to copy
     int n = (int)inc.size();
     auto alloc = (FnNew)(livetrade::module_base() + ENGINE_NEW);
     uint8_t* buf = (uint8_t*)alloc((size_t)n * REC_STRIDE);

@@ -36,6 +36,7 @@ inline int g_bail_empty=0, g_bail_big=0, g_bail_tmpl=0, g_bail_alloc=0,
 
 constexpr int NODE_OUT_VALUES = 0x88;      // int32* begin
 constexpr int NODE_OUT_VALUES_END = 0x90;  // int32* end
+constexpr int NODE_OUT_VALUES_CAP = 0x98;  // int32* capacity (verified: OFFSETS.md)
 
 inline int count_of(uintptr_t node) {
     uintptr_t b = livetrade::rq(node + NODE_OUT_VALUES);
@@ -96,7 +97,15 @@ inline int32_t* resize(uintptr_t node, int n) {
     // reallocate anything else, even when its length already matches.
     static std::set<uintptr_t> ours;
     if (b && have >= n && ours.count(b)) return (int32_t*)b;
-    if (n <= 0 || n > 64) return nullptr;
+    // n == 0 IS ALLOWED, and is in fact the case that matters most. An END node (english_channel,
+    // venice, genua -- `end=yes`, no outgoing links) has an EMPTY steer_power vector whose `begin`
+    // is NULL. The same one-past-the-end read described below then evaluates [NULL + 0] and takes
+    // an access violation instead of landing on tolerated adjacent heap. Vanilla never reaches it
+    // because it never builds a link view owned by an end node -- but the reverse-direction panels
+    // do exactly that, one for every link arriving at english_channel. So end nodes get a real,
+    // zero-filled buffer with `end == begin`: still an empty vector to every size computation, but
+    // a valid pointer to dereference.
+    if (n < 0 || n > 64) return nullptr;
     // OVER-ALLOCATE. The engine reads ONE PAST THE END of this array as a matter of course:
     // 0x13FC1CD..0x13FC24D linear-searches the TARGET node's outgoing list for an entry pointing
     // back at the source (a reverse edge). The graph is a DAG, so that entry usually does NOT
@@ -115,9 +124,13 @@ inline int32_t* resize(uintptr_t node, int n) {
     *(uintptr_t*)(node + NODE_OUT_VALUES)     = (uintptr_t)buf;
     *(uintptr_t*)(node + NODE_OUT_VALUES_END) = (uintptr_t)(buf + n);
     ours.insert((uintptr_t)buf);
-    // NOT +0x98: it was assumed to be the vector's capacity but never verified, and writing it
-    // corrupted the node struct -- the node window's incoming/outgoing tooltips stopped
-    // responding entirely. Leave it alone until it is identified.
+    // +0x98 IS the capacity, now verified rather than assumed (OFFSETS.md, CTradeNode map): the
+    // push_back fast path tests `end != cap`, and every _Tidy computes the free size as
+    // `cap - begin`. Leaving it pointing into the OLD engine buffer makes that size meaningless --
+    // and for an end node, whose cap was NULL, it makes it negative. Write it to match what we
+    // actually allocated. (n + SLACK) * 4 is at most 288 bytes, comfortably under the 0x1000
+    // threshold above which _Tidy also validates an allocation header at [begin - 8].
+    *(uintptr_t*)(node + NODE_OUT_VALUES_CAP) = (uintptr_t)(buf + n + SLACK);
     VirtualProtect((void*)(node + NODE_OUT_VALUES), 24, old, &old);
     return buf;
 }
@@ -233,9 +246,11 @@ inline int install(const std::vector<livetrade::SimNode>& sim,
     int wrote = 0;
     for (auto& s : sim) {
         int n = def_out_count(s.obj);
-        if (n <= 0) continue;
+        if (n < 0) continue;
         int32_t* buf = resize(s.obj, n);
         if (!buf) continue;
+        // An end node has no shares to write, but it DID need the buffer above.
+        if (n == 0) continue;
         int src_f = field_of_node(s.obj);
         // A live node the model does not own would otherwise get raw_sum == 0 and be given an even
         // 1/n split, destroying the engine's own steering distribution. resize() above is still

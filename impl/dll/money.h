@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 #include "livetrade.h"
+#include "booklog.h"
 
 namespace money {
 
@@ -53,45 +54,33 @@ inline void sample_before(const std::vector<livetrade::SimNode>& sim) {
 
 // After pass 10: rec.money now holds what each collector was paid. Compare the accumulator delta
 // against the sum of those payments.
+// E2, re-based on what the engine BOOKS. country+0x68 was assumed to be the monthly income
+// accumulator because AddDelayedIncome does `add [country+0x68], eax` (0x338AFC). Measured with
+// every AddDelayedIncome call in pass 10 logged: Ming's records carry money = 4.67+2.87+1.15 =
+// 8.69, and pass 10 books 8.689 of category 2 (trade) to Ming -- to the cent -- while +0x68 moved
+// 0.253. So +0x68 is not the figure the treasury shows (the per-category ledger at country+0x760,
+// 0x338B05..0x338B17, is), and comparing against it manufactured a 40% "shortfall". The test is
+// therefore: SUM of category-2 bookings == SUM of rec.money, per country, inside the same pass.
 inline void check_e2(const std::vector<livetrade::SimNode>& sim, std::ofstream& lg) {
-    if (g_accum_before.empty()) return;
     std::map<int, double> paid;
     for (auto& s : sim)
         for (auto& rec : livetrade::read_standings(s.obj))
-            if (rec.money != 0)
-                paid[livetrade::country_index_of(rec.tag_index)] += rec.money;
-    int checked = 0, agree = 0;
-    double worst = 0; int worst_c = -1;
-    { double mx = 0; int nrec = 0, nz = 0;
-      for (auto& s : sim) for (auto& rec : livetrade::read_standings(s.obj)) { nrec++; if (rec.money > mx) mx = rec.money; if (rec.money != 0) nz++; }
-      lg << "[E2/probe] records=" << nrec << " nonzero money=" << nz << " max=" << mx << " accum_before=" << g_accum_before.size() << " pass10_total=" << g_pass10_total << (char)10; }
-    for (auto& [c, before] : g_accum_before) {
-        auto p = paid.find(c);
-        if (p == paid.end() || p->second <= 0) continue;
-        uintptr_t country = livetrade::country_at(c);
-        if (!country) continue;
-        double after = livetrade::country_income_accum(country);
-        double delta = after - before;
-        // the accumulator also collects the month's other income categories, so the trade
-        // component can only be checked as "at least what trade paid, and not less"
+            if (rec.money != 0) paid[livetrade::country_index_of(rec.tag_index)] += rec.money;
+    int checked = 0, agree = 0; double worst = 0; int worst_c = -1;
+    for (auto& [c, m] : paid) {
+        if (m <= 0) continue;
+        auto it = booklog::g_sums.find(c);
+        double booked = 0;
+        if (it != booklog::g_sums.end()) { auto c2 = it->second.find(2); if (c2 != it->second.end()) booked = c2->second; }
         checked++;
-        double shortfall = p->second - delta;
-        if (shortfall <= 0.002 + 0.001 * checked) agree++;
-        if (shortfall > worst) { worst = shortfall; worst_c = c; }
-    }
-    // PROBE the worst country: every record it holds, and where its envoys actually stand.
-    if (worst_c >= 0) {
-        lg << "[E2/worst] country#" << worst_c << " accum before=" << g_accum_before[worst_c]
-           << " after=" << livetrade::country_income_accum(livetrade::country_at(worst_c)) << (char)10;
-        for (auto& s : sim) for (auto& rec : livetrade::read_standings(s.obj))
-            if (livetrade::country_index_of(rec.tag_index) == worst_c && (rec.money != 0 || rec.has_trader || rec.has_capital))
-                lg << "    " << s.name << ": money=" << rec.money << " trader=" << (int)rec.has_trader << " type=" << rec.type
-                   << " capital=" << (int)rec.has_capital << " pf=" << rec.power_fraction << (char)10;
+        double d = booked - m; if (d < 0) d = -d;
+        if (d <= 0.002) agree++;
+        if (d > worst) { worst = d; worst_c = c; }
     }
     g_e2_checked = checked; g_e2_agree = agree; g_e2_worst = worst;
-    lg << "[E2] treasury booking vs pass-10 payout: " << agree << "/" << checked
-       << " countries booked at least what trade paid; worst shortfall " << worst
-       << " ducats (country #" << worst_c << ")\n";
+    lg << "[E2] engine booked (category 2) vs pass-10 rec.money: " << agree << "/" << checked
+       << " countries agree to 0.002 ducats; worst |diff| " << worst << " (country #" << worst_c << ")" << (char)10;
+    if (worst_c >= 0) booklog::report(worst_c, lg);
 }
 
 // E4: the visible face of conservation, checked on the engine's own fields.
@@ -169,6 +158,7 @@ inline void __fastcall pass10_wrapper(uintptr_t node) {
     if (g_exact && g_pass10_seen == 0 && g_pass10_total > 0) {
         auto sim0 = livetrade::read_sim_nodes();
         if (!sim0.empty()) sample_before(sim0);
+        booklog::reset();
     }
     ((FnPass10)(livetrade::module_base() + 0xB584F0))(node);
     g_pass10_calls_total++;

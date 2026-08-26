@@ -29,6 +29,7 @@
 #include "clickgate.h"
 #include "caravan.h"
 #include "money.h"
+#include "booklog.h"
 #include "tickhook.h"
 #include "alledges.h"
 #include "revpanel.h"
@@ -333,6 +334,11 @@ static void run_install(const std::string& logpath) {
                                "treasury inside the same monthly update)\n";
                     else
                         log << "  E2 instrument NOT installed: " << merr << "\n";
+                    std::string berr;
+                    if (booklog::install(&berr))
+                        log << "  booking log on both AddDelayedIncome sites in pass 10" << (char)10;
+                    else
+                        log << "  booking log NOT installed: " << berr << (char)10;
                 }
                 if (livetrade::marker_present("CARAVAN")) {
                     std::string kerr;

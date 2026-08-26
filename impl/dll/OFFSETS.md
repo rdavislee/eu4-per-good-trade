@@ -353,3 +353,12 @@ at `0x25AE0B` in `CMerchantConstruction::Update`, then SetTrader `0x25AE22`; act
 written only by the ctor `0x25AB92` and the re-derive `0x25AC10` (`= province+0xE8`). `rec+0xAE`
 has one semantic writer, `0xB5E2FF` inside SetTrader `0xB5E290`, sole caller `0xB599E5`.
 `0x305C6C` = `SetTrader(homeNode, handle, 0)`, the default collect-at-home.
+
+## `country+0x68` is NOT the monthly trade-income accumulator (measured 2026-08-26)
+
+`AddDelayedIncome` (`0x338A90`) does `add [country+0x68], eax` and then posts the amount to the
+per-category ledger at `country+0x760` (`0x338B05..0x338B17`, category in `edx`). Logging every
+call from pass 10: category 2 (trade) fires once PER RECORD (52,614 calls/month across 80 nodes),
+and the sum booked to a country equals `SUM rec.money` to the cent (Ming: 8.689 vs 8.69). Yet
+`+0x68` moved only 0.253 for Ming -- it is drained or reset by something else within the month.
+Use the ledger, or the booking sum, never `+0x68`, for any treasury reconciliation.

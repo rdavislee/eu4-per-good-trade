@@ -33,6 +33,12 @@ inline std::map<int, double> g_money_expected;
 inline int g_e2_checked = 0, g_e2_agree = 0;
 inline int g_pass10_seen = 0, g_pass10_total = 0;   // declared here: check_e2 reads them
 inline long long g_pass10_calls_total = 0;   // every 0xB584F0 call through the wrapper, ever
+// Anything that must read the records AFTER pass 10 has paid them registers here and runs from
+// the wrapper's last-node branch -- inside the same pass, no thread, no sleep. E1 and E4 used to
+// run on a worker thread after a fixed Sleep(400), which raced pass 10: once the booking log's
+// thunks lengthened the pass, the read landed on half-paid records and E1 fell to 338/662.
+inline void (*g_after_pass10)(const std::vector<livetrade::SimNode>&, std::ofstream&) = nullptr;
+inline unsigned long long g_pass10_t0 = 0;   // QueryPerformanceCounter at the first node
 inline double g_e2_worst = 0;
 
 // Sample every country's accumulator, and the money pass 10 is about to hand out. Called from the
@@ -62,6 +68,7 @@ inline void sample_before(const std::vector<livetrade::SimNode>& sim) {
 // 0x338B05..0x338B17, is), and comparing against it manufactured a 40% "shortfall". The test is
 // therefore: SUM of category-2 bookings == SUM of rec.money, per country, inside the same pass.
 inline void check_e2(const std::vector<livetrade::SimNode>& sim, std::ofstream& lg) {
+    if (!booklog::g_installed) { lg << "[E2] not measured this run (pgt.BOOKLOG absent)" << (char)10; return; }
     std::map<int, double> paid;
     for (auto& s : sim)
         for (auto& rec : livetrade::read_standings(s.obj))
@@ -156,6 +163,7 @@ inline void __fastcall pass10_wrapper(uintptr_t node) {
     // between the two samples reset +0x68. Sampling at pass 10's FIRST node closes every
     // such window: nothing but pass 10 runs between the samples.
     if (g_exact && g_pass10_seen == 0 && g_pass10_total > 0) {
+        { LARGE_INTEGER t; QueryPerformanceCounter(&t); g_pass10_t0 = (unsigned long long)t.QuadPart; }
         auto sim0 = livetrade::read_sim_nodes();
         if (!sim0.empty()) sample_before(sim0);
         booklog::reset();
@@ -168,7 +176,10 @@ inline void __fastcall pass10_wrapper(uintptr_t node) {
     auto sim = livetrade::read_sim_nodes();
     if (sim.empty()) return;
     std::ofstream lg(g_log_path, std::ios::app);
+    { LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
+      lg << "[pass10] " << g_pass10_total << " nodes in " << (1000.0 * (double)((unsigned long long)t.QuadPart - g_pass10_t0) / (double)f.QuadPart) << " ms" << (char)10; }
     check_e2(sim, lg);
+    if (g_after_pass10) g_after_pass10(sim, lg);   // E1, E4: same pass, after every record is paid
 }
 
 inline bool install_exact(const std::string& logpath, std::string* err) {

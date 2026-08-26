@@ -109,6 +109,17 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   node value exploding or draining to zero without cause, no good's world value appearing from or
   vanishing to nowhere (conservation is asserted per tick — §2.8 — this is its visible face).
 
+  **Measured 2026-08-26.** E1, E2 and E4 all run from the pass-10 wrapper's last node -- inside the
+  same monthly pass, after every record is paid; the earlier worker-thread read after Sleep(400)
+  raced the pass (measured 3.8 s with the booking log on) and read half-paid records.
+  - E1: **662/662** countries agree, worst |diff| 0.002 ducats.
+  - E2: **662/662** countries, worst |diff| 0. Basis corrected: `country+0x68` is NOT the trade income
+    accumulator (it moved 0.25 while 8.69 was booked to Ming); the test now compares the engine's own
+    category-2 `AddDelayedIncome` bookings (both pass-10 call sites logged, `pgt.BOOKLOG`) against
+    SUM rec.money. Booked == computed, to the cent, for every country.
+  - E4: CLEAN every tick.
+  Run: `touch dllbuild/pgt.AI dllbuild/pgt.BOOKLOG; bash run.sh <dll> 3`; read `[E1]`, `[E2]`, `[E4]`.
+
 ## F. Reorientation and responsiveness (console scenarios)
 
 - **F1. A flip is honoured end to end.** Pick a near-balanced link (§2.8), nudge development via

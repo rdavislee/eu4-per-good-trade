@@ -609,19 +609,21 @@ inline std::atomic<bool> g_verify_stop{false};
 inline void verify_worker() {
     while (!g_verify_stop) {
         if (g_verify_pending.exchange(false)) {
-            Sleep(400);                        // let pass 10 finish
-            auto sim = livetrade::read_sim_nodes();
-            if (!sim.empty()) {
-                std::ofstream lg(g_log, std::ios::app);
-                verify_income(sim, lg);                 // E1
-                money::check_e4(sim, lg, g_ticks.load()); // E4
-            }
+            // E1 and E4 now run from money::pass10_wrapper's last node (g_after_pass10),
+            // inside the pass; the 400 ms sleep here raced it and read half-paid records.
+            (void)0;
         }
         Sleep(120);
     }
 }
 
+inline void after_pass10(const std::vector<livetrade::SimNode>& sim, std::ofstream& lg) {
+    verify_income(sim, lg);                       // E1
+    money::check_e4(sim, lg, g_ticks.load());     // E4
+}
+
 inline void start_verifier() {
+    money::g_after_pass10 = &after_pass10;
     CreateThread(nullptr, 0, [](LPVOID) -> DWORD { verify_worker(); return 0; }, nullptr, 0, nullptr);
 }
 

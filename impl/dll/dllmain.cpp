@@ -335,10 +335,10 @@ static void run_install(const std::string& logpath) {
                     else
                         log << "  E2 instrument NOT installed: " << merr << "\n";
                     std::string berr;
-                    if (booklog::install(&berr))
+                    if (livetrade::marker_present("BOOKLOG") && booklog::install(&berr))
                         log << "  booking log on both AddDelayedIncome sites in pass 10" << (char)10;
                     else
-                        log << "  booking log NOT installed: " << berr << (char)10;
+                        log << "  booking log off (pgt.BOOKLOG absent: its 52k redirected calls cost ~3.4 s per month)" << (char)10;
                 }
                 if (livetrade::marker_present("CARAVAN")) {
                     std::string kerr;

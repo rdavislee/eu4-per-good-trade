@@ -302,7 +302,7 @@ inline int apply(uintptr_t mgr) {
            << " noname=" << assign::g_merge_noname << " (e.g. " << assign::g_merge_noname_example << ")"
            << " kept_collector="
            << assign::g_merge_kept_collector << " added_new=" << assign::g_merge_added
-           << "; flagfix: forward-#0 panels inspected=" << flagfix::g_inspected << " shields seen=" << flagfix::g_shields << " removed=" << flagfix::g_cleared
+           << "; flagfix: forward-#0 panels inspected=" << flagfix::g_inspected << " shields seen=" << flagfix::g_shields << " removed=" << flagfix::g_cleared << " | reverse panels updated=" << flagfix::g_rev_panels << " with shields=" << flagfix::g_rev_with_shields << " total shields=" << flagfix::g_rev_shields
            << (char)10;
         for (auto& [e, n] : by_edge)
             lt << "     " << e.first << " -> " << e.second << " : " << n << " merchant(s)" << (char)10;

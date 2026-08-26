@@ -63,6 +63,7 @@ inline FnUpdate g_orig = nullptr;
 inline bool g_installed = false;
 inline uint64_t g_cleared = 0;      // aliased shields removed from forward link-#0 panels
 inline uint64_t g_inspected = 0, g_shields = 0;   // forward-#0 panels seen / shields walked
+inline uint64_t g_rev_panels = 0, g_rev_with_shields = 0, g_rev_shields = 0;   // reverse panels drawn
 
 // the ordinal a FORWARD panel represents: its entry's target within its source's outgoing vector
 inline int panel_ordinal(uintptr_t lv) {
@@ -104,7 +105,25 @@ inline void __fastcall update_hook(uintptr_t panel) {
     if (g_orig) g_orig(panel);                  // the engine builds the row exactly as it wants
     if (!panel || !livetrade::validate_region(panel + PANEL_LINKVIEW, 8)) return;
     uintptr_t lv = livetrade::fq(panel + PANEL_LINKVIEW);
-    if (!lv || revpanel::is_reverse(lv)) return;         // reverse panels: the engine is right
+    if (!lv) return;
+    if (revpanel::is_reverse(lv)) {
+        // MEASURE, do not touch: how many shields did the engine put on this reverse panel?
+        g_rev_panels++;
+        uintptr_t w2 = livetrade::fq(panel + PANEL_WINDOW);
+        if (w2 && livetrade::validate_region(w2, 8)) {
+            uintptr_t wv2 = livetrade::fq(w2);
+            if (wv2 && livetrade::validate_region(wv2 + WIN_FIND_BOX, 8)) {
+                auto fb2 = (FnFindBox)livetrade::fq(wv2 + WIN_FIND_BOX);
+                uintptr_t bx = fb2 ? fb2(w2, "director_flags") : 0;
+                if (bx && livetrade::validate_region(bx + BOX_HEAD, 16)) {
+                    int n = 0;
+                    for (uintptr_t nd = livetrade::fq(bx + BOX_HEAD); nd && n < 64 && livetrade::validate_region(nd, 0x20); nd = livetrade::fq(nd + 0x10)) n++;
+                    if (n) { g_rev_with_shields++; g_rev_shields += n; }
+                }
+            }
+        }
+        return;
+    }
     if (panel_ordinal(lv) != 0) return;                  // only link #0 collects the aliases
     g_inspected++;
     if (assign::g_table.empty()) return;

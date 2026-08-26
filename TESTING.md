@@ -228,6 +228,17 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   the working default -- computed gain x1.5 plus a 3-month dwell -- fires 1-3 times per tick
   world-wide, i.e. rarely, as the prior expected.
 
+  **Measured 2026-08-26 (pgt_h3z, 11 ticks, no-collect v2).** Vanilla parks a collecting merchant
+  at every AI country's own trade capital at the 1444 start (573 of them); under the rule they are
+  worth nothing there and are the first recall victims: 573 -> 8 over 11 ticks, 644 recalls landed,
+  every one still at its target 1 and 3 ticks later (624/0, 540/0). G1 494 of 1437 placements
+  (34%) on Phi_w-INCOMING ends; G2 worst churn 0 target changes; 1160 of 1213 sent-to nodes hold
+  (3 lost, 50 vacated by our own recall); E1 657/657; E4 CLEAN. The sweep converts 38 save-start
+  collectors on tick 1 through the OUTER SetTrader (engine-scored steer ordinal), 0 fail to land;
+  4 merchants collect at the two Phi_w END nodes (genua 3, hangzhou 1) where the engine has no
+  link to steer along -- the model now agrees with the engine about them (install.h: collects =
+  has_capital || (has_trader && type == 0)); the plan never stands a merchant at such a node.
+
 ## H. Determinism, saves, performance
 
 - **H1. Tick determinism live.** Save, note the full orientation, reload, tick. PASS: identical

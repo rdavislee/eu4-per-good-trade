@@ -424,7 +424,7 @@ static void run_install(const std::string& logpath) {
                     // hasTrader is forced to transfer unless the record is a capital (nocollect.h).
                     std::string ncerr;
                     if (nocollect::install(&ncerr))
-                        log << "  no-collect enforced at SetTrader (prologue hook at 0xB5E290)" << (char)10;
+                        log << "  no-collect enforced at SetTrader (prologue hook on the OUTER function 0xB596E0)" << (char)10;
                     else
                         log << "  no-collect NOT installed: " << ncerr << (char)10;
                     std::string serr;

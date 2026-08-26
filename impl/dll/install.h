@@ -234,7 +234,7 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             // merchants never collect. The only place a country collects is its trade capital,
             // without a merchant, and a merchant cannot be placed there. So collecting is
             // has_capital alone; a merchant record is always a steerer.
-            s.collects = c.has_capital;
+            s.collects = c.has_capital || (c.has_trader && c.type == 0);   // the ENGINE's collector set (has_trader ? type==0 : has_capital); merchants at end nodes collect in the engine and must in the model
             s.is_capital = c.has_capital;
             s.steer_to = -1;
             // A TABLE-OWNED PLACEMENT IS READ FROM THE TABLE, NOT THE RECORD. syncrec writes a

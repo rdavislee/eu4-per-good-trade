@@ -222,7 +222,7 @@ vector<float2>** (the ribbon polyline -- display-only), `+0x70` unknown, never s
 
 Country record (0xC0): `+0xA8` `steer_power` is a **bare 0-based position into
 `def->outgoing`**, `+0xAC` type (0 collect / 1 steer). Canonical setter is
-**`0xB5E290 SetTrader(this, bool hasTrader, u8 type)`** -- writes `+0xAC` and `+0xAE` together.
+**`0xB5E290 SetTraderFlags(rec, bool hasTrader, u8 type)`** -- writes `+0xAC` and `+0xAE` together (the INNER function). The OUTER `0xB596E0 SetTrader(node, handle, type)` addresses the record, scores the outgoing links ONLY when type == 1 (`0xB59767`) and writes the chosen ordinal to `+0xA8` (`0xB599AE`) before calling it; its four callers are `0x25AE22` (arrival), `0x25B9A3` (instant placement), `0x27424A` (send_merchant command), `0x305C6C` (trade-capital move). nocollect.h hooks the OUTER prologue (15 relocatable bytes `48 89 5c 24 08 48 89 54 24 10 55 56 57 41 54`).
 `+0xA8` readers use SIGNED compares with NO lower bound: a negative ordinal at `0xB54F8F`
 zero-extends into `rax=0xFFFFFFFF` and writes ~16GB past `node+0x88`. Never write a negative;
 a node with zero outgoing links must have `+0xAC == 0`.
@@ -351,7 +351,7 @@ Envoy lifecycle: action 1 (travelling) set at `0x25C896`/`0x25C923` in SetEnvoy;
 at `0x25AE0B` in `CMerchantConstruction::Update`, then SetTrader `0x25AE22`; action 0 (free) at
 `0x9DC3EC` after `0x6FF570(envoy, 0)` (recall). `CMerchantConstruction+0x80` (posted node) is
 written only by the ctor `0x25AB92` and the re-derive `0x25AC10` (`= province+0xE8`). `rec+0xAE`
-has one semantic writer, `0xB5E2FF` inside SetTrader `0xB5E290`, sole caller `0xB599E5`.
+has one semantic writer, `0xB5E2FF` inside SetTraderFlags `0xB5E290`, reached by `call 0xB599E5` and by ClearTrader's tail `jmp 0xB59BA4` (both enter at the prologue). Non-semantic writers of `+0xAC`: the deserializer `0xB5EDC5` and the record copy `0x785D81`.
 `0x305C6C` = `SetTrader(homeNode, handle, 0)`, the default collect-at-home.
 
 ## `country+0x68` is NOT the monthly trade-income accumulator (measured 2026-08-26)

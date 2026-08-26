@@ -44,6 +44,7 @@
 #include "livetrade.h"
 #include "assign.h"
 #include "aiwire.h"
+#include "nocollect.h"
 #include "../src/frontier.h"
 
 namespace envoy {
@@ -111,6 +112,7 @@ inline bool send(int country_idx, uintptr_t node, std::ofstream* lg, const std::
 constexpr uintptr_t SET_TRADER = 0xB5E290;    // (rec, bool hasTrader, u8 type) -- syncrec's
 using FnSetTrader = void (__fastcall*)(uintptr_t, bool, uint8_t);
 inline uint64_t g_recalled = 0, g_recall_stale = 0, g_recall_refused = 0;
+inline uint64_t g_plan_at_end = 0;                          // plan entries skipped because the engine node has no outgoing link
 constexpr int RECALL_CAP_PER_TICK = 60;      // world-wide per tick, observation cap
 constexpr int RECALL_BUDGET_PER_COUNTRY = 2; // per country per tick: `continue` after a refusal must not become a stampede      // observation cap while the engine's behaviour on re-placement is being measured
 
@@ -285,6 +287,10 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
             if (it != g_touched_tick.end() && tick - it->second < (int)ai::DWELL_FLOOR_MONTHS) continue;
             uintptr_t nd = obj_of[pl.node];
             if (!nd) { g_no_node++; continue; }                      // name did not resolve: not a recall case
+            // an END node (no outgoing entry in the engine) cannot hold a steering merchant: the engine
+            // would keep it collecting, the model would call it a steerer, and the two would disagree
+            // about who is paid. Until relink gives such nodes entries (ALLOUT), the plan skips them.
+            if (!nocollect::node_has_outgoing(nd)) { g_plan_at_end++; continue; }
             double ts0 = nowms();
             bool placed_here = false;
             if (!free_list.empty()) { placed_here = send(cidx, nd, lg, names[pl.node], free_list.back()); if (placed_here) free_list.pop_back(); }
@@ -306,7 +312,11 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                     if (moved_envoys.count(m.envoy)) continue;              // already re-placed this tick (snapshot is stale)
                     auto f = eng_to_field.find(m.node_index); if (f == eng_to_field.end()) continue;
                     int fnode = f->second;
-                    if (plan_nodes.count(fnode) || fnode == home) continue;   // on the plan: not a victim
+                    if (plan_nodes.count(fnode)) continue;                    // on the plan: not a victim
+                    // A MERCHANT STANDING AT ITS OWN CAPITAL is worth nothing under the rule (it can only
+                    // collect there, which is forbidden; vanilla parks 573 of them at home at the 1444
+                    // start). It is the first victim, at value 0 -- no gain test can keep it there.
+                    if (fnode == home) { if (0.0 < weakest) { weakest = 0.0; victim = &m; victim_node = fnode; any_valid = true; } continue; }
                     auto tt = g_touched_tick.find(std::make_pair(c, fnode));
                     if (tt != g_touched_tick.end() && tick - tt->second < (int)ai::DWELL_FLOOR_MONTHS) continue;   // dwell
                     double v;
@@ -369,7 +379,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
     if (lg && planned_countries) *lg << "  [plan/drift] " << drift_countries << " of " << planned_countries << " planned countries changed their planned node set since last planned; " << drift_nodes << " node changes in total" << (char)10;
     if (lg && recalls_this_tick) *lg << "  [envoy] recalled " << recalls_this_tick << " (" << recall_own_tick << " of them our own placements; " << g_recall_own << " ever)" << " off-plan merchants this tick (" << g_recalled << " landed in total; " << g_recall_stale << " old records the engine left set; " << g_recall_refused << " refused by the x1.5 test)" << (char)10;
     if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
-                        << g_sent << " total; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
+                        << g_sent << " total; " << g_plan_at_end << " plan entries at END nodes skipped; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
     return sent;
 }
 

@@ -2,35 +2,45 @@
 //
 // "Merchants never collect; the only collecting node is the trade capital without a merchant; no
 // merchant may be placed at the trade capital; applies to the player too." The AI side is the
-// table + syncrec (type is always 1). This is the engine side: every change of a trader record's
-// mode goes through ONE function,
+// table + syncrec (type is always 1). This is the engine side.
 //
-//   0xB5E290  SetTrader(rec /*rcx*/, bool hasTrader /*dl*/, u8 type /*r8b: 0 collect, 1 steer*/)
+// THE SEAM (reviewed against the PE, build 835bfdf8). Two functions:
 //
-// -- the sole semantic writer of rec+0xAC (type) and rec+0xAE (has_trader), with one caller
-// (0xB599E5) that every path funnels into: the send-merchant command, the node window's
-// collect/transfer toggle, PlaceMerchantAtNode, and our own syncrec. So one prologue hook that
-// rewrites r8b to 1 whenever hasTrader is set enforces the rule for every path at once, without
-// touching the GUI's commands. The GUI's collect button then does nothing visible, and is removed
-// from the view separately (interface override) so the player is not offered a dead choice.
+//   0xB596E0  SetTrader(CTradeNode* node /*rcx*/, u64 handle /*rdx*/, u8 type /*r8b*/)
+//             -- the OUTER one: GetTraderRecord arithmetic (rec = *(node+0x18) + 0xC0 * idx),
+//             then, ONLY IF type == 1 (0xB59767), scores the node's outgoing links and writes the
+//             chosen ordinal to rec+0xA8 (0xB599AE), then calls
+//   0xB5E290  SetTraderFlags(rec, bool hasTrader, u8 type)
+//             -- writes rec+0xAC (type) and rec+0xAE (has_trader). Nothing else.
 //
-// The ONE exception is a record at the country's own trade capital (rec+0xAD has_capital): the
-// engine's collect-eligibility is `has_trader ? type == 0 : has_capital`, so forcing type=1 on a
-// merchant standing at home would switch the capital's own collection OFF. Such a record keeps
-// whatever the engine asked for (vanilla: collect). Placing a merchant at the capital is the
-// user's other rule; the AI never does it, and the player's case is left to the sweep below.
+// The first version hooked the INNER function. That rewrote the type after the outer one had
+// already branched away from its link scoring on the original type 0, so every converted merchant
+// carried a steer ordinal nobody chose (Bordeaux "to Champagne" was link #0) -- and it had no
+// end-node guard, so it could manufacture the one record state this code base has already
+// crashed on (type 1 at a node with an empty outgoing vector, 0xB5654D). Both reviewed.
 //
-// Prologue (from the PE on disk, build 835bfdf8), 16 relocatable bytes:
-//   48 89 5c 24 18   mov [rsp+0x18], rbx
-//   55               push rbp
-//   56               push rsi
-//   57               push rdi
-//   48 83 ec 30      sub rsp, 0x30
-//   41 0f b6 f0      movzx esi, r8b        <- reads r8b AFTER our handler ran, so the rewrite lands
+// So the hook is on the OUTER function, where rcx = node and rdx = handle are live:
+//   - type != 0            -> nothing to do
+//   - node has NO outgoing -> leave type 0 (the engine cannot steer there; counted as at_end)
+//   - record has_capital   -> leave type 0 (forcing it would switch the capital's own collection
+//                             off; a MERCHANT standing there is the other rule -- counted)
+//   - otherwise            -> r8b = 1, and the engine's own link scoring then runs and writes a
+//                             real rec+0xA8.
+// All four callers of the outer function (0x25AE22 arrival, 0x25B9A3 instant placement,
+// 0x27424A send_merchant command, 0x305C6C trade-capital move) pass through this prologue.
 //
-// The tick SWEEP handles what was already collecting before the hook existed (the 1444 save's
-// merchants, e.g. Castile's at Bordeaux): any record with has_trader && type == 0 && !has_capital
-// is re-set through SetTrader(rec, true, 1) once, and counted.
+// Prologue of 0xB596E0, 15 relocatable bytes (no RIP-relative operand, no branch into them,
+// checked against .text and .pdata by the reviewer):
+//   48 89 5c 24 08   mov [rsp+0x08], rbx
+//   48 89 54 24 10   mov [rsp+0x10], rdx
+//   55 56 57         push rbp / rsi / rdi
+//   41 54            push r12
+//
+// The SWEEP converts records that were collecting before the hook existed (the save's merchants)
+// by calling the OUTER function with type 1, so they get a scored ordinal too, and it checks that
+// each conversion landed (+0xAC == 1, +0xA8 in range) -- the test that can go red. It runs every
+// tick regardless of the AI marker: it is the enforcement, not an AI feature. Records at end nodes
+// and merchants standing at their own capital are counted by name, not fought here.
 #pragma once
 #include <windows.h>
 #include <cstdint>
@@ -42,29 +52,47 @@
 
 namespace nocollect {
 
-constexpr uintptr_t SET_TRADER = 0xB5E290;
-using FnSetTrader = void (__fastcall*)(uintptr_t, bool, uint8_t);
+constexpr uintptr_t SET_TRADER_OUTER = 0xB596E0;   // (node, handle, type)
+using FnSetTraderOuter = void (__fastcall*)(uintptr_t node, uint64_t handle, uint8_t type);
 inline detour::Hook g_hook;
-inline uint64_t g_calls = 0, g_forced = 0, g_kept_capital = 0, g_swept = 0, g_at_end = 0;
+inline uint64_t g_calls = 0, g_forced = 0, g_kept_capital = 0, g_kept_end = 0, g_swept = 0, g_red = 0;
+inline uint64_t g_at_end = 0, g_at_capital = 0;
+inline std::string g_end_names, g_capital_names;
 inline bool g_installed = false;
+
+inline bool node_has_outgoing(uintptr_t node) {
+    uintptr_t def = livetrade::validate_region(node + 0xA8, 8) ? livetrade::fq(node + 0xA8) : 0;
+    if (!def || !livetrade::validate_region(def + 0x98, 16)) return false;   // unreadable: treat as none (never force)
+    return livetrade::fq(def + 0xA0) > livetrade::fq(def + 0x98);
+}
+
+// the record the outer function will address for (node, handle), slot-checked, or 0
+inline uintptr_t record_for(uintptr_t node, uint64_t handle) {
+    if (!node || !livetrade::validate_region(node + 0x18, 16)) return 0;
+    uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
+    int idx = (int)(int16_t)(handle >> 32);
+    if (!rb || idx < 0 || idx >= rc || !livetrade::validate_region(rb + (uintptr_t)idx * 0xC0, 0xC0)) return 0;
+    if ((livetrade::fi(rb + (uintptr_t)idx * 0xC0 + 0x14) & 0xFFFF) != idx) return 0;
+    return rb + (uintptr_t)idx * 0xC0;
+}
 
 inline void on_set_trader(detour::Regs* r) {
     g_calls++;
-    uintptr_t rec = r->rcx;
-    bool has_trader = (r->rdx & 0xFF) != 0;
-    uint8_t type = (uint8_t)(r->r8 & 0xFF);
-    if (!has_trader || type != 0) return;                       // nothing to force
-    if (!rec || !livetrade::validate_region(rec + 0xAD, 1)) return;
-    if (livetrade::fb(rec + 0xAD) != 0) { g_kept_capital++; return; }   // the capital keeps collecting
-    r->r8 = (r->r8 & ~(uint64_t)0xFF) | 1;                        // collect -> transfer
+    if ((r->r8 & 0xFF) != 0) return;                           // already transfer
+    uintptr_t node = r->rcx; uint64_t handle = r->rdx;
+    if (!node_has_outgoing(node)) { g_kept_end++; return; }    // nothing to steer along
+    uintptr_t rec = record_for(node, handle);
+    if (!rec) return;                                          // cannot see the record: leave the engine alone
+    if (livetrade::fb(rec + 0xAD) != 0) { g_kept_capital++; return; }
+    r->r8 = (r->r8 & ~(uint64_t)0xFF) | 1;                     // collect -> transfer; the engine scores the link
     g_forced++;
 }
 
 inline bool install(std::string* err) {
     if (g_installed) return true;
-    const std::vector<uint8_t> expected = {0x48, 0x89, 0x5c, 0x24, 0x18, 0x55, 0x56, 0x57,
-                                           0x48, 0x83, 0xec, 0x30, 0x41, 0x0f, 0xb6, 0xf0};
-    if (!detour::install(g_hook, livetrade::module_base() + SET_TRADER, expected, on_set_trader, "nocollect")) {
+    const std::vector<uint8_t> expected = {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x54, 0x24, 0x10,
+                                           0x55, 0x56, 0x57, 0x41, 0x54};
+    if (!detour::install(g_hook, livetrade::module_base() + SET_TRADER_OUTER, expected, on_set_trader, "nocollect")) {
         if (err) *err = g_hook.error;
         return false;
     }
@@ -72,42 +100,49 @@ inline bool install(std::string* err) {
     return true;
 }
 
-// Once per tick: convert records that were collecting before the hook existed. Returns the count.
+// Once per tick. Converts records that were collecting before the hook existed; verifies each
+// conversion landed; counts (by name) the two classes the rule cannot reach through the engine.
 inline int sweep(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg) {
     if (!g_installed) return 0;
-    auto set_trader = (FnSetTrader)(livetrade::module_base() + SET_TRADER);
-    int n = 0, at_end = 0; std::string sample;
+    auto set_trader = (FnSetTraderOuter)(livetrade::module_base() + SET_TRADER_OUTER);
+    int n = 0, red = 0; uint64_t at_end = 0, at_capital = 0;
+    std::string sample, end_names, cap_names;
     for (auto& s : sim) {
         uintptr_t node = s.obj;
         if (!node || !livetrade::validate_region(node + 0x18, 16)) continue;
         uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
         if (!rb || rc <= 0 || rc > 4096 || !livetrade::validate_region(rb, (size_t)rc * 0xC0)) continue;
-        // an END node (no outgoing link in the installed graph) has nothing the engine can steer
-        // along: SetTrader(rec, true, 1) there is undone by the engine itself (+0xAC must be 0 with
-        // zero outgoing links, OFFSETS.md), so the sweep re-converted genua/hangzhou every tick.
-        // Those merchants collect in the engine; counted apart, not fought.
-        bool is_end = true;
-        { uintptr_t def = livetrade::validate_region(node + 0xA8, 8) ? livetrade::fq(node + 0xA8) : 0;
-          if (def && livetrade::validate_region(def + 0x98, 16)) is_end = livetrade::fq(def + 0xA0) <= livetrade::fq(def + 0x98); }
+        bool has_out = node_has_outgoing(node);
+        int end_here = 0, cap_here = 0;
         for (int i = 0; i < rc; i++) {
             uintptr_t rec = rb + (uintptr_t)i * 0xC0;
-            if (livetrade::fb(rec + 0xAE) == 0) continue;            // no trader
-            if (livetrade::fb(rec + 0xAC) != 0) continue;            // already transferring
-            if (livetrade::fb(rec + 0xAD) != 0) continue;            // capital: keeps collecting
-            if (is_end) { at_end++; continue; }
-            set_trader(rec, true, 1);                                 // the hook sees type 1 and lets it through
+            if ((livetrade::fi(rec + 0x14) & 0xFFFF) != i) continue;   // slot check (syncrec's)
+            if (livetrade::fb(rec + 0xAE) == 0) continue;               // no trader
+            if (livetrade::fb(rec + 0xAD) != 0) { cap_here++; continue; }   // a merchant at its own capital
+            if (livetrade::fb(rec + 0xAC) != 0) continue;               // already transferring
+            if (!has_out) { end_here++; continue; }                     // engine has nothing to steer along
+            uint64_t handle = livetrade::fq(rec + 0x10);
+            set_trader(node, handle, 1);                                // the outer function: scores the link
+            int type_after = livetrade::fb(rec + 0xAC), ord = livetrade::fi(rec + 0xA8);
+            int outc = 0;
+            { uintptr_t def = livetrade::fq(node + 0xA8); outc = (int)((livetrade::fq(def + 0xA0) - livetrade::fq(def + 0x98)) / 0x78); }
+            if (type_after != 1 || ord < 0 || ord >= outc) { red++; if (lg) *lg << "  [nocollect] RED: conversion did not land at " << s.name << "#" << i << " type=" << type_after << " ord=" << ord << "/" << outc << (char)10; }
             n++; g_swept++;
-            if (sample.size() < 160) sample += s.name + "#" + std::to_string(livetrade::fi(rec + 0x14) & 0xFFFF) + " ";
+            if (sample.size() < 160) sample += s.name + "#" + std::to_string(i) + "->" + std::to_string(ord) + " ";
         }
+        if (end_here) { at_end += end_here; if (end_names.size() < 120) end_names += s.name + "(" + std::to_string(end_here) + ") "; }
+        if (cap_here) { at_capital += cap_here; if (cap_names.size() < 120) cap_names += s.name + "(" + std::to_string(cap_here) + ") "; }
     }
-    g_at_end = at_end;
-    if (lg && (n || at_end)) *lg << "  [nocollect] swept " << n << " collecting merchants to transfer (" << sample << "); " << at_end << " collect at Phi_w END nodes (no outgoing link for the engine to steer along)" << (char)10;
+    g_red += red; g_at_end = at_end; g_at_capital = at_capital; g_end_names = end_names; g_capital_names = cap_names;
+    if (lg && (n || at_end || at_capital))
+        *lg << "  [nocollect] swept " << n << " collecting merchants to transfer (" << sample << "); " << red << " did not land; "
+            << at_end << " collect at END nodes [" << end_names << "]; " << at_capital << " merchants stand at their own capital [" << cap_names << "]" << (char)10;
     return n;
 }
 
 inline void report(std::ofstream& lg) {
-    lg << "  [nocollect] SetTrader calls=" << g_calls << " forced collect->transfer=" << g_forced
-       << " kept at capital=" << g_kept_capital << " swept=" << g_swept << (char)10;
+    lg << "  [nocollect] SetTrader(outer) calls=" << g_calls << " forced collect->transfer=" << g_forced
+       << " kept: at end=" << g_kept_end << " at capital=" << g_kept_capital << "; swept=" << g_swept << " red=" << g_red << (char)10;
 }
 
 } // namespace nocollect

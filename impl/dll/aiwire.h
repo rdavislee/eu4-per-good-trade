@@ -130,6 +130,7 @@ inline std::vector<Merchant> merchants_of_uncached(int country_idx) {
 inline std::map<int, std::map<int, int>> g_prev;    // country -> merchant id -> node index
 inline std::set<int> g_baselined;                     // countries whose first snapshot is taken
 inline int g_placed = 0, g_triggers = 0;
+inline long long g_table_at_end = 0;   // plan entries with a merchant standing at an engine END node: no table entry written
 
 // --- G2 damping state, and the G1/G2 measurements -------------------------------------------
 // Damping is the second half of the cadence the user chose: a computed-gain test plus a dwell
@@ -303,6 +304,13 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& pl : plan) {
             g_evals++;
             if (!standing_at.count(pl.node)) { g_wants_move++; continue; }   // no merchant there yet
+            {   // an END node in the engine (no outgoing entry) keeps its merchant collecting; no table entry there
+                uintptr_t nobj = 0; for (auto& s0 : sim) if (s0.name == names[pl.node]) { nobj = s0.obj; break; }
+                bool has_out = false;
+                if (nobj && livetrade::validate_region(nobj + 0xA8, 8)) { uintptr_t def = livetrade::fq(nobj + 0xA8);
+                    if (def && livetrade::validate_region(def + 0x98, 16)) has_out = livetrade::fq(def + 0xA0) > livetrade::fq(def + 0x98); }
+                if (!has_out) { g_table_at_end++; continue; }
+            }
             auto key = std::make_pair(c, names[pl.node]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {

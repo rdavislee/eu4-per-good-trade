@@ -42,6 +42,7 @@
 #include "clickfix.h"
 #include "envoy.h"
 #include "nocollect.h"
+#include "igiprobe.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -220,6 +221,8 @@ inline void frame_view_poll() {
     // tick hook, which sits at a known-safe point between passes (0xB4BF09); at speed 5 a month
     // is about a second, so a view change still lands promptly.
     viewmode::poll(g_plan.good_names);
+    // (igiprobe::frame, the D1 selected-province probe, is not wired: its level-2 walk on the render
+    //  thread took the process down without a dump on 2026-08-26 -- see igiprobe.h)
 
     // Reverse-direction map panels, driven from the frame hook (render thread, inside the frame).
     if (livetrade::marker_present("REVPANEL")) {
@@ -482,8 +485,6 @@ inline int apply(uintptr_t mgr) {
           aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), pidx, la, &per_good); }
         PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
-        nocollect::sweep(sim, &la);       // records still collecting from before the hook (the save)
-        nocollect::report(la);
         PH("dispatch");
         { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/cost] validate_region calls this tick=" << livetrade::g_validate_calls << " syscalls=" << livetrade::g_validate_syscalls << "; plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
         aiwire::g_flowmat = nullptr;
@@ -510,6 +511,9 @@ inline int apply(uintptr_t mgr) {
     // belong at both ends; without a record for links drawn OUT of this node, the value
     // arriving along them has nowhere to live and is omitted from incoming entirely.
     outlinks::g_log_inc = g_log;
+    // NO-COLLECT ENFORCEMENT runs every tick, AI marker or not: a save loaded mid-session brings
+    // its collecting merchants back through the deserializer, which the hook never sees.
+    { std::ofstream lnc(g_log, std::ios::app); nocollect::sweep(sim, &lnc); nocollect::report(lnc); }
     PH("ai+dispatch");
     if (livetrade::marker_present("NOWRITE")) { PH("nowrite"); std::ofstream lg0(g_log, std::ios::app); lg0 << "[tick/phases]" << ph_line << " (NOWRITE: engine writes skipped)" << (char)10; return 0; }
     outlinks::install_incoming(sim, g_plan.names, gross, install::g_id_to_name);

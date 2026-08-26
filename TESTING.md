@@ -85,7 +85,9 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   TRANSFERRING merchant at a non-home node -- which is the player-side no-collect enforcement the
   user deferred ("worry about making the game steer only later"). C1/C2 are blocked on that, not
   on the hook. The AI path (G1) already exercises the same table + syncrec representation the
-  click writes.
+  click writes. C1 as observed in the same session: the Sevilla window shows its three Phi_w-outgoing
+  tabs named (Valencia, Tunis, Safi) and its two incoming tabs as "?????" -- the incoming group's
+  names do not resolve through relink's rebuilt incoming lists. DEFECT, open.
 
 ## D. ★ Per-good view
 
@@ -195,6 +197,15 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   - E1 636/636 countries agree (worst 0.0019 ducats), E4 CLEAN throughout.
   Run: `touch dllbuild/pgt.AI; bash run.sh pgt_sil2.dll 4`; read `[G1]`, `[G2]`, `[envoy] ... still hold one`.
 
+  **Measured 2026-08-26 (pgt_h3q, commit dad208b, 11 ticks).** With RECALL enabled -- a posted
+  merchant standing off its country's plan is re-placed on a planned node when that node beats it
+  by x1.5 -- 37 recalls, 34 refused by the x1.5 test, the engine cleared every old record itself
+  (has_trader 1->0). Plan drift 0-12 of ~220 planned countries per tick (one node in, one out).
+  G1 226 of 791 placements (28%) on Phi_w-INCOMING ends; G2 worst churn 0 target changes; 565 of
+  609 sent-to nodes still hold a merchant; E1 655/655; E4 CLEAN. The human's country is excluded
+  from step and dispatch (observer's index holds no trade power, so observer runs drive every
+  country).
+
 ## H. Determinism, saves, performance
 
 - **H1. Tick determinism live.** Save, note the full orientation, reload, tick. PASS: identical
@@ -204,6 +215,12 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
 - **H3. Tick cost.** PASS: the monthly tick's added time is imperceptible against vanilla's own
   monthly work — the solve budget is ~0.1 s even on the Python reference (§2.2), so any visible
   hitch is an implementation defect, not a design cost.
+  **Measured 2026-08-26.** Vanilla's own monthly stall with the DLL idle: 87-98 ms worst frame gap.
+  With the mod: 174-236 ms (was 300-350 before the per-tick VirtualQuery cache, which turned
+  ~16,000 validate_region calls into ~290 syscalls). Tick profile (ms, cumulative): standings 6,
+  routed 30, orient 46, flowmat 50, AI 61, dispatch 74, incoming 96, linkvalue 100, aggregate 117.
+  Perceptible at speed 5; the remaining cost is routing 29 goods (~25 ms), relink (~16 ms) and the
+  aggregate write (~20 ms). NOT PASSED yet by the "imperceptible" wording.
 - **H4. Long-run soak.** Hands-off observer run, 1444 → 1600, autosaves on. PASS: no crash, no
   save corruption, no monotonic drift in world trade value beyond what development growth
   explains.

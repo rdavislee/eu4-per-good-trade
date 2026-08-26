@@ -171,3 +171,14 @@ their frontier because envoy travel is not driven. The send-merchant command is 
 **Two-year run (pgt_sil2, 24 ticks):** G1 26% reverse-end placements, G2 zero churn, 516/527 placements
 held, E1 636/636, E4 CLEAN. `4,598 refused: no free merchant` is the plan wanting more merchants than
 countries own -- the model saturating, not a defect. Vanilla's merchant AI is silenced at 0x1B831D.
+
+**2026-08-26, recall + review fixes (dad208b):** dispatch now RECALLS the least valuable off-plan
+posted merchant onto a planned node when it beats it by x1.5 (37 recalls / 34 refusals over 11 ticks;
+the engine clears the old record itself). Reviewer-found defects fixed: the +2 floor now applies along
+the whole network path (the network could not grow past one hop before), added_value is the same metric
+as candidates(), plan cache keyed on (country,k), travelling merchants occupy their node, the human is
+excluded, table entries vacated for every country. Region cache made thread_local, in-tick only,
+positive-only. Ledger: B1 EQUAL (engine lists == installed graph, 159/159), D3 logged per view,
+G1 28%, G2 0 churn, E1/E4 clean, H3 ~230 ms vs vanilla ~90. OPEN: C1 incoming tabs read "?????";
+C2 blocked on player-side no-collect (engine disables the steer button where the country collects);
+per-good view still shows both panels per link (D2); province-click trigger not built (D1).

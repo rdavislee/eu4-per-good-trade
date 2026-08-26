@@ -36,6 +36,7 @@
 #include "relink.h"
 #include "viewmode.h"
 #include "assign.h"
+#include "syncrec.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -287,6 +288,8 @@ inline int apply(uintptr_t mgr) {
     // this node) live in our own table and are merged on top of the engine's own assignments.
     assign::poll(g_log);
     int assigned = assign::merge(st, g_plan.names);
+    // ...and the engine records are made to say the same, so the map draws what is routed
+    { std::ofstream lsr(g_log, std::ios::app); syncrec::apply(sim, &lsr); }
     if (assigned && (g_ticks.load() % 12) == 0) {
         std::ofstream la(g_log, std::ios::app);
         la << "  [assign] " << assigned << " DLL-owned merchant assignments active\n";
@@ -426,7 +429,7 @@ inline int apply(uintptr_t mgr) {
                 if (v >= 0) { und[u].push_back(v); und[v].push_back(u); phi_out[u].push_back(v); }
         ai::Orient orient = aiwire::build_orient(g_plan.N, per_good, g_plan.graphs, inj_field);
         std::ofstream la(g_log, std::ios::app);
-        aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la);
+        aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);
     auto gross = econ::gross_link_flows(shown);                  // WITH steering bonus

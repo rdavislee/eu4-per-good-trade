@@ -25,6 +25,7 @@
 // CEnvoy: +0x10 CMerchantConstruction*, +0x18 action (0 free / 1 travelling / 2 posted), +0x44 id
 // CMerchantConstruction: +0x80 the node it is posted at
 #pragma once
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <set>
@@ -94,6 +95,10 @@ inline std::map<std::pair<int, std::string>, int>    g_hold_tick;
 inline std::map<std::pair<int, std::string>, int>    g_flips;
 inline long long g_phi_out = 0, g_phi_in = 0;   // G1: which tab group each chosen end sits in
 inline long long g_damped = 0;
+inline long long g_kept_collecting = 0;
+inline long long g_moved_nodes = 0;
+inline long long g_wants_move = 0;        // best placement is at a node the merchant is not at       // placements at a node other than where the merchant sat   // steering did not beat collecting by x1.5
+constexpr int CADENCE_TICKS = 3;          // each merchant reconsidered every N months
 inline int g_evals = 0;
 
 // Build the solver-side view the scorer needs, from this tick's routed flows.
@@ -124,7 +129,8 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                  const std::vector<std::vector<int>>& phi_out_adj,   // Phi_w orientation, for G1
                  int tick,
                  int player_country,
-                 std::ofstream& log) {
+                 std::ofstream& log,
+                 const std::vector<econ::GoodFlow>* per_good = nullptr) {
     std::map<int, std::string> idx_name;
     for (int i = 0; i < (int)names.size(); i++) idx_name[i] = names[i];
     // engine node index -> field index
@@ -161,13 +167,25 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         // country's whole map instead lets one merchant setting out re-place all its siblings,
         // which is neither spec 3.14's rule (that rule is about one placement) nor the
         // rarely-firing behaviour the user's prior expects.
+        // THE TRIGGER IS A CADENCE, NOT A VANILLA MOVE. The shadow-vanilla rule -- reconsider a
+        // merchant only when vanilla just moved it -- turned out to place NOTHING on reverse ends
+        // once vanilla settled, which it does within a few months: vanilla's own AI never moves
+        // a merchant onto a link it cannot index, so waiting for it to move one first meant
+        // waiting forever. The user's stated default (CLAUDE.md, spec 3.14) is the other option:
+        // a computed-gain test plus a dwell floor of a few months, expected to fire rarely. So
+        // every posted merchant is evaluated on that cadence, and the gain test and dwell floor
+        // below are what keep it rare.
+        //
+        // A merchant vanilla just moved is still evaluated at once (it is in transit anyway).
         std::vector<std::pair<int, int>> changed;
         for (auto& [id, nd] : cur) {
             auto pv = prev.find(id);
-            if (pv == prev.end() || pv->second != nd) changed.push_back({id, nd});
+            bool moved = (pv == prev.end() || pv->second != nd);
+            bool due   = (tick % CADENCE_TICKS) == (id % CADENCE_TICKS);   // spread the load
+            if (moved || due) changed.push_back({id, nd});
         }
         prev = cur;
-        if (changed.empty()) continue;                     // shadow-vanilla: vanilla did nothing
+        if (changed.empty()) continue;
         triggers += (int)changed.size();
         // build this country's live footprint
         ai::Country ac;
@@ -180,14 +198,56 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                 }
         if (ac.collect_power.empty()) continue;
         // re-place every posted merchant: candidates are the link ends at the node it sits on
+        // ELIGIBLE NODES: every node where this country already holds power. That is the set the
+        // engine's own CanSteer (0xB5C010) accepts -- a record with power > 0 or a merchant present,
+        // else STEER_NO_POWER -- and it is where a merchant can actually be sent. Trade range is
+        // not read from the engine yet (spec 2.7 item 17 is an open probe), so this is the
+        // approximation; a country never holds power in a node it cannot reach.
+        std::vector<int> eligible;
+        for (auto& [fn, pw] : ac.collect_power) if (pw > 0) eligible.push_back(fn);
+        for (int fn = 0; fn < (int)st.size(); fn++)
+            for (auto& e : st[fn].entries)
+                if (e.country == c && e.power > 0 &&
+                    std::find(eligible.begin(), eligible.end(), fn) == eligible.end())
+                    eligible.push_back(fn);
+
         for (auto& [id, eng_node] : changed) {
             auto f = eng_to_field.find(eng_node);
             if (f == eng_to_field.end()) continue;
-            auto cands = ai::candidates_at(orient, ac, f->second, undirected_adj);
-            if (cands.empty()) continue;                   // steers nothing -> never chosen
-            const ai::Candidate& best = cands.front();
-            if (best.score <= 0) continue;
+            int here = f->second;
+            // THE WHOLE FIELD, not just the node the merchant sits on. Offering only `here`'s ends
+            // meant a merchant collecting at saxony was never asked whether steering from
+            // rheinland TOWARD saxony pays more -- the exact case spec 3.14 is about, and why no
+            // reverse end was ever exercised. best_placement scores every (node, link-end) pair
+            // the country can reach; the current node is always among them.
+            auto best_pair = ai::best_placement(orient, ac, eligible, undirected_adj);
+            if (best_pair.first < 0) continue;              // steers nothing anywhere -> stays
+            auto cands = ai::candidates_at(orient, ac, best_pair.first, undirected_adj);
+            const ai::Candidate* bestp = nullptr;
+            for (auto& cd : cands) if (cd.target == best_pair.second) { bestp = &cd; break; }
+            if (!bestp || bestp->score <= 0) continue;
+            const ai::Candidate& best = *bestp;
             g_evals++;
+            // A merchant COLLECTING here has an income already. Steering anywhere must beat it by
+            // the same x1.5 margin the steer-vs-steer test uses, or it stays: otherwise every
+            // home-node collector would be pushed onto a link, the regression that emptied
+            // P_collect at north_sea. score_collect is the spec's own figure -- the country's
+            // share of this node's collectible pool.
+            {
+                bool collecting_here = false;
+                for (auto& e : st[here].entries)
+                    if (e.country == c && e.collects) { collecting_here = true; break; }
+                if (collecting_here) {
+                    double pool = 0, coll_pow = 0;
+                    if (per_good)
+                        for (auto& F : *per_good)
+                            if (here < (int)F.collected.size()) pool += F.collected[here];
+                    for (auto& e : st[here].entries)
+                        if (e.collects && e.power > 0) coll_pow += e.power;
+                    double keep = ai::score_collect(orient, ac, here, pool, coll_pow);
+                    if (best.score < 1.5 * keep) { g_kept_collecting++; continue; }
+                }
+            }
             auto key = std::make_pair(c, names[best.node]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
@@ -205,6 +265,14 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                 if (best.score < 1.5 * incumbent) { g_damped++; continue; }
                 g_flips[key]++;
             }
+            // A MERCHANT ONLY STEERS WHERE IT STANDS. The engine posts a merchant at ONE node;
+            // its record anywhere else has has_trader = 0 and cannot steer. Until the envoy is
+            // physically moved (the travel mechanic, not driven yet), a placement at another
+            // node is a plan the map cannot show and the record cannot hold. So the field-wide
+            // search decides WHETHER this merchant should move; the placement is written only
+            // when best.node == here, and the move itself is left to vanilla, which the
+            // cadence re-evaluates once it lands.
+            if (best.node != here) { g_wants_move++; continue; }
             assign::set(c, names[best.node], names[best.target]);
             g_hold_tick[key] = tick;
             // G1: is the chosen end Phi_w-OUTGOING (the tab group the engine can index) or
@@ -213,6 +281,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             if (best.node < (int)phi_out_adj.size())
                 for (int m : phi_out_adj[best.node]) if (m == best.target) { outgoing = true; break; }
             if (outgoing) g_phi_out++; else g_phi_in++;
+            if (best.node != here) g_moved_nodes++;
             placed++;
         }
     }
@@ -221,13 +290,15 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     int worst_flip = 0;
     for (auto& [k, n] : g_flips) if (n > worst_flip) worst_flip = n;
     log << "  [ai] scan: " << live_countries.size() << " countries with power, "
+        << g_wants_move << " merchants whose best placement is elsewhere (envoy travel not driven); "
         << triggers << " merchants moved by vanilla, " << placed
         << " re-placed by us; table now " << assign::g_table.size() << " entries\n";
     log << "  [G1] placements by tab group: " << g_phi_out << " on Phi_w-outgoing ends, "
         << g_phi_in << " on Phi_w-INCOMING ends"
         << (tot ? " (" : "") << (tot ? (int)(100.0 * g_phi_in / tot) : 0) << (tot ? "%)" : "")
         << " -- the incoming group is the one vanilla cannot express\n";
-    log << "  [G2] damping: " << g_damped << " candidate moves refused by the dwell floor ("
+    log << "  [G2] damping: " << g_damped << " refused by the dwell floor/gain test, "
+        << g_kept_collecting << " collectors kept collecting ("
         << (int)ai::DWELL_FLOOR_MONTHS << " months) or the x1.5 gain test, of " << g_evals
         << " evaluations; worst churn on any one (country,node) = " << worst_flip
         << " target changes over " << tick << " ticks\n";

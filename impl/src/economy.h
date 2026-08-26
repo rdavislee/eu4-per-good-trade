@@ -166,9 +166,16 @@ inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
             if (steers_g || reaches_collector) pt += s.power;   // else inert for g
         }
         F.p_collect[n] = pc; F.p_transfer[n] = pt;
-        double cs = (pc + pt > 0) ? pc / (pc + pt) : 0.0;
-        // nobody holds any power: vanilla forwards nothing collectible; the remainder still
-        // moves (even split) so value is never lost -- conservation is asserted per tick.
+        // The engine's own branch, at the tail of 0xB593F0:
+        //     0xB5961C  movsxd rcx,[r13]     ; pull
+        //     0xB59620  test   ecx,ecx
+        //     0xB59624  mov    edi,0x3E8     ; pull == 0 -> retention = 1000, keep everything
+        // It tests pull ALONE, never reading retain. In model terms: P_transfer == 0 means
+        // collected_share == 1, regardless of P_collect. The old 0/0 -> 0.0 was inverted
+        // against that: an uninhabited node (every New World node in 1444 has NO standings
+        // at all) forwarded 100% of whatever reached it. Identical to the old value wherever
+        // pc > 0; differs only at pc == pt == 0, where the engine keeps.
+        double cs = (pt > 0) ? pc / (pc + pt) : 1.0;
         F.collected_share[n] = cs;
         F.collected[n] = F.value[n] * cs;
         F.outgoing[n] = F.value[n] - F.collected[n];

@@ -206,26 +206,26 @@ inline std::vector<econ::NodeStandings> read_standings_field(
         for (auto& c : livetrade::read_standings(sim[it->second].obj)) {
             econ::Standing s{};
             s.country = c.tag_index;
-            // A COUNTRY'S POWER AT A NODE IS `val`, full stop.
+            // A COUNTRY'S POWER AT A NODE, exactly as the engine computes it -- read out of the
+            // instructions, not inferred from the save:
             //
-            // This used to be min(val, max_pow * max_demand) + t_in - t_out, which is an
-            // invention: no define, string or spec line names it, and it has two failure modes.
-            // The cap silently demotes a country whose max_demand has been adjusted below 1,
-            // and the t_in - t_out term adds a component that is ALREADY inside val. Aragon
-            // holds the largest standing in valencia by a wide margin and collects there, and
-            // was earning almost nothing, because its payout share is power / SUM(collector
-            // power) and the cap had cut its power down.
+            //   0xB594DF  movsxd rdx,[rdi+0x4C]   ; max_pow
+            //   0xB594E3  movsxd rax,[rdi+0x44]   ; max_demand
+            //   0xB594E7  imul   rdx,rax          ; /1000 follows
+            //   0xB59503  cmovg  eax,edx          ; cap = max(0, .)
+            //   0xB59506  cmp    r10d,eax         ; r10d = val (+0x48)
+            //   0xB59509  cmovl  eax,r10d         ; min(val, cap)
+            //   0xB5950D  add    eax,ecx          ; + (t_in - t_out)
             //
-            // The engine settles what val means: the field map verifies node+0xC8 `total` --
-            // the node's total trade power, the figure the node window shows -- equals the SUM
-            // of the per-country `val` on 77 of 80 nodes. So val is exactly the per-country
-            // modified power in the node's own accounting, and CalcPower has already folded the
-            // merchant bonus, the off-home penalty, propagation and the caravan grant into it.
-            //
-            // (The earlier bug here was narrower and is fixed too: read_standings divides every
-            // fixed-point field by 1000, so max_demand was already a fraction and the cap was
-            // dividing by 1000 a second time, making every capped power 1000x too small.)
-            s.power = c.val > 0 ? c.val : 0.0;
+            // Two things this settles. (1) t_in - t_out is PROPAGATED power that val does NOT
+            // contain: the clamp sites at 0xB52114 store the CAP into val, and the propagation
+            // writes at 0xB52563/0xB525D2 touch only +0x50/+0x54. An earlier commit dropped the
+            // term as "already inside val"; that was refuted at the instruction level and is
+            // reverted here. (2) read_standings already divides every fixed-point field by 1000,
+            // so max_demand is a fraction and max_pow is in ducats -- the bug that crushed every
+            // collector to 0.002-0.07 was a SECOND /1000 on their product, nothing else.
+            double capped = std::max(0.0, c.max_pow * c.max_demand);
+            s.power = std::min(c.val, capped > 0 ? capped : c.val) + c.t_in - c.t_out;
             if (s.power < 0) s.power = 0;
             s.collects = c.has_trader ? (c.type == 0) : c.has_capital;
             s.steer_to = -1;

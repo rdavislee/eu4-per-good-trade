@@ -89,6 +89,20 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   tabs named (Valencia, Tunis, Safi) and its two incoming tabs as "?????" -- the incoming group's
   names do not resolve through relink's rebuilt incoming lists. DEFECT, open.
 
+  **C2 MEASURED 2026-08-26 (pgt_h3v, seated as Castile, no-collect enforced).** With the sweep
+  having flipped the Bordeaux merchant to transfer, clicking the steer button of the reverse panel
+  at bordeaux for the Phi_w link ivory_coast -> bordeaux: `[click] steer_button #1 (REVERSE view)`,
+  `player country#185 assigned a merchant at bordeaux to steer the REVERSE end toward ivory_coast`;
+  the engine accepted its own command (tooltip "We are currently steering trade towards Ivory
+  Coast", Castile shield drawn under that panel at once). Next tick the per-good split at bordeaux
+  (`pgt.SPLIT`) shows `country#185 power=2 collects=no steers_to=ivory_coast`; Castile is ELIGIBLE
+  on exactly the goods oriented bordeaux -> ivory_coast (glass, iron, naval_supplies, salt, wine,
+  wool: e.g. iron -> ivory_coast 0.189 vs st_lawrence 0.401 = its 2/(2+4.24) power share against
+  the two st_lawrence steerers) and on none of the goods oriented the other way (cloth, fish,
+  grain, livestock send nothing to ivory_coast). `[flow] bordeaux -> ivory_coast 0.0064`
+  ducats/month. PASS. (C1: the button that works on both groups is the MAP PANEL steer button;
+  the node window's incoming tabs remain vanilla -- unnamed here, see above, and buttonless.)
+
 ## D. ★ Per-good view
 
 - **D1. ★ Click a province, get its good's network.** Click a cloves province. PASS: province

@@ -149,3 +149,21 @@ iteratively. That is the concrete next step, and the tracer + memtool are the in
 
 Every ★ test in `TESTING.md` (map numbers, per-good views, monthly money, merchant-on-any-end, AI)
 needs the sim node array + tick hook found first, so they remain pending that RE.
+
+## AI merchant placement -- the frontier model (user-specified, 2026-08-26)
+
+Replaces spec 3.14's scorer. Home = trade capital; network = home + nodes with the country's
+merchants; candidates = frontier edges (one end in, one out; merchant stands outside, steers in);
+score = inward flow x product of (my power / all power) at each node on the shortest network
+path home x share at home; a merchant moves only if a candidate beats the weakest current one
+by x1.5. Merchants never collect (user decision; spec 3.14 line 787 says collect/steer is vanilla
+-- this diverges and should be folded into the spec).
+
+**Offline regression test, no game:** `impl/aitest.exe <eu4_root> <VANILLA_start.eu4>
+<standings1444.json> TAG[,k] ...` drives the real `src/frontier.h` from the save. Expected on
+1444: MNG hangzhou->beijing 11.78, xian->beijing 11.38 (reverse Phi_w ends toward home), 3rd
+canton->hangzhou 2.92; CAS safi->sevilla 0.62; VEN ragusa->venice 0.38. Regenerate the standings
+with the extractor in the session log if the save changes.
+
+**In-game (f7c51dc):** choices match the offline test; the gap is that 1,005 merchants stand off
+their frontier because envoy travel is not driven. The send-merchant command is the next trace.

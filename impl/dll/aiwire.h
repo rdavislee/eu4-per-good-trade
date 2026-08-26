@@ -97,7 +97,8 @@ inline long long g_phi_out = 0, g_phi_in = 0;   // G1: which tab group each chos
 inline long long g_damped = 0;
 inline long long g_kept_collecting = 0;
 inline long long g_moved_nodes = 0;
-inline long long g_wants_move = 0;        // best placement is at a node the merchant is not at       // placements at a node other than where the merchant sat   // steering did not beat collecting by x1.5
+inline long long g_wants_move = 0;
+inline long long g_vacated = 0;           // table entries dropped because the merchant left        // best placement is at a node the merchant is not at       // placements at a node other than where the merchant sat   // steering did not beat collecting by x1.5
 constexpr int CADENCE_TICKS = 3;          // each merchant reconsidered every N months
 inline int g_evals = 0;
 
@@ -181,10 +182,23 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& [id, nd] : cur) {
             auto pv = prev.find(id);
             bool moved = (pv == prev.end() || pv->second != nd);
-            bool due   = (tick % CADENCE_TICKS) == (id % CADENCE_TICKS);   // spread the load
+            bool due   = true;   // the caller already gates on g_ticks % 3 == 0; an inner id%3 test left two thirds of merchants never evaluated
             if (moved || due) changed.push_back({id, nd});
         }
         prev = cur;
+        // A TABLE ENTRY LIVES ONLY WHILE THE MERCHANT STANDS THERE. When vanilla moves it away
+        // the entry must go with it, or merge keeps converting the country's whole standing
+        // at that node from collecting to steering and syncrec keeps fabricating has_trader=1
+        // -- the country then earns nothing there, even at its own capital. assign::clear had
+        // no caller at all; this is it.
+        {
+            std::set<std::string> posted_at;
+            for (auto& [id, nd] : cur) { auto f = eng_to_field.find(nd); if (f != eng_to_field.end()) posted_at.insert(names[f->second]); }
+            std::vector<std::string> gone;
+            for (auto& [key, tgt] : assign::g_table)
+                if (key.first == c && !posted_at.count(key.second)) gone.push_back(key.second);
+            for (auto& n : gone) { assign::clear(c, n); g_vacated++; }
+        }
         if (changed.empty()) continue;
         triggers += (int)changed.size();
         // build this country's live footprint
@@ -306,7 +320,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     int worst_flip = 0;
     for (auto& [k, n] : g_flips) if (n > worst_flip) worst_flip = n;
     log << "  [ai] scan: " << live_countries.size() << " countries with power, "
-        << g_wants_move << " merchants whose best placement is elsewhere (envoy travel not driven); "
+        << g_wants_move << " merchants whose best placement is elsewhere (envoy travel not driven); " << g_vacated << " entries vacated; "
         << triggers << " merchants moved by vanilla, " << placed
         << " re-placed by us; table now " << assign::g_table.size() << " entries\n";
     log << "  [G1] placements by tab group: " << g_phi_out << " on Phi_w-outgoing ends, "

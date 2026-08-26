@@ -69,10 +69,15 @@ inline double score_steer(const Orient& o, const Country& c, int n, int m,
     // power steering to bordeaux -- each earning 2/157 of a pool it had been scored as owning
     // outright. This is the share it actually gets: the link's cut of the pool, then the
     // country's cut within the link.
+    // The share is the LINK's cut of the pool and nothing more. An earlier form multiplied by
+    // my_power/(steer_at_m + my_power) as well -- 'my cut within the link' -- which cancels
+    // algebraically to my_power/(steer_total + my_power), a per-node constant that gives every
+    // link at the node the identical factor and discriminates nothing. Spec 1.8 divides a
+    // good's outgoing value ACROSS links by steering power and never within a link: everything
+    // down the link benefits every steerer of it, realised downstream through S.
     double share = 1.0;
     if (my_power > 0 && steer_total + my_power > 0)
-        share = ((steer_at_m + my_power) / (steer_total + my_power))
-              * (my_power / (steer_at_m + my_power));
+        share = (steer_at_m + my_power) / (steer_total + my_power);
     for (int g = 0; g < o.G; g++) {
         // is n->m oriented for g?
         const auto& aw = o.away[g][n];

@@ -38,6 +38,7 @@
 #include "assign.h"
 #include "syncrec.h"
 #include "flagfix.h"
+#include "clickfix.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -302,7 +303,7 @@ inline int apply(uintptr_t mgr) {
            << " noname=" << assign::g_merge_noname << " (e.g. " << assign::g_merge_noname_example << ")"
            << " kept_collector="
            << assign::g_merge_kept_collector << " added_new=" << assign::g_merge_added
-           << "; flagfix: forward-#0 panels inspected=" << flagfix::g_inspected << " shields seen=" << flagfix::g_shields << " removed=" << flagfix::g_cleared << " | reverse panels updated=" << flagfix::g_rev_panels << " with shields=" << flagfix::g_rev_with_shields << " total shields=" << flagfix::g_rev_shields
+           << "; flagfix: forward-#0 panels inspected=" << flagfix::g_inspected << " shields seen=" << flagfix::g_shields << " removed=" << flagfix::g_cleared << " | reverse panels updated=" << flagfix::g_rev_panels << " with shields=" << flagfix::g_rev_with_shields << " total shields=" << flagfix::g_rev_shields << " | steer_button clicks seen=" << clickfix::g_clicks << " reverse=" << clickfix::g_reverse_clicks
            << (char)10;
         for (auto& [e, n] : by_edge)
             lt << "     " << e.first << " -> " << e.second << " : " << n << " merchant(s)" << (char)10;

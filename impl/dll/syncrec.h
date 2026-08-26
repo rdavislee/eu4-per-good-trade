@@ -61,7 +61,7 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
         def_by_key[k]  = livetrade::fq(s.obj + 0xA8);
     }
     auto set_trader = (FnSetTrader)(livetrade::module_base() + SET_TRADER);
-    int fwd = 0, rev = 0, missing = 0, same = 0;
+    int fwd = 0, rev = 0, missing = 0, same = 0, endnode = 0, nomerchant = 0;
     for (auto& [key, target] : assign::g_table) {
         int country = key.first;
         auto nit = node_by_key.find(key.second);
@@ -78,6 +78,18 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
         if (cidx < 0 || cidx >= cnt) { missing++; continue; }
         uintptr_t rec = base + (uintptr_t)cidx * 0xC0;
         if ((livetrade::fi(rec + 0x14) & 0xFFFF) != cidx) { missing++; continue; }   // slot mismatch
+        // A node with NO outgoing links must keep +0xAC == 0: 0xB53AB0 computes N-1 = -1 and
+        // a steering record there both crashes on a negative ordinal and drops the country
+        // from the collector set at a Phi_w sink, where spec 1.8 collects 100%. Skip it.
+        {
+            uintptr_t d = livetrade::fq(node + 0xA8);
+            uintptr_t ob = d ? livetrade::fq(d + 0x98) : 0, oe = d ? livetrade::fq(d + 0xA0) : 0;
+            if (!ob || oe <= ob) { endnode++; continue; }
+        }
+        // Only a record the engine already marks as holding a merchant may be set to steer.
+        // Fabricating has_trader=1 grants the +10% income bonus and the merchant power bonus
+        // for a merchant the country does not own.
+        if (livetrade::fb(rec + 0xAE) == 0) { nomerchant++; continue; }
         int ord = forward_ordinal(livetrade::fq(node + 0xA8), tit->second);
         int32_t want_idx = ord >= 0 ? ord : 0;
         bool already = livetrade::fb(rec + 0xAE) != 0 && livetrade::fb(rec + 0xAC) == 1 &&
@@ -94,7 +106,7 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
     if (lg && (fwd || rev))
         *lg << "  [syncrec] engine records aligned to the table: " << fwd << " forward steers, "
             << rev << " reverse ends (index 0, target from the table), " << same
-            << " already right, " << missing << " with no record yet" << (char)10;
+            << " already right, " << missing << " with no record yet, " << endnode << " skipped at end nodes, " << nomerchant << " skipped (no merchant posted)" << (char)10;
 }
 
 } // namespace syncrec

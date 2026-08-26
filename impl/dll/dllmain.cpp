@@ -33,6 +33,7 @@
 #include "alledges.h"
 #include "revpanel.h"
 #include "flagfix.h"
+#include "clickfix.h"
 #include "ticklive.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
@@ -397,6 +398,12 @@ static void run_install(const std::string& logpath) {
                         log << "  panel flag row corrected for reverse views" << (char)10;
                     else
                         log << "  panel flag fix NOT installed: " << ferr << "" << (char)10;
+                    // ...and a click on a reverse panel's steer button assigns THAT end.
+                    std::string cerr;
+                    if (clickfix::install(logpath, &cerr))
+                        log << "  reverse-panel steer_button click routed to the table (prologue hook at 0x13FD5F0)" << (char)10;
+                    else
+                        log << "  click hook NOT installed: " << cerr << (char)10;
                 }
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))

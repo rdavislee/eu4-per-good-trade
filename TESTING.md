@@ -248,6 +248,18 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   orientation, bit-for-bit (§2.8). Repeat across a game restart (separate process).
 - **H2. Mid-campaign load.** Load a save mid-campaign. PASS: runs on the start-date file for at
   most one month, then the monthly solve takes over cleanly (§2.4).
+  **Measured 2026-08-26 (pgt_h4b/h4c).** H2: loading the Jan-1445 yearly autosave (`LOAD=1 run.sh`),
+  the DLL attaches, runs the start-date orientation for its first month (gen 0/1 == the 1444
+  fingerprint f6fb5d39068181c4) and the live monthly solve takes over from the next tick; E1
+  661/661, E4 CLEAN on the loaded game. PASS. H1 as specified is NOT met across the reload:
+  the fresh run (A) had flipped hormuz/gulf_of_aden at Feb 1445 (fingerprint 35e205047e6dca26)
+  while the reloaded run (B) kept f6fb... at the same dates and later flipped different links
+  (katsina/ethiopia, kiev/crimea); world local also differs at matching dates (A 342.31 vs B
+  341.92 at Feb 1445). The solver itself is deterministic (30/30 offline cross-check; both runs
+  reproduce the 1444 baseline exactly), so the divergence is in the INPUTS after a reload --
+  the `[H1/inputs]` fingerprint (hash of the province tax/production/devastation vector and
+  prices the solve consumed) is the next instrument; spec 2.8 already records that vanilla
+  itself is not reproducible run to run.
 - **H3. Tick cost.** PASS: the monthly tick's added time is imperceptible against vanilla's own
   monthly work — the solve budget is ~0.1 s even on the Python reference (§2.2), so any visible
   hitch is an implementation defect, not a design cost.

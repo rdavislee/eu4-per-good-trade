@@ -318,7 +318,7 @@ inline int add_reverse(std::ofstream* lg) {
     // The engine rebuilds this vector on every view change (install_active_orientation ->
     // arrows::rebuild), so skipping the augmentation here is the whole switch: reverse panels
     // vanish on entering a per-good view and come back on the next rebuild in the aggregate one.
-    if (viewmode::per_good()) { g_last_forward = 0; return 0; }
+    if (viewmode::per_good()) { g_last_forward = 0; if (lg) *lg << "  [revpanel] per-good view (" << viewmode::g_selected_name << "): " << n << " forward panels, reverse panels suppressed (D2)" << (char)10; return 0; }
 
     uintptr_t type = linkview_type(ctl);
     if (!type || !livetrade::validate_region(type, 8)) return -1;

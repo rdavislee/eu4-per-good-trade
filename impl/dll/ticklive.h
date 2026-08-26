@@ -24,6 +24,7 @@
 #include <windows.h>
 #include <atomic>
 #include <cstdio>
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <string>
@@ -221,8 +222,7 @@ inline void frame_view_poll() {
     // tick hook, which sits at a known-safe point between passes (0xB4BF09); at speed 5 a month
     // is about a second, so a view change still lands promptly.
     viewmode::poll(g_plan.good_names);
-    // (igiprobe::frame, the D1 selected-province probe, is not wired: its level-2 walk on the render
-    //  thread took the process down without a dump on 2026-08-26 -- see igiprobe.h)
+    { std::ofstream ip(g_log, std::ios::app); igiprobe::frame(&ip); }   // D1 probe, two-phase (igiprobe.h); inert without its markers
 
     // Reverse-direction map panels, driven from the frame hook (render thread, inside the frame).
     if (livetrade::marker_present("REVPANEL")) {
@@ -297,6 +297,16 @@ inline int apply(uintptr_t mgr) {
     auto inject = install::gather_inject(sim, g_plan.names, gc, matched);
     std::map<int, std::vector<int>> collect_nodes;
     PH("standings");
+    {   // H1 fingerprint: an order-independent hash of the installed Phi_w, by node NAME, so a
+        // save/reload at the same date can be compared bit-for-bit across processes.
+        std::vector<std::string> es;
+        for (auto& [u, v] : g_plan.phi_w) if (u < (int)g_plan.names.size() && v < (int)g_plan.names.size()) es.push_back(g_plan.names[u] + ">" + g_plan.names[v]);
+        std::sort(es.begin(), es.end());
+        uint64_t h = 1469598103934665603ull;
+        for (auto& e0 : es) for (unsigned char ch : e0) { h ^= ch; h *= 1099511628211ull; }
+        std::ofstream lh(g_log, std::ios::app);
+        lh << "[H1] tick fingerprint gen " << g_plan.generation << ": Phi_w edges=" << es.size() << " hash=" << std::hex << h << std::dec << (char)10;
+    }
     auto st = install::read_standings_field(sim, g_plan.names, g_plan.link_targets, collect_nodes);
     // spec 1.7: merchants assigned to a link END the engine has no index for (a link drawn INTO
     // this node) live in our own table and are merged on top of the engine's own assignments.

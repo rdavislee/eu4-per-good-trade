@@ -41,6 +41,17 @@ namespace aiwire {
 
 // the tick's flow matrix, summed once after routing (ticklive sets it before step/dispatch)
 inline const frontier::FlowMatrix* g_flowmat = nullptr;
+// plan() is deterministic for (country, k) within a tick; step and dispatch both need it
+inline std::map<int, std::vector<frontier::Placement>> g_plan_cache;   // per country per tick
+inline long long g_plan_cache_hits = 0;
+inline const std::vector<frontier::Placement>& cached_plan(int N, int home, int k,
+        const std::vector<std::vector<int>>& adj, const std::vector<econ::NodeStandings>& st, int c) {
+    auto key = c;   // k differs between step (posted merchants) and dispatch (all merchants); the
+                    // larger plan is a superset ordered by score, so one plan per country serves both
+    auto it = g_plan_cache.find(key);
+    if (it != g_plan_cache.end()) { g_plan_cache_hits++; return it->second; }
+    return g_plan_cache[key] = frontier::plan(N, home, k, adj, st, *g_flowmat, c);
+}
 
 struct Merchant { int id = 0; int action = 0; int node_index = -1; };
 
@@ -294,7 +305,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& [id, n2] : posted_node) standing_at.insert(n2);
         int k = (int)posted_node.size();
         if (k <= 0) continue;
-        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, *g_flowmat, c);
+        const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c);
         g_frontier_cands += (long long)plan.size();
         // the weakest CURRENT placement, for the x1.5 move test
         std::set<int> network{home};

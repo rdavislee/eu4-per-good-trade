@@ -132,12 +132,16 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         auto ms = aiwire::merchants_of(cidx);
         if (ms.empty()) continue;
         int k = (int)ms.size();
+        // nothing to dispatch if no merchant is free: every plan() call for such a country is
+        // wasted (measured: dispatch 190 ms of a 375 ms AI tick, most countries saturated)
+        { bool any_free = false; for (auto& m : ms) if (m.action == 0) { any_free = true; break; }
+          if (!any_free) { g_no_free++; continue; } }
         std::set<int> standing;
         std::map<int, int> eng_to_field;
         for (int fn = 0; fn < (int)names.size(); fn++)
             for (auto& s : sim) if (s.name == names[fn]) { eng_to_field[s.index] = fn; break; }
         for (auto& m : ms) if (m.action == 2) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
-        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, *aiwire::g_flowmat, c);
+        const auto& plan = aiwire::cached_plan((int)names.size(), home, k, undirected_adj, st, c);
         for (auto& pl : plan) {
             if (standing.count(pl.node)) continue;               // aiwire handles the ones already there
             if (pl.node == home) continue;                        // never at the capital

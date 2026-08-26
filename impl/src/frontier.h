@@ -26,6 +26,7 @@
 namespace frontier {
 
 struct Placement { int node; int target; double added; };   // stand at `node`, steer toward `target`
+inline long long g_calls_candidates = 0, g_calls_plan = 0;   // per-tick cost counters
 
 // A merchant present at a node holds MERCHANT_MAX_POWER_BONUS (+2) of trade power there, whatever
 // else it holds (spec 1.7). This is what keeps a REVERSE end from scoring zero: the engine
@@ -107,6 +108,7 @@ inline std::vector<Placement> candidates(int N, int home, const std::set<int>& n
                                          const FlowMatrix& F,
                                          int country) {
     std::vector<Placement> out;
+    g_calls_candidates++;
     if (home < 0 || home >= N) return out;
     std::vector<int> parent = network_parents(N, home, network, adj);
     for (int inside : network) {
@@ -162,6 +164,7 @@ inline std::vector<Placement> plan(int N, int home, int k,
                                    const FlowMatrix& F,
                                    int country) {
     std::vector<Placement> chosen;
+    g_calls_plan++;
     if (home < 0 || home >= N || k <= 0) return chosen;
     std::set<int> network{home};
     for (int i = 0; i < k; i++) {

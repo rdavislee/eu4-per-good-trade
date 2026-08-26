@@ -467,8 +467,12 @@ inline int apply(uintptr_t mgr) {
         std::ofstream la(g_log, std::ios::app);
         frontier::FlowMatrix flowmat = frontier::flow_matrix(g_plan.N, per_good);   // once per tick
         aiwire::g_flowmat = &flowmat;
+        frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear();
         aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
+        PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
+        PH("dispatch");
+        { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/cost] plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
         aiwire::g_flowmat = nullptr;
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);

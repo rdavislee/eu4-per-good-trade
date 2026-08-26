@@ -19,6 +19,7 @@
 // one. It is what walking the graph gives for free; a best-path variant is a later refinement.
 #pragma once
 #include <map>
+#include <functional>
 #include <set>
 #include <vector>
 #include "economy.h"
@@ -105,11 +106,17 @@ inline double path_share(const std::vector<econ::NodeStandings>& st, const std::
 }
 
 // score every frontier edge; `network` must contain home
+// REACH. A candidate stand node must be one the country can actually send a merchant to. The
+// model does not know the engine's range rule (trade range from owned provinces, discovery),
+// so the caller passes it in: nullptr means every node is reachable (the offline test); the DLL
+// passes the engine's own CanSendMerchantTo, OR-ed with nodes the country already occupies.
+// Without it a New World tribe could plan -- and be force-placed -- at Sevilla (observed 1444).
+using Reach = std::function<bool(int)>;
 inline std::vector<Placement> candidates(int N, int home, const std::set<int>& network,
                                          const std::vector<std::vector<int>>& adj,
                                          const std::vector<econ::NodeStandings>& st,
                                          const FlowMatrix& F,
-                                         int country) {
+                                         int country, const Reach* reach = nullptr) {
     std::vector<Placement> out;
     g_calls_candidates++;
     if (home < 0 || home >= N) return out;
@@ -121,6 +128,7 @@ inline std::vector<Placement> candidates(int N, int home, const std::set<int>& n
         if (inside < 0 || inside >= (int)adj.size()) continue;
         for (int outside : adj[inside]) {
             if (network.count(outside)) continue;         // not a frontier edge
+            if (reach && *reach && !(*reach)(outside)) continue;   // out of the country's reach
             double f = flow_of(F, outside, inside);
             if (f <= 0) continue;                         // nothing moves inward here
             // the merchant would stand at `outside`: its own presence is +2 there, so its
@@ -165,13 +173,13 @@ inline std::vector<Placement> plan(int N, int home, int k,
                                    const std::vector<std::vector<int>>& adj,
                                    const std::vector<econ::NodeStandings>& st,
                                    const FlowMatrix& F,
-                                   int country) {
+                                   int country, const Reach* reach = nullptr) {
     std::vector<Placement> chosen;
     g_calls_plan++;
     if (home < 0 || home >= N || k <= 0) return chosen;
     std::set<int> network{home};
     for (int i = 0; i < k; i++) {
-        auto cands = candidates(N, home, network, adj, st, F, country);
+        auto cands = candidates(N, home, network, adj, st, F, country, reach);
         if (cands.empty() || cands.front().added <= 0) break;   // nothing left worth a merchant
         chosen.push_back(cands.front());
         network.insert(cands.front().node);

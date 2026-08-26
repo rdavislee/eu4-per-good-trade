@@ -201,7 +201,7 @@ static void run_install(const std::string& logpath) {
         log << "  named live nodes: " << nm.by_key << " from the engine's own definition key"
             << " (node+0xA8 -> def+0x10); goods-signature cross-check: " << nm.matched
             << " matched (" << nm.exact << " exact), " << nm.disagree
-            << " DISAGREED with the key, " << nm.spurious << " spurious/unnamed" << (char)10;
+            << " DISAGREED with the key, " << nm.spurious << " spurious, " << nm.unnamed << " unnamed (the sentinel), " << nm.duplicates << " DUPLICATE names" << (char)10;
 
         // gather live inject into FIELD index order, BY NAME (the index-mismatch fix)
         int goods_count = 0, matched = 0;

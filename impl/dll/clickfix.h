@@ -77,6 +77,20 @@ inline void on_click(detour::Regs* r) {
     if (node.empty() || other.empty()) return;
     // the table key is the raw tag dword; its low 16 bits are the index, which is all the
     // routing and syncrec ever extract from it
+    {   // no merchant assignment at the player's OWN trade capital (user rule); the engine record
+        // of this country at this node carries has_capital at +0xAD
+        uintptr_t nobj = 0;
+        for (auto& s0 : livetrade::read_sim_nodes()) if (s0.obj && livetrade::validate_region(s0.obj + 0xA8, 8) && livetrade::fq(s0.obj + 0xA8) == ri->owner_def) { nobj = s0.obj; break; }
+        if (nobj && livetrade::validate_region(nobj + 0x18, 16)) {
+            uintptr_t rb = livetrade::fq(nobj + 0x18); int rc = livetrade::fi(nobj + 0x24);
+            int idx = cidx & 0xFFFF;
+            if (rb && idx >= 0 && idx < rc && livetrade::validate_region(rb + (uintptr_t)idx * 0xC0, 0xC0) && livetrade::fb(rb + (uintptr_t)idx * 0xC0 + 0xAD) != 0) {
+                std::ofstream lg(g_log, std::ios::app);
+                lg << "  [click] REFUSED: " << node << " is this country's trade capital -- no merchant may be assigned there" << (char)10;
+                return;
+            }
+        }
+    }
     assign::set(cidx, node, other);
     g_reverse_clicks++;
     if (!g_log.empty()) {

@@ -250,7 +250,10 @@ inline std::vector<econ::NodeStandings> read_standings_field(
                 auto tf = fidx_of.find(tab->second);
                 if (tf != fidx_of.end()) {
                     s.steer_to = tf->second;
-                    s.collects = false;
+                    // a table entry at the country's OWN capital must not switch home collection off in
+                    // the model while the engine keeps collecting there (nocollect keeps type 0 on
+                    // capital records; syncrec skips them): collects stays as the engine has it
+                    if (!c.has_capital) s.collects = false;
                     if (s.power < 2.0) s.power = 2.0;
                 }
             } else if (c.has_trader && c.type == 1 && c.steer_link >= 0 &&

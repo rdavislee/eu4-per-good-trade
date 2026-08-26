@@ -38,7 +38,7 @@ struct Map {
     std::map<int, std::string> id_to_name;   // engine node id -> name
     std::map<std::string, int> name_to_id;   // inverse
     int exact = 0, matched = 0, spurious = 0;
-    int by_key = 0;      // named from the definition key -- the authoritative path
+    int by_key = 0, unnamed = 0, duplicates = 0;      // named from the definition key -- the authoritative path
     int disagree = 0;    // fingerprint match disagreed with the key
 };
 
@@ -85,8 +85,11 @@ inline Map resolve(const std::vector<livetrade::SimNode>& sim,
         int id = sim[p.i].index;             // the stable engine node id
         auto have = m.id_to_name.find(id);
         if (have == m.id_to_name.end()) {
-            m.id_to_name[id] = ref[p.j].name;       // no key (the sentinel): fall back
-            m.name_to_id[ref[p.j].name] = id;
+            // NEVER fabricate a name for a node without a definition key: that is the Null sentinel,
+            // whose all-zero goods vector ties at distance 0 with any empty New World node and could
+            // take that node's name -- two sim entries with one name, and every first-match scan
+            // then resolves to the sentinel (reviewed). Count it instead.
+            m.unnamed++;
         } else if (have->second != ref[p.j].name) {
             m.disagree++;                            // the key wins; count the difference
         }
@@ -94,6 +97,11 @@ inline Map resolve(const std::vector<livetrade::SimNode>& sim,
         if (p.d == 0.0) m.exact++;
     }
     for (size_t i = 0; i < sim.size(); i++) if (!usedL[i]) m.spurious++;
+    {   // duplicate names across sim entries would make every by-name lookup ambiguous
+        std::map<std::string, int> cnt;
+        for (auto& [id0, nm0] : m.id_to_name) cnt[nm0]++;
+        for (auto& [nm0, k] : cnt) if (k > 1) m.duplicates++;
+    }
     return m;
 }
 

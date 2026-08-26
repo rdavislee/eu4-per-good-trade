@@ -488,7 +488,7 @@ inline int apply(uintptr_t mgr) {
         PH("flowmat");
         aiwire::g_flowmat = &flowmat;
         aiwire::g_shard = (int)(g_ticks.load() % 3);
-        frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear(); aiwire::g_plan_cache_hits = 0; aiwire::merchants_memo_reset();
+        frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear(); aiwire::g_plan_cache_hits = 0; aiwire::merchants_memo_reset(); aiwire::reach_cache_reset();
         { int pidx = aiwire::player_country_index();
           bool live = false; for (auto& ns0 : st) for (auto& e0 : ns0.entries) if (e0.power > 0 && livetrade::country_index_of(e0.country) == pidx) live = true;
           la << "  [ai] player country index=" << pidx << (pidx < 0 ? " (observer: every country is AI)" : (live ? " -- a LIVE trading country, excluded from the AI" : " -- holds no trade power anywhere (excluding it changes nothing)")) << (char)10;
@@ -496,7 +496,7 @@ inline int apply(uintptr_t mgr) {
         PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
         PH("dispatch");
-        { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/cost] validate_region calls this tick=" << livetrade::g_validate_calls << " syscalls=" << livetrade::g_validate_syscalls << "; plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
+        { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/reach] CanSendMerchantTo calls this tick=" << aiwire::g_reach_calls << " refused=" << aiwire::g_reach_refused << (char)10; lc << "  [ai/cost] validate_region calls this tick=" << livetrade::g_validate_calls << " syscalls=" << livetrade::g_validate_syscalls << "; plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
         aiwire::g_flowmat = nullptr;
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);

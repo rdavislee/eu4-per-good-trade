@@ -96,6 +96,7 @@ inline uintptr_t free_envoy(int country_idx) {
 
 // Place a free merchant of `country_idx` at `node` transferring. Returns false, touching nothing,
 // if there is no free merchant or the node is unresolved.
+inline std::string g_home_name;   // set by dispatch before send(), for the log line
 inline bool send(int country_idx, uintptr_t node, std::ofstream* lg, const std::string& node_name, uintptr_t e = 0) {
     uintptr_t c = aiwire::country_by_index(country_idx);
     if (!c || !node) { g_no_node++; return false; }
@@ -105,14 +106,15 @@ inline bool send(int country_idx, uintptr_t node, std::ofstream* lg, const std::
     place(c, e, 1, node, -1, 1);
     g_sent++;
     if (lg) *lg << "  [envoy] country#" << country_idx << " merchant#" << livetrade::fi(e + ENVOY_ID)
-                << " placed at " << node_name << " (transfer; target set by the table next tick)" << (char)10;
+                << " placed at " << node_name << " (home " << g_home_name << "; transfer; target set by the table next tick)" << (char)10;
     return true;
 }
 
 constexpr uintptr_t SET_TRADER = 0xB5E290;    // (rec, bool hasTrader, u8 type) -- syncrec's
 using FnSetTrader = void (__fastcall*)(uintptr_t, bool, uint8_t);
 inline uint64_t g_recalled = 0, g_recall_stale = 0, g_recall_refused = 0;
-inline uint64_t g_plan_at_end = 0;                          // plan entries skipped because the engine node has no outgoing link
+inline uint64_t g_plan_at_end = 0;
+inline uint64_t g_unreachable = 0;                          // plan entries refused by the engine's CanSendMerchantTo at dispatch                          // plan entries skipped because the engine node has no outgoing link
 constexpr int RECALL_CAP_PER_TICK = 60;      // world-wide per tick, observation cap
 constexpr int RECALL_BUDGET_PER_COUNTRY = 2; // per country per tick: `continue` after a refusal must not become a stampede      // observation cap while the engine's behaviour on re-placement is being measured
 
@@ -251,7 +253,13 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         // (SetTrader is gated on has_trader == 0) -- one merchant stranded (reviewed defect).
         std::set<int> standing;
         for (auto& m : ms) if ((m.action == 2 || m.action == 1) && m.node_index >= 0) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
-        double tp0 = nowms(); const auto& plan = aiwire::cached_plan((int)names.size(), home, k, undirected_adj, st, c); t_plan += nowms() - tp0;
+        g_home_name = names[home];
+        frontier::Reach reach = [&](int fnode) -> bool {
+            if (standing.count(fnode)) return true;
+            uintptr_t nobj = (fnode >= 0 && fnode < (int)obj_of.size()) ? obj_of[fnode] : 0;
+            return nobj && aiwire::can_send_to(cidx, nobj);
+        };
+        double tp0 = nowms(); const auto& plan = aiwire::cached_plan((int)names.size(), home, k, undirected_adj, st, c, &reach); t_plan += nowms() - tp0;
         {   // PLAN DRIFT: how many planned nodes changed since this country was last planned
             std::set<int> now; for (auto& q : plan) now.insert(q.node);
             auto pv = g_prev_plan.find(c);
@@ -291,6 +299,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
             // would keep it collecting, the model would call it a steerer, and the two would disagree
             // about who is paid. Until relink gives such nodes entries (ALLOUT), the plan skips them.
             if (!nocollect::node_has_outgoing(nd)) { g_plan_at_end++; continue; }
+            if (!standing.count(pl.node) && !aiwire::can_send_to(cidx, nd)) { g_unreachable++; continue; }   // never force a placement the engine would refuse
             double ts0 = nowms();
             bool placed_here = false;
             if (!free_list.empty()) { placed_here = send(cidx, nd, lg, names[pl.node], free_list.back()); if (placed_here) free_list.pop_back(); }
@@ -341,7 +350,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                 double tr0 = nowms();
                 bool ok_recall = recall_send(cidx, victim->envoy, obj_of[victim_node], nd, lg, names[victim_node], names[pl.node], tick);
                 t_recall += nowms() - tr0;
-                if (!ok_recall) continue;
+                if (!ok_recall) { g_touched_tick[std::make_pair(c, victim_node)] = tick; continue; }   // do not retry it every tick
                 { auto own = g_sent_tick.find(std::make_pair(c, victim_node));
                   if (own != g_sent_tick.end()) { g_recall_own++; recall_own_tick++;
                       if (lg) *lg << "  [recall/own] country#" << cidx << " victim at " << names[victim_node] << " was OUR placement " << (tick - own->second) << " ticks ago, worth " << weakest << " vs candidate " << names[pl.node] << " worth " << pl.added << (char)10; }
@@ -378,8 +387,9 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
     if (lg) *lg << "  [envoy/cost] merchants_of=" << (int)t_merch << "ms plan=" << (int)t_plan << "ms victims=" << (int)t_victim << "ms send=" << (int)t_send << "ms recall=" << (int)t_recall << "ms" << (char)10;
     if (lg && planned_countries) *lg << "  [plan/drift] " << drift_countries << " of " << planned_countries << " planned countries changed their planned node set since last planned; " << drift_nodes << " node changes in total" << (char)10;
     if (lg && recalls_this_tick) *lg << "  [envoy] recalled " << recalls_this_tick << " (" << recall_own_tick << " of them our own placements; " << g_recall_own << " ever)" << " off-plan merchants this tick (" << g_recalled << " landed in total; " << g_recall_stale << " old records the engine left set; " << g_recall_refused << " refused by the x1.5 test)" << (char)10;
+    if (lg && g_plan_at_end) *lg << "  [envoy] plan entries at engine END nodes skipped so far: " << g_plan_at_end << (char)10;
     if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
-                        << g_sent << " total; " << g_plan_at_end << " plan entries at END nodes skipped; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
+                        << g_sent << " total; " << g_plan_at_end << " plan entries at END nodes skipped; " << g_unreachable << " refused by CanSendMerchantTo; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
     return sent;
 }
 

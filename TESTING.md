@@ -242,6 +242,16 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   link to steer along -- the model now agrees with the engine about them (install.h: collects =
   has_capital || (has_trader && type == 0)); the plan never stands a merchant at such a node.
 
+  **Reach (user-reported 2026-08-26, fixed pgt_h4f).** Native American countries were placing
+  merchants at Western European nodes in 1444: dispatch used PlaceMerchantAtNode with force=1,
+  which skips the engine's CanSendMerchantTo, and the +2 presence floor let any country score any
+  node. Now the plan's candidate set is gated by the engine's own rule -- CCountry::
+  CanSendMerchantTo (0x3532C0) on the node's location province (provinces + 0x2E10 * def->+0xDC),
+  OR the country already stands there -- cached per (country, node) per tick, and dispatch
+  refuses anything the engine would. Measured over 7 ticks: New World homes placed only at New
+  World nodes (chesapeake_bay -> ohio x7, mississippi_river -> ohio x1), E1 662/662, E4 CLEAN,
+  G1 35% reverse ends.
+
 ## H. Determinism, saves, performance
 
 - **H1. Tick determinism live.** Save, note the full orientation, reload, tick. PASS: identical

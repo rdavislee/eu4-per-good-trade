@@ -55,7 +55,8 @@ namespace nocollect {
 constexpr uintptr_t SET_TRADER_OUTER = 0xB596E0;   // (node, handle, type)
 using FnSetTraderOuter = void (__fastcall*)(uintptr_t node, uint64_t handle, uint8_t type);
 inline detour::Hook g_hook;
-inline uint64_t g_calls = 0, g_forced = 0, g_kept_capital = 0, g_kept_end = 0, g_swept = 0, g_red = 0;
+inline uint64_t g_calls = 0, g_type0 = 0, g_forced = 0, g_kept_capital = 0, g_kept_end = 0, g_no_record_oob = 0, g_no_record_unreadable = 0, g_swept = 0, g_red = 0;
+inline uint64_t g_scored = 0, g_unscored = 0;   // sweep poison experiment: did the engine choose the ordinal?
 inline uint64_t g_at_end = 0, g_at_capital = 0;
 inline std::string g_end_names, g_capital_names;
 inline bool g_installed = false;
@@ -71,14 +72,19 @@ inline uintptr_t record_for(uintptr_t node, uint64_t handle) {
     if (!node || !livetrade::validate_region(node + 0x18, 16)) return 0;
     uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
     int idx = (int)(int16_t)(handle >> 32);
-    if (!rb || idx < 0 || idx >= rc || !livetrade::validate_region(rb + (uintptr_t)idx * 0xC0, 0xC0)) return 0;
-    if ((livetrade::fi(rb + (uintptr_t)idx * 0xC0 + 0x14) & 0xFFFF) != idx) return 0;
+    if (!rb || idx < 0 || idx >= rc) { g_no_record_oob++; return 0; }
+    if (!livetrade::validate_region(rb + (uintptr_t)idx * 0xC0, 0xC0)) { g_no_record_unreadable++; return 0; }
+    // NO slot-equality check here: the engine stamps rec+0x10/+0x14 at 0xB599EF, AFTER the flags
+    // call, so on first contact the record is still all-zero and a slot test fails closed -- the
+    // merchant would quietly keep collecting (reviewed). The array is index-dense by construction:
+    // every engine site addresses rb + 0xC0*idx with no search, so this IS the record it will read.
     return rb + (uintptr_t)idx * 0xC0;
 }
 
 inline void on_set_trader(detour::Regs* r) {
     g_calls++;
     if ((r->r8 & 0xFF) != 0) return;                           // already transfer
+    g_type0++;
     uintptr_t node = r->rcx; uint64_t handle = r->rdx;
     if (!node_has_outgoing(node)) { g_kept_end++; return; }    // nothing to steer along
     uintptr_t rec = record_for(node, handle);
@@ -104,6 +110,7 @@ inline bool install(std::string* err) {
 // conversion landed; counts (by name) the two classes the rule cannot reach through the engine.
 inline int sweep(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg) {
     if (!g_installed) return 0;
+    if (livetrade::marker_present("NOWRITE")) return 0;        // a vanilla-control arm must not have its records mutated
     auto set_trader = (FnSetTraderOuter)(livetrade::module_base() + SET_TRADER_OUTER);
     int n = 0, red = 0; uint64_t at_end = 0, at_capital = 0;
     std::string sample, end_names, cap_names;
@@ -122,13 +129,19 @@ inline int sweep(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg) 
             if (livetrade::fb(rec + 0xAC) != 0) continue;               // already transferring
             if (!has_out) { end_here++; continue; }                     // engine has nothing to steer along
             uint64_t handle = livetrade::fq(rec + 0x10);
-            set_trader(node, handle, 1);                                // the outer function: scores the link
-            int type_after = livetrade::fb(rec + 0xAC), ord = livetrade::fi(rec + 0xA8);
             int outc = 0;
             { uintptr_t def = livetrade::fq(node + 0xA8); outc = (int)((livetrade::fq(def + 0xA0) - livetrade::fq(def + 0x98)) / 0x78); }
+            // POISON EXPERIMENT (reviewed): the outer function scores links only when a [country x node]
+            // presence gate passes; otherwise it jumps to the flags call and +0xA8 keeps whatever was
+            // there. Writing a legal sentinel first and reading it back tells the two apart per record.
+            int poison = outc >= 2 ? outc - 1 : -1;
+            if (poison >= 0) *(int32_t*)(rec + 0xA8) = poison;
+            set_trader(node, handle, 1);                                // the outer function
+            int type_after = livetrade::fb(rec + 0xAC), ord = livetrade::fi(rec + 0xA8);
+            if (poison >= 0) { if (ord != poison) g_scored++; else g_unscored++; }
             if (type_after != 1 || ord < 0 || ord >= outc) { red++; if (lg) *lg << "  [nocollect] RED: conversion did not land at " << s.name << "#" << i << " type=" << type_after << " ord=" << ord << "/" << outc << (char)10; }
             n++; g_swept++;
-            if (sample.size() < 160) sample += s.name + "#" + std::to_string(i) + "->" + std::to_string(ord) + " ";
+            if (sample.size() < 200) sample += s.name + "#" + std::to_string(i) + "->" + std::to_string(ord) + "/" + std::to_string(outc) + (poison >= 0 ? (ord != poison ? "s " : "u ") : " ");
         }
         if (end_here) { at_end += end_here; if (end_names.size() < 120) end_names += s.name + "(" + std::to_string(end_here) + ") "; }
         if (cap_here) { at_capital += cap_here; if (cap_names.size() < 120) cap_names += s.name + "(" + std::to_string(cap_here) + ") "; }
@@ -141,8 +154,11 @@ inline int sweep(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg) 
 }
 
 inline void report(std::ofstream& lg) {
-    lg << "  [nocollect] SetTrader(outer) calls=" << g_calls << " forced collect->transfer=" << g_forced
-       << " kept: at end=" << g_kept_end << " at capital=" << g_kept_capital << "; swept=" << g_swept << " red=" << g_red << (char)10;
+    lg << "  [nocollect] SetTrader(outer) calls=" << g_calls << " of which type0=" << g_type0
+       << ": forced=" << g_forced << " kept_end=" << g_kept_end << " kept_capital=" << g_kept_capital
+       << " no_record(oob=" << g_no_record_oob << " unreadable=" << g_no_record_unreadable << ")"
+       << "; swept=" << g_swept << " red=" << g_red << " (engine scored the ordinal: " << g_scored << ", gate skipped: " << g_unscored << ")"
+       << "; this tick: at END nodes=" << g_at_end << " [" << g_end_names << "] at own capital=" << g_at_capital << " [" << g_capital_names << "]" << (char)10;
 }
 
 } // namespace nocollect

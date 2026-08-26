@@ -47,17 +47,53 @@ inline int g_shard = -1;   // -1 = all countries; 0..2 = only countries with ind
 inline std::map<std::pair<int, int>, std::vector<frontier::Placement>> g_plan_cache;   // per (country, k) per tick
 inline long long g_plan_cache_hits = 0;
 inline const std::vector<frontier::Placement>& cached_plan(int N, int home, int k,
-        const std::vector<std::vector<int>>& adj, const std::vector<econ::NodeStandings>& st, int c) {
+        const std::vector<std::vector<int>>& adj, const std::vector<econ::NodeStandings>& st, int c, const frontier::Reach* reach = nullptr) {
     // keyed on (country, k). Keying on the country alone let step's k = posted merchants fill the
     // cache first, and dispatch -- asking for k = all merchants -- got the truncated plan back and
     // had nothing to send the free merchants to (reviewed defect). Both now ask for all merchants.
     auto key = std::make_pair(c, k);
     auto it = g_plan_cache.find(key);
     if (it != g_plan_cache.end()) { g_plan_cache_hits++; return it->second; }
-    return g_plan_cache[key] = frontier::plan(N, home, k, adj, st, *g_flowmat, c);
+    return g_plan_cache[key] = frontier::plan(N, home, k, adj, st, *g_flowmat, c, reach);
 }
 
 struct Merchant { int id = 0; int action = 0; int node_index = -1; uintptr_t envoy = 0; };
+
+// THE ENGINE'S OWN REACH RULE. 0x3532C0 = CCountry::CanSendMerchantTo(CProvince* rdx, std::string*
+// reason r8, bool r9b, u8, u8) -> al; the merchant Update calls it with the construction's location
+// province (0x25B940) and force=1 skips it -- which is how a native tribe got a merchant at Sevilla.
+// A node's location province is provinces_base(G+0x1CA8) + 0x2E10 * def->+0xDC (0x3BADE6..0x3BAE02).
+inline uintptr_t country_by_index(int country_idx);   // defined below
+constexpr uintptr_t CAN_SEND_MERCHANT_TO = 0x3532C0;
+constexpr uintptr_t PROVINCE_STRIDE = 0x2E10;
+using FnCanSend = bool (__fastcall*)(uintptr_t country, uintptr_t province, uintptr_t reason, uint8_t flag, uint8_t a5, uint8_t a6);
+inline std::map<std::pair<int, int>, bool> g_reach_cache;   // (country index, engine node id) -> reachable, per tick
+inline long long g_reach_calls = 0, g_reach_refused = 0;
+inline void reach_cache_reset() { g_reach_cache.clear(); g_reach_calls = 0; g_reach_refused = 0; }
+inline uintptr_t node_location_province(uintptr_t node) {
+    if (!node || !livetrade::validate_region(node + 0xA8, 8)) return 0;
+    uintptr_t def = livetrade::fq(node + 0xA8);
+    if (!def || !livetrade::validate_region(def + 0xDC, 4)) return 0;
+    int pid = livetrade::fi(def + 0xDC);
+    uintptr_t g = livetrade::game_singleton();
+    if (!g || pid < 0 || pid > 20000 || !livetrade::validate_region(g + 0x1CA8, 8)) return 0;
+    uintptr_t base = livetrade::fq(g + 0x1CA8);
+    uintptr_t prov = base + (uintptr_t)pid * PROVINCE_STRIDE;
+    if (!base || !livetrade::validate_region(prov, 0x100)) return 0;
+    if (livetrade::fi(prov + 0x20) != pid) return 0;                 // CProvince+0x20 is the id: the stride/base must agree
+    return prov;
+}
+inline bool can_send_to(int country_idx, uintptr_t node) {
+    if (!node || !livetrade::validate_region(node + 0x120, 4)) return false;
+    auto key = std::make_pair(country_idx, livetrade::fi(node + 0x120));
+    auto it = g_reach_cache.find(key);
+    if (it != g_reach_cache.end()) return it->second;
+    uintptr_t c = country_by_index(country_idx);
+    uintptr_t prov = node_location_province(node);
+    bool ok = false;
+    if (c && prov) { g_reach_calls++; ok = ((FnCanSend)(livetrade::module_base() + CAN_SEND_MERCHANT_TO))(c, prov, 0, 0, 0, 0); if (!ok) g_reach_refused++; }
+    return g_reach_cache[key] = ok;
+}
 
 // THE HUMAN'S COUNTRY, as an index into the manager array, or -1 when there is none (observer).
 // game+0x1E60 is the player's country handle, +0x1E66 the game mode (7 = observing) and
@@ -130,7 +166,7 @@ inline std::vector<Merchant> merchants_of_uncached(int country_idx) {
 inline std::map<int, std::map<int, int>> g_prev;    // country -> merchant id -> node index
 inline std::set<int> g_baselined;                     // countries whose first snapshot is taken
 inline int g_placed = 0, g_triggers = 0;
-inline long long g_table_at_end = 0;   // plan entries with a merchant standing at an engine END node: no table entry written
+inline long long g_table_at_end = 0, g_vacated_end = 0;   // plan entries with a merchant standing at an engine END node: no table entry written
 
 // --- G2 damping state, and the G1/G2 measurements -------------------------------------------
 // Damping is the second half of the cadence the user chose: a computed-gain test plus a dwell
@@ -198,6 +234,16 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     // lost its last merchant, or all its trade power, never reached the per-country vacate and its
     // entries persisted for ever: merge kept injecting a phantom power=2 steering standing for a
     // merchant that no longer exists (reviewed defect). Same shard cadence as the scoring loop.
+    // engine END nodes by name (no outgoing entry), once per tick
+    std::map<std::string, bool> end_by_name;
+    std::vector<uintptr_t> obj_of(names.size(), 0);
+    for (int fn = 0; fn < (int)names.size(); fn++) {
+        for (auto& s0 : sim) if (s0.name == names[fn]) { obj_of[fn] = s0.obj; break; }
+        bool has_out = false; uintptr_t nobj = obj_of[fn];
+        if (nobj && livetrade::validate_region(nobj + 0xA8, 8)) { uintptr_t def = livetrade::fq(nobj + 0xA8);
+            if (def && livetrade::validate_region(def + 0x98, 16)) has_out = livetrade::fq(def + 0xA0) > livetrade::fq(def + 0x98); }
+        end_by_name[names[fn]] = !has_out;
+    }
     {
         std::set<int> table_countries;
         for (auto& [key, tgt] : assign::g_table) table_countries.insert(key.first);
@@ -207,8 +253,14 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             std::set<std::string> posted_at;
             for (auto& m : ms0) if (m.action == 2 && m.node_index >= 0) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) posted_at.insert(names[f->second]); }
             std::vector<std::string> gone;
-            for (auto& [key, tgt] : assign::g_table)
-                if (key.first == c && !posted_at.count(key.second)) gone.push_back(key.second);
+            for (auto& [key, tgt] : assign::g_table) {
+                if (key.first != c) continue;
+                if (!posted_at.count(key.second)) { gone.push_back(key.second); continue; }
+                // an entry at a node relink has since turned into an END node keeps the model steering
+                // where the engine collects (reviewed): vacate it too
+                auto eo = end_by_name.find(key.second);
+                if (eo != end_by_name.end() && eo->second) { gone.push_back(key.second); g_vacated_end++; }
+            }
             for (auto& n : gone) { assign::clear(c, n); g_vacated++; }
         }
     }
@@ -280,7 +332,12 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         int k = (int)ms.size();
         if (posted_node.empty()) continue;
         if (changed.empty()) continue;                       // no merchant to evaluate: no plan (652 -> few plan() calls)
-        double t1 = now(); const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c); t_plan += now() - t1;
+        frontier::Reach reach = [&](int fnode) -> bool {
+            if (standing_at.count(fnode)) return true;                 // already there: always a candidate
+            uintptr_t nobj = (fnode >= 0 && fnode < (int)obj_of.size()) ? obj_of[fnode] : 0;
+            return nobj && can_send_to(cidx, nobj);
+        };
+        double t1 = now(); const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c, &reach); t_plan += now() - t1;
         g_frontier_cands += (long long)plan.size();
         // the weakest CURRENT placement, for the x1.5 move test
         std::set<int> network{home};
@@ -304,13 +361,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& pl : plan) {
             g_evals++;
             if (!standing_at.count(pl.node)) { g_wants_move++; continue; }   // no merchant there yet
-            {   // an END node in the engine (no outgoing entry) keeps its merchant collecting; no table entry there
-                uintptr_t nobj = 0; for (auto& s0 : sim) if (s0.name == names[pl.node]) { nobj = s0.obj; break; }
-                bool has_out = false;
-                if (nobj && livetrade::validate_region(nobj + 0xA8, 8)) { uintptr_t def = livetrade::fq(nobj + 0xA8);
-                    if (def && livetrade::validate_region(def + 0x98, 16)) has_out = livetrade::fq(def + 0xA0) > livetrade::fq(def + 0x98); }
-                if (!has_out) { g_table_at_end++; continue; }
-            }
+            if (end_by_name[names[pl.node]]) { g_table_at_end++; continue; }   // an engine END node keeps its merchant collecting; no table entry there
             auto key = std::make_pair(c, names[pl.node]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
@@ -354,7 +405,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     log << "  [ai] scan: " << live_countries.size() << " countries with power, "
         << g_wants_move << " merchants standing off their frontier; " << g_vacated << " entries vacated; "
         << g_frontier_cands << " frontier edges scored; " << triggers << " merchants moved by vanilla, "
-        << placed << " re-placed by us; table now " << assign::g_table.size() << " entries" << (char)10;
+        << placed << " re-placed by us; table now " << assign::g_table.size() << " entries; plan entries at engine END nodes (no table entry): " << g_table_at_end << "; entries vacated at END nodes: " << g_vacated_end << (char)10;
     log << "  [G1] placements by tab group: " << g_phi_out << " on Phi_w-outgoing ends, "
         << g_phi_in << " on Phi_w-INCOMING ends"
         << (tot ? " (" : "") << (tot ? (int)(100.0 * g_phi_in / tot) : 0) << (tot ? "%)" : "")

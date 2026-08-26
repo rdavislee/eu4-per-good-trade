@@ -80,8 +80,14 @@ inline int merge(std::vector<econ::NodeStandings>& st, const std::vector<std::st
         bool found = false;
         for (auto& e : ns.entries)
             if (e.country == key.first) {
+                // A merchant the engine says is COLLECTING here stays a collector. This
+                // table only adds steering on ends the engine has no index for; it must
+                // never convert a collector, because that is the country's income at
+                // this node and the engine is the authority on what its merchant is
+                // doing. Unconditionally clearing `collects` was how Venice -- over half
+                // the power in venice, collecting -- saw almost all of it forwarded.
+                if (e.collects) { found = true; break; }
                 e.steer_to = tf->second;      // steer, not collect (spec 1.7)
-                e.collects = false;
                 found = true;
                 applied++;
                 break;

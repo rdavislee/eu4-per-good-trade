@@ -55,7 +55,8 @@ inline std::string g_log;
 inline size_t g_last_forward = 0;
 inline int g_measured = 0;
 inline int g_dumped = 0;
-inline int g_flipped = 0;   // ribbons whose polyline runs target -> source      // how many forward anchors we have measured, for the log
+inline int g_flipped = 0;
+inline int g_fallback = 0;   // anchors the engine would not place for us   // ribbons whose polyline runs target -> source      // how many forward anchors we have measured, for the log
 
 using FnInit  = void*  (__fastcall*)(uintptr_t, int, uintptr_t, uintptr_t, void*);
 using FnLookup= uintptr_t (__fastcall*)(uintptr_t, void*);
@@ -401,14 +402,70 @@ inline int add_reverse(std::ofstream* lg) {
             uintptr_t tmp = make(type);
             if (tmp) {
                 init(tmp, 0, tgtdef_for_lv, rev_entry_for_lv, &scratch);
-                if (livetrade::validate_region(tmp + LV_ANCHOR + 12, 4)) {
-                    const float* ta = (const float*)(tmp + LV_ANCHOR);
-                    if (std::isfinite(ta[0]) && std::isfinite(ta[2])) {
-                        *(float*)(nlv + LV_ANCHOR + 0) = ta[0];
-                        *(float*)(nlv + LV_ANCHOR + 8) = ta[2];
-                        placed.push_back({ta[0], ta[2]});
+                // ACCEPT THE HARVESTED ANCHOR ONLY IF IT IS ACTUALLY AT OUR END.
+                //
+                // Two ways the harvest comes back unusable, and both used to leave `nlv` holding
+                // the anchor init() computed from the FORWARD ribbon -- which sits at the SOURCE
+                // node. The reverse panel then draws next to the wrong node and simply is not
+                // there when you look at the node it belongs to. That is the "wien is missing
+                // some of its panels" symptom: wien has five incident links, so five panels are
+                // due near it, and any whose harvest failed went to pest or krakow instead.
+                //   - the engine rejects a candidate that lands too close to one already in the
+                //     shared scratch (0x13FAB80..0x13FACED) and leaves the anchor unwritten;
+                //   - the anchor comes back non-finite.
+                //
+                // So validate against the ribbon: a good anchor is finite and lies in OUR half of
+                // it. Anything else falls back to a point walked in from our end, which is always
+                // on the ribbon and always on the correct side.
+                bool ok = false;
+                {
+                    uintptr_t pb = livetrade::fq(nlv + LV_POLY), pe = livetrade::fq(nlv + LV_POLY + 8);
+                    int np = (pb && pe > pb) ? (int)((pe - pb) / 12) : 0;
+                    if (np >= 2 && livetrade::validate_region(pb, (size_t)np * 12) &&
+                        livetrade::validate_region(tmp + LV_ANCHOR + 12, 4)) {
+                        const float* p3 = (const float*)pb;
+                        const float* fa = (const float*)(lv + LV_ANCHOR);
+                        const float* ta = (const float*)(tmp + LV_ANCHOR);
+                        auto d2 = [&](int i, double x, double z) {
+                            double dx = p3[i * 3 + 0] - x, dz = p3[i * 3 + 2] - z;
+                            return dx * dx + dz * dz;
+                        };
+                        int si = (d2(0, fa[0], fa[2]) <= d2(np - 1, fa[0], fa[2])) ? 0 : np - 1;
+                        int ti = (si == 0) ? np - 1 : 0;
+                        double total = ribbon_length(p3, np);
+                        if (std::isfinite(ta[0]) && std::isfinite(ta[2]) &&
+                            d2(ti, ta[0], ta[2]) <= d2(si, ta[0], ta[2])) {
+                            *(float*)(nlv + LV_ANCHOR + 0) = ta[0];
+                            *(float*)(nlv + LV_ANCHOR + 8) = ta[2];
+                            placed.push_back({ta[0], ta[2]});
+                            ok = true;
+                        } else if (total > 1e-3) {
+                            // Fall back to the forward panel's own arc distance, measured from our
+                            // end, capped short of the midpoint so the two panels cannot swap sides.
+                            double d = arc_of_nearest(p3, np, si, fa[0], fa[2]);
+                            if (!(d > 0)) d = ARC_LEN;
+                            if (d > total * 0.45) d = total * 0.45;
+                            for (int step = 0; step < 8; step++) {
+                                double ax = 0, az = 0;
+                                point_at_arc(p3, np, ti, d + step * MIN_SEP, &ax, &az);
+                                bool clear = true;
+                                for (auto& q : placed) {
+                                    double dx = ax - q.first, dz = az - q.second;
+                                    if (dx * dx + dz * dz < MIN_SEP * MIN_SEP) { clear = false; break; }
+                                }
+                                if (clear || step == 7) {
+                                    *(float*)(nlv + LV_ANCHOR + 0) = (float)ax;
+                                    *(float*)(nlv + LV_ANCHOR + 8) = (float)az;
+                                    placed.push_back({(float)ax, (float)az});
+                                    ok = true;
+                                    g_fallback++;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
+                (void)ok;
                 uintptr_t vt = livetrade::fq(tmp);
                 if (vt && livetrade::validate_region(vt, 8)) {
                     using FnDtor = void* (__fastcall*)(uintptr_t, unsigned);
@@ -448,6 +505,35 @@ inline int add_reverse(std::ofstream* lg) {
         g_rev_views[nlv] = RevInfo{tgtdef_for_lv, srcdef};
         added++;
     }
+    // WHICH PANELS DOES A NODE ACTUALLY GET, and where do they sit? A node with several links can
+    // end up with panels that overlap and hide one another: the engine rejects an anchor that
+    // lands too close to one already in the scratch vector it is given, and we hand it a FRESH
+    // scratch, so our reverse anchors de-duplicate against each other but never against the
+    // forward panels already on the map.
+    if (lg && g_logged < 6) {
+        uintptr_t vb = livetrade::fq(ctl + VEC_BEGIN), ve2 = livetrade::fq(ctl + VEC_END);
+        std::vector<std::pair<float,float>> at;
+        for (uintptr_t p = vb; p && p + 8 <= ve2; p += 8) {
+            uintptr_t v = livetrade::fq(p);
+            if (!v || !livetrade::validate_region(v + LV_ANCHOR + 12, 4)) continue;
+            uintptr_t owner = livetrade::fq(v + LV_SRCDEF);
+            if (def_key(owner) != "wien") continue;
+            const float* a = (const float*)(v + LV_ANCHOR);
+            uintptr_t ent = livetrade::fq(v + LV_ENTRY);
+            std::string other = ent ? def_key(livetrade::fq(ent + 0x30)) : "?";
+            *lg << "    [wien] " << (is_reverse(v) ? "reverse" : "forward") << " -> " << other
+                << " anchor=(" << a[0] << "," << a[2] << ")" << (char)10;
+            at.push_back({a[0], a[2]});
+        }
+        for (size_t i = 0; i < at.size(); i++)
+            for (size_t j = i + 1; j < at.size(); j++) {
+                double dx = at[i].first - at[j].first, dz = at[i].second - at[j].second;
+                double d = std::sqrt(dx*dx + dz*dz);
+                if (d < MIN_SEP)
+                    *lg << "    [wien] OVERLAP: panels " << i << " and " << j
+                        << " are " << d << " apart (vanilla keeps >= " << MIN_SEP << ")" << (char)10;
+            }
+    }
     if (scratch.first)
         efree(scratch.first, (size_t)((char*)scratch.end - (char*)scratch.first));
     g_last_forward = fwd.size();
@@ -455,7 +541,7 @@ inline int add_reverse(std::ofstream* lg) {
     if (lg && g_logged < 6) {
         g_logged++;
         *lg << "  [revpanel] " << fwd.size() << " forward panels, added " << added
-            << " reverse ones (" << g_flipped << " ribbons tessellated target-first)" << "\n";
+            << " reverse ones (" << g_fallback << " anchors placed by fallback)" << "\n";
     }
     return added;
 }

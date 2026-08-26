@@ -82,6 +82,7 @@ inline std::vector<Merchant> merchants_of(int country_idx) {
 
 // the previous tick's snapshot, for the shadow-vanilla trigger
 inline std::map<int, std::map<int, int>> g_prev;    // country -> merchant id -> node index
+inline std::set<int> g_baselined;                     // countries whose first snapshot is taken
 inline int g_placed = 0, g_triggers = 0;
 
 // --- G2 damping state, and the G1/G2 measurements -------------------------------------------
@@ -147,6 +148,14 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         std::map<int, int> cur;
         for (auto& m : ms) if (m.action == 2 && m.node_index >= 0) cur[m.id] = m.node_index;
         std::map<int, int>& prev = g_prev[c];
+        // THE FIRST SNAPSHOT IS A BASELINE, NOT A TRIGGER. With g_prev empty, every posted
+        // merchant in the world read as "newly appeared" on tick 1 and was re-placed -- 624
+        // of them, including every collector sitting at its own home node. Measured at
+        // north_sea: 14 collectors on tick 1, ZERO from tick 2, all turned into steerers
+        // toward english_channel, so P_collect went to 0 and the node forwarded 100% of
+        // its value. Shadow-vanilla means we act when VANILLA moves a merchant, and on the
+        // first tick vanilla has moved nothing.
+        if (!g_baselined.count(c)) { g_baselined.insert(c); prev = cur; continue; }
         // The trigger is PER MERCHANT, not per country: a merchant is reconsidered only when
         // vanilla moved THAT merchant (it appeared, or its posted node changed). Diffing the
         // country's whole map instead lets one merchant setting out re-place all its siblings,

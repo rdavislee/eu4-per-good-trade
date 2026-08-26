@@ -126,6 +126,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
     for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) countries.insert(e.country);
     for (int c : countries) {
         int cidx = livetrade::country_index_of(c);
+        if (aiwire::g_shard >= 0 && (cidx % 3) != aiwire::g_shard) continue;   // same shard as step
         int home = -1;
         for (int fn = 0; fn < (int)st.size() && home < 0; fn++)
             for (auto& e : st[fn].entries) if (e.country == c && e.is_capital) { home = fn; break; }

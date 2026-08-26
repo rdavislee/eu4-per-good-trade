@@ -458,7 +458,7 @@ inline int apply(uintptr_t mgr) {
         caravan::g_steering.swap(steering);
     }
     // spec 3.14 / G1: shadow-vanilla AI merchant re-placement over BOTH tab groups.
-    if (livetrade::marker_present("AI") && (g_ticks.load() % 3) == 0) {
+    if (livetrade::marker_present("AI")) {   // every month, a third of the countries (aiwire::g_shard)
         std::vector<std::vector<int>> und(g_plan.N), phi_out(g_plan.N);
         for (int u = 0; u < g_plan.N && u < (int)g_plan.link_targets.size(); u++)
             for (int v : g_plan.link_targets[u])
@@ -467,6 +467,7 @@ inline int apply(uintptr_t mgr) {
         std::ofstream la(g_log, std::ios::app);
         frontier::FlowMatrix flowmat = frontier::flow_matrix(g_plan.N, per_good);   // once per tick
         aiwire::g_flowmat = &flowmat;
+        aiwire::g_shard = (int)(g_ticks.load() % 3);
         frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear();
         aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
         PH("ai-step");
@@ -589,6 +590,7 @@ inline void handler(detour::Regs* r) {
     int t = ++g_ticks;
     if (t <= 8 || (t % 12) == 0) {
         std::ofstream lg(g_log, std::ios::app);
+        lg << "[H3] worst frame gap since last tick: " << frame::take_worst_gap() << " ms" << (char)10;
         lg << "[tick] monthly update " << t << ": wrote " << wrote
            << " nodes inside the engine's value pass (pre-division), " << ms << " ms\n";
     }

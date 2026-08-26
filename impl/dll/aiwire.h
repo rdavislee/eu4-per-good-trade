@@ -41,6 +41,7 @@ namespace aiwire {
 
 // the tick's flow matrix, summed once after routing (ticklive sets it before step/dispatch)
 inline const frontier::FlowMatrix* g_flowmat = nullptr;
+inline int g_shard = -1;   // -1 = all countries; 0..2 = only countries with index % 3 == shard
 // plan() is deterministic for (country, k) within a tick; step and dispatch both need it
 inline std::map<int, std::vector<frontier::Placement>> g_plan_cache;   // per country per tick
 inline long long g_plan_cache_hits = 0;
@@ -163,6 +164,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) live_countries.insert(e.country);
 
     for (int c : live_countries) {
+        if (g_shard >= 0 && (livetrade::country_index_of(c) % 3) != g_shard) continue;   // amortised over the cadence
         if (c == player_country) continue;                 // spec 3.14 is about the AI
         // `c` is the RAW tag dword from the node record (+0x14), whose low 16 bits are the
         // country's index into the manager array and whose byte 3 is a validity tag. Passing the

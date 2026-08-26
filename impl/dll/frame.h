@@ -33,6 +33,16 @@
 
 namespace frame {
 
+// H3 meter: the longest gap between two consecutive frames since last read, in ms. A monthly
+// tick that stalls the game shows up here as one long frame; the tick's own ms does not.
+inline double g_worst_gap_ms = 0; inline unsigned long long g_last_frame_qpc = 0;
+inline void note_frame() {
+    LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
+    if (g_last_frame_qpc) { double gap = 1000.0 * (double)((unsigned long long)t.QuadPart - g_last_frame_qpc) / (double)f.QuadPart; if (gap > g_worst_gap_ms) g_worst_gap_ms = gap; }
+    g_last_frame_qpc = (unsigned long long)t.QuadPart;
+}
+inline double take_worst_gap() { double g = g_worst_gap_ms; g_worst_gap_ms = 0; return g; }
+
 constexpr uintptr_t MAP_UPDATE = 0x10A6EC0;
 constexpr uint64_t DRAIN_EVERY = 30;      // frames between console polls (~0.5 s at 60 fps)
 
@@ -47,6 +57,7 @@ inline void (*g_view_poll)() = nullptr;
 inline bool active() { return g_hook.active; }
 
 inline void handler(detour::Regs* r) {
+    note_frame();
     // rcx is the map renderer; take it once and never again
     if (!arrows::g_map_renderer.load()) arrows::g_map_renderer.store((uintptr_t)r->rcx);
 

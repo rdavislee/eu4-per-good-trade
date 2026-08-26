@@ -55,7 +55,7 @@ constexpr int ENVOY_ID     = 0x44;
 using FnPlace = void (__fastcall*)(uintptr_t country, uintptr_t envoy, uint8_t mode, uintptr_t node,
                                    int32_t steerLinkIndex, uint8_t force);
 
-inline uint64_t g_sent = 0, g_no_free = 0, g_no_node = 0;
+inline uint64_t g_sent = 0, g_no_free = 0, g_no_node = 0, g_stale_record = 0;
 inline std::map<std::pair<int, int>, int> g_sent_tick;   // (country, node) -> tick, dwell
 inline std::string g_log;
 inline bool g_installed = false;
@@ -76,9 +76,10 @@ inline uintptr_t free_envoy(int country_idx) {
     if (!cont || !livetrade::validate_region(cont + 0x20, 16)) return 0;
     uintptr_t first = livetrade::fq(cont + 0x20), last = livetrade::fq(cont + 0x28);
     if (!first || last <= first || (last - first) > 8 * 256) return 0;
+    if (!livetrade::validate_region(first, last - first)) return 0;          // C-2: the whole span
     for (uintptr_t p = first; p + 8 <= last; p += 8) {
         uintptr_t e = livetrade::fq(p);
-        if (e && livetrade::validate_region(e, 0x48) && livetrade::fi(e + ENVOY_ACTION) == 0) return e;
+        if (e && livetrade::validate_region(e, 0x48) && livetrade::fb(e + ENVOY_ACTION) == 0) return e;   // C-1: a byte
     }
     return 0;
 }
@@ -140,6 +141,15 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         for (auto& pl : plan) {
             if (standing.count(pl.node)) continue;               // aiwire handles the ones already there
             if (pl.node == home) continue;                        // never at the capital
+            // D-1 (review): the engine's record can say has_trader=1 with no envoy there -- 0x775C14
+            // frees an envoy without ClearTrader, and Update then bails forever on +0x58. Placing
+            // another merchant on such a record is not caught by the envoy list; read the record.
+            {
+                uintptr_t nd0 = node_obj(sim, names[pl.node]);
+                uintptr_t rb = nd0 ? livetrade::rq(nd0 + 0x18) : 0; int rc = nd0 ? livetrade::ri(nd0 + 0x24) : 0;
+                if (rb && cidx >= 0 && cidx < rc && livetrade::validate_region(rb + (uintptr_t)cidx * 0xC0 + 0xAE, 1)
+                    && livetrade::fb(rb + (uintptr_t)cidx * 0xC0 + 0xAE) != 0) { g_stale_record++; continue; }
+            }
             auto key = std::make_pair(c, pl.node);
             auto it = g_sent_tick.find(key);
             if (it != g_sent_tick.end() && tick - it->second < (int)ai::DWELL_FLOOR_MONTHS) continue;
@@ -166,7 +176,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         }
     }
     if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
-                        << g_sent << " total; " << g_no_free << " refused: no free merchant)" << (char)10;
+                        << g_sent << " total; " << g_no_free << " refused: no free merchant; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
     return sent;
 }
 

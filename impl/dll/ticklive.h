@@ -536,8 +536,13 @@ inline int apply(uintptr_t mgr) {
             pool_monthly[fn] = livetrade::fi(sim[it->second].obj + 0xB0) / 1000.0;
         }
         predict_income(sim, g_plan.names, pool_monthly);
-        money::sample_before(sim);      // E2: accumulator before the collector division
-        money::g_pass10_total = (int)sim.size();   // so the wrapper knows when the pass ends
+        // E2's 'before' is now sampled inside pass 10 itself (money.h pass10_wrapper)
+        // Pass 10 runs once per node with a VALID definition (0xB4BF3A tests def->vtbl[0x40]), so
+        // the Null sentinel at slot 0 is skipped: 80 calls, not sim.size() == 81. Counting 81
+        // meant the wrapper's 'last node' never fired and check_e2 saw 0/0.
+        { int valid = 0; for (auto& s2 : sim) { std::string k2 = livetrade::node_key(s2.obj); if (!k2.empty() && k2 != "Null") valid++; }   // the sentinel has key "Null" and is skipped by pass 10: 80, measured
+          money::g_pass10_total = valid; money::g_pass10_seen = 0; }
+        { std::ofstream lp(g_log, std::ios::app); lp << "  [E2/wrap] exact=" << money::g_exact << " pass10 calls so far=" << money::g_pass10_calls_total << " total expected/month=" << money::g_pass10_total << (char)10; }
         g_verify_pending = true;      // the verifier samples rec.total after pass 10 finishes
     }
     // per-country shares of the pool, so the engine's own pass 10 pays out the model's income.

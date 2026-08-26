@@ -30,13 +30,17 @@ inline std::map<int, double> g_accum_before;
 // country index -> Sigma rec.money the engine computed this month
 inline std::map<int, double> g_money_expected;
 inline int g_e2_checked = 0, g_e2_agree = 0;
+inline int g_pass10_seen = 0, g_pass10_total = 0;   // declared here: check_e2 reads them
+inline long long g_pass10_calls_total = 0;   // every 0xB584F0 call through the wrapper, ever
 inline double g_e2_worst = 0;
 
 // Sample every country's accumulator, and the money pass 10 is about to hand out. Called from the
 // tick hook, i.e. after our write and before the collector division.
+// The ACCUMULATOR only, for every country holding a record anywhere. rec.money is NOT read
+// here: at pass 10's first node no collector has been paid yet, and reading payouts now
+// gave paid == 0 for every country, so check_e2 skipped them all (0/0, measured).
 inline void sample_before(const std::vector<livetrade::SimNode>& sim) {
     g_accum_before.clear();
-    g_money_expected.clear();
     for (auto& s : sim)
         for (auto& rec : livetrade::read_standings(s.obj)) {
             int c = livetrade::country_index_of(rec.tag_index);
@@ -58,6 +62,9 @@ inline void check_e2(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
                 paid[livetrade::country_index_of(rec.tag_index)] += rec.money;
     int checked = 0, agree = 0;
     double worst = 0; int worst_c = -1;
+    { double mx = 0; int nrec = 0, nz = 0;
+      for (auto& s : sim) for (auto& rec : livetrade::read_standings(s.obj)) { nrec++; if (rec.money > mx) mx = rec.money; if (rec.money != 0) nz++; }
+      lg << "[E2/probe] records=" << nrec << " nonzero money=" << nz << " max=" << mx << " accum_before=" << g_accum_before.size() << " pass10_total=" << g_pass10_total << (char)10; }
     for (auto& [c, before] : g_accum_before) {
         auto p = paid.find(c);
         if (p == paid.end() || p->second <= 0) continue;
@@ -71,6 +78,15 @@ inline void check_e2(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
         double shortfall = p->second - delta;
         if (shortfall <= 0.002 + 0.001 * checked) agree++;
         if (shortfall > worst) { worst = shortfall; worst_c = c; }
+    }
+    // PROBE the worst country: every record it holds, and where its envoys actually stand.
+    if (worst_c >= 0) {
+        lg << "[E2/worst] country#" << worst_c << " accum before=" << g_accum_before[worst_c]
+           << " after=" << livetrade::country_income_accum(livetrade::country_at(worst_c)) << (char)10;
+        for (auto& s : sim) for (auto& rec : livetrade::read_standings(s.obj))
+            if (livetrade::country_index_of(rec.tag_index) == worst_c && (rec.money != 0 || rec.has_trader || rec.has_capital))
+                lg << "    " << s.name << ": money=" << rec.money << " trader=" << (int)rec.has_trader << " type=" << rec.type
+                   << " capital=" << (int)rec.has_capital << " pf=" << rec.power_fraction << (char)10;
     }
     g_e2_checked = checked; g_e2_agree = agree; g_e2_worst = worst;
     lg << "[E2] treasury booking vs pass-10 payout: " << agree << "/" << checked
@@ -138,14 +154,24 @@ inline void check_e4(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
 // The wrapper counts calls; on the last node of the pass it samples every accumulator and
 // compares the delta against what pass 10 actually paid. Same tick, no boundary in between.
 inline uintptr_t g_mgr = 0;
-inline int g_pass10_seen = 0, g_pass10_total = 0;
 inline std::string g_log_path;
 inline bool g_exact = false;
 
 using FnPass10 = void(__fastcall*)(uintptr_t);
 
 inline void __fastcall pass10_wrapper(uintptr_t node) {
+    // BOTH samples inside pass 10. The 'before' sample used to come from the tick hook, which
+    // is earlier in the same monthly update -- but measured, 70 of ~100 countries showed the
+    // accumulator growing by LESS than trade paid (worst shortfall 4.0 ducats), which a plain
+    // `add [country+0x68], eax` (AddDelayedIncome, 0x338AFC) cannot produce unless something
+    // between the two samples reset +0x68. Sampling at pass 10's FIRST node closes every
+    // such window: nothing but pass 10 runs between the samples.
+    if (g_exact && g_pass10_seen == 0 && g_pass10_total > 0) {
+        auto sim0 = livetrade::read_sim_nodes();
+        if (!sim0.empty()) sample_before(sim0);
+    }
     ((FnPass10)(livetrade::module_base() + 0xB584F0))(node);
+    g_pass10_calls_total++;
     if (!g_exact) return;
     if (++g_pass10_seen < g_pass10_total || g_pass10_total <= 0) return;
     g_pass10_seen = 0;

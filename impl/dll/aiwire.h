@@ -305,6 +305,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& [id, n2] : posted_node) standing_at.insert(n2);
         int k = (int)posted_node.size();
         if (k <= 0) continue;
+        if (changed.empty()) continue;                       // no merchant to evaluate: no plan (652 -> few plan() calls)
         const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c);
         g_frontier_cands += (long long)plan.size();
         // the weakest CURRENT placement, for the x1.5 move test

@@ -57,6 +57,7 @@ using FnPlace = void (__fastcall*)(uintptr_t country, uintptr_t envoy, uint8_t m
 
 inline uint64_t g_sent = 0, g_no_free = 0, g_no_node = 0, g_stale_record = 0;
 inline std::map<std::pair<int, int>, int> g_sent_tick;   // (country, node) -> tick, dwell
+inline std::map<int, int> g_nothing_tick;                  // country -> tick it last placed nothing
 inline std::string g_log;
 inline bool g_installed = false;
 
@@ -136,12 +137,16 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         // wasted (measured: dispatch 190 ms of a 375 ms AI tick, most countries saturated)
         { bool any_free = false; for (auto& m : ms) if (m.action == 0) { any_free = true; break; }
           if (!any_free) { g_no_free++; continue; } }
+        // a country whose free merchant could not be placed last pass will not place now either
+        // (the plan is the same until the standings move); skip it for the dwell floor
+        { auto ns = g_nothing_tick.find(c); if (ns != g_nothing_tick.end() && tick - ns->second < (int)ai::DWELL_FLOOR_MONTHS) continue; }
         std::set<int> standing;
         std::map<int, int> eng_to_field;
         for (int fn = 0; fn < (int)names.size(); fn++)
             for (auto& s : sim) if (s.name == names[fn]) { eng_to_field[s.index] = fn; break; }
         for (auto& m : ms) if (m.action == 2) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
         const auto& plan = aiwire::cached_plan((int)names.size(), home, k, undirected_adj, st, c);
+        int sent_here = 0;
         for (auto& pl : plan) {
             if (standing.count(pl.node)) continue;               // aiwire handles the ones already there
             if (pl.node == home) continue;                        // never at the capital
@@ -176,8 +181,9 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                 if (outgoing) aiwire::g_phi_out++; else aiwire::g_phi_in++;
             }
             standing.insert(pl.node);
-            sent++;
+            sent++; sent_here++;
         }
+        if (sent_here == 0) g_nothing_tick[c] = tick;
     }
     if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
                         << g_sent << " total; " << g_no_free << " refused: no free merchant; " << g_stale_record << " skipped: record already has_trader)" << (char)10;

@@ -59,7 +59,7 @@ recalled envoys still at their target one and three ticks later.
 
 ---
 
-## D3. Trade-power propagation per good (approved 2026-08-26, in progress)
+## D3. Trade-power propagation split by good (approved 2026-08-26, implemented v2)
 
 **Spec.** §1.9 preserves vanilla: a country's provincial power at node m, if it meets
 `TRADE_PROPAGATE_THRESHOLD` (2), sends `1/TRADE_PROPAGATE_DIVIDER` (a fifth) of it to the nodes
@@ -75,29 +75,35 @@ receives the whole fifth -- and for 9 under a divided fifth. The engine's figure
 above the exact fifth (fixed-point rounding). `rec+0x50/+0x54` are NOT propagation: they pair
 between countries at the same node (subject -> overlord transfers; `+0xAF has_subject`).
 
-**Departure.** For each good g, the fifth travels along g's own graph instead of Phi_w:
+**Departure (v2, the user's rule, 2026-08-26).** Trade power stays ONE number per (node,
+country). What becomes good-aware is how a node's fifth is DIVIDED among its neighbours. A country
+with provincial power pp_c(m) >= 2 at node m sends F = pp_c(m)/5, as in vanilla. F is split among
+the goods by price, and each good's portion goes to the neighbours of m that are UPSTREAM of m in
+that good's graph (equally among them if several); goods with no upstream neighbour at m take no
+share, so F is fully distributed whenever anything flows into m:
 
-    prop_g(n, c) = sum over m with edge n -> m in g's graph of  [pp_c(m) >= 2] * pp_c(m) / 5
+    split(m -> n) = sum over g with n in U_g(m) of (price_g / |U_g(m)|)  /  sum over g with U_g(m) != {} of price_g
+    received_c(n) = sum over m of [pp_c(m) >= 2] * pp_c(m)/5 * split(m -> n)
+    P_c(n)        = own_c(n) + received_c(n),   own_c(n) = val_c(n) - vanilla's full fifths along the installed graph
 
-so a country's power at n for good g is
+What n receives is ordinary trade power: the model writes P back into the record (`val` +0x48
+and `max_pow` +0x4C so the engine's cap does not clip it), so the node window, the engine's own
+scorers and the daily AI all see it, and the collector split uses it. A country receiving power
+at a node where it had no standing gets one (and the engine already has a record slot there).
 
-    P_c(n, g) = own_c(n) + prop_g(n, c),     own_c(n) = max(0, val_c(n) - prop_Phi_w(n, c))
+**No feedback, by construction.** The source of every fifth is the record's PROVINCIAL power
+(`+0x28`), never the standing's total: power received at a node is never re-sent from it (one
+hop, never chains -- spec 1.9's own rule), and the write-back cannot ratchet because the engine
+wipes and recomputes `val` from provinces at the start of every month.
 
-where `prop_Phi_w` is the vanilla amount the engine already added (recomputed by the same rule
-from `province_power` along the installed Phi_w) and is removed so that nothing propagates
-twice. `P_c(n, g)` replaces the single aggregate power in §1.8's per-good split (P_collect(g),
-P_transfer(g)) and in the steering shares.
-
-Optional scaling (off by default, `PROP_FLOW_SCALED`): multiply each term by g's share of m's
-inflow that came from n, `f_g(n->m) / sum_x f_g(x->m)`. It divides the fifth among the goods a
-link carries instead of granting it in full per good; it also lowers every per-good power below
-vanilla's aggregate. Left off until the user chooses.
+(v1, superseded the same day: each good's graph carried the FULL fifth as a per-good power
+P_c(n,g); it made power per good, which the user rejected -- trade power is per node.)
 
 **Consequences the implementation must carry.**
 1. The model computes the collector division itself: `power_fraction` (`rec+0x2C`) is written
-   per record before the engine's division as the country's flow-weighted share of the node's
-   pool, `sum_g collected_g(n) * P_c(n,g)/P_collect(n,g) / sum_g collected_g(n)`, so pass 10 pays
-   the model's figure. E1 is re-based on that prediction.
+   per record before the engine's division as the collector's share of P among the node's
+   collectors (0 for any non-collector, merchant records included), so pass 10 pays the model's
+   figure. E1 predicts from the written shares.
 2. A merchant the table says steers at an END node gets collector share 0 -- the engine and the
    model agree on who is paid without the engine needing an outgoing entry there. This closes
    D1's residual, and the AI may plan end nodes again.

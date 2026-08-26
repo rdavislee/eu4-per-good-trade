@@ -205,6 +205,14 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   AV at eu4.exe+0xB988D8 (a script-condition list with a -1 data pointer) was logged once; to be
   counted across runs before it is attributed.
 
+  **Measured 2026-08-26 (pgt_h4x, D3 v2 split propagation).** The fifth of a country's provincial
+  power is split among the node's neighbours by price-weighted goods along each good's graph
+  (impl/DEPARTURES.md D3); the model writes val/max_pow and power_fraction. E1 664/664 (worst
+  0.0075) on two runs; E4 CLEAN; G1 42% of AI placements on Phi_w-INCOMING ends (was 30-33%).
+  Probe at genua: the fifth splits alexandria .273 / champagne .240 / valencia .169 / tunis .168 /
+  ragusa .150; Tunis (#306) receives 2.61 power at genua from 0; 1,396 such new standings
+  world-wide. Genoa's window shows Aragon and Provence steering from Genoa (the user's test).
+
 ## F. Reorientation and responsiveness (console scenarios)
 
 - **F1. A flip is honoured end to end.** Pick a near-balanced link (§2.8), nudge development via

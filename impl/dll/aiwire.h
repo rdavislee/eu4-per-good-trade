@@ -98,7 +98,8 @@ inline long long g_damped = 0;
 inline long long g_kept_collecting = 0;
 inline long long g_moved_nodes = 0;
 inline long long g_wants_move = 0;
-inline long long g_vacated = 0;           // table entries dropped because the merchant left        // best placement is at a node the merchant is not at       // placements at a node other than where the merchant sat   // steering did not beat collecting by x1.5
+inline long long g_vacated = 0;           // table entries dropped because the merchant left
+inline long long g_not_homeward = 0;      // candidate ends rejected for pointing away from home
 constexpr int CADENCE_TICKS = 3;          // each merchant reconsidered every N months
 inline int g_evals = 0;
 
@@ -204,13 +205,44 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         // build this country's live footprint
         ai::Country ac;
         ac.tag = std::to_string(c);
+        // collect_power is WHERE THE COUNTRY COLLECTS -- its home node and any collecting
+        // merchant -- not every node it holds power in. score_steer's `reach` sums survival
+        // from the far end to these nodes, so with every powered node in here a merchant was
+        // credited for pushing value toward places the country never collects at, and the
+        // assignments pointed away from home. power_at is kept separately for eligibility.
+        std::map<int, double> power_at;
         for (int fn = 0; fn < (int)st.size(); fn++)
             for (auto& e : st[fn].entries)
                 if (e.country == c) {
-                    if (e.power > 0) ac.collect_power[fn] = e.power;
-                    if (e.collects) ac.home_nodes.insert(fn);
+                    if (e.power > 0) power_at[fn] = e.power;
+                    if (e.collects && e.power > 0) { ac.collect_power[fn] = e.power; ac.home_nodes.insert(fn); }
                 }
-        if (ac.collect_power.empty()) continue;
+        if (ac.collect_power.empty()) continue;     // collects nowhere: nothing to steer toward
+        // BFS FROM HOME over the undirected graph. An end n->m is worth evaluating only if it
+        // points homeward: dist(m) < dist(n), where dist is hops to the nearest collect node.
+        // Everything else is an edge away from home and can only ever score by accident.
+        std::vector<int> dist_home((int)names.size(), -1);
+        {
+            std::vector<int> q;
+            for (auto& [H, pw] : ac.collect_power) { dist_home[H] = 0; q.push_back(H); }
+            for (size_t qi = 0; qi < q.size(); qi++) {
+                int u = q[qi];
+                if (u < 0 || u >= (int)undirected_adj.size()) continue;
+                for (int v : undirected_adj[u])
+                    if (v >= 0 && v < (int)dist_home.size() && dist_home[v] < 0) { dist_home[v] = dist_home[u] + 1; q.push_back(v); }
+            }
+        }
+        // Homeward means "m is no further from a collect node than n is". Strict `<` rejected
+        // every end at a home node (dist 0 -- nothing is closer than 0), which is where most
+        // merchants stand: 15,683 ends rejected, 34 placed, measured. At home, steering toward
+        // another collect node (0 -> 0) is homeward; steering into the void (0 -> 1) is not.
+        // Away from home the strict form still holds, so a merchant a hop out never points
+        // further out.
+        auto homeward = [&](int n, int m) {
+            if (n < 0 || m < 0 || n >= (int)dist_home.size() || m >= (int)dist_home.size()) return false;
+            if (dist_home[m] < 0 || dist_home[n] < 0) return false;
+            return dist_home[n] == 0 ? dist_home[m] == 0 : dist_home[m] < dist_home[n];
+        };
         // re-place every posted merchant: candidates are the link ends at the node it sits on
         // ELIGIBLE NODES: every node where this country already holds power. That is the set the
         // engine's own CanSteer (0xB5C010) accepts -- a record with power > 0 or a merchant present,
@@ -218,7 +250,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         // not read from the engine yet (spec 2.7 item 17 is an open probe), so this is the
         // approximation; a country never holds power in a node it cannot reach.
         std::vector<int> eligible;
-        for (auto& [fn, pw] : ac.collect_power) if (pw > 0) eligible.push_back(fn);
+        for (auto& [fn, pw] : power_at) if (pw > 0) eligible.push_back(fn);
         for (int fn = 0; fn < (int)st.size(); fn++)
             for (auto& e : st[fn].entries)
                 if (e.country == c && e.power > 0 &&
@@ -245,8 +277,20 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             // rheinland TOWARD saxony pays more -- the exact case spec 3.14 is about, and why no
             // reverse end was ever exercised. best_placement scores every (node, link-end) pair
             // the country can reach; the current node is always among them.
-            auto best_pair = ai::best_placement(orient, ac, eligible, undirected_adj,
-                                                &steer_by_node, &my_power_by_node);
+            // Only HOMEWARD ends are candidates. best_placement has no gate, so the candidate
+            // set is built here: every (node, end) the country can reach whose end is nearer
+            // home than the node, scored with the competition maps.
+            std::pair<int,int> best_pair{-1,-1}; double best_sc = 0.0;
+            for (int n : eligible) {
+                const std::map<int, double>* sbe0 = nullptr;
+                { auto it = steer_by_node.find(n); if (it != steer_by_node.end()) sbe0 = &it->second; }
+                double mp0 = 0.0;
+                { auto it = my_power_by_node.find(n); if (it != my_power_by_node.end()) mp0 = it->second; }
+                for (auto& cd : ai::candidates_at(orient, ac, n, undirected_adj, sbe0, mp0)) {
+                    if (!homeward(cd.node, cd.target)) { g_not_homeward++; continue; }
+                    if (cd.score > best_sc) { best_sc = cd.score; best_pair = {cd.node, cd.target}; }
+                }
+            }
             if (best_pair.first < 0) continue;              // steers nothing anywhere -> stays
             const std::map<int, double>* sbe = nullptr;
             { auto it = steer_by_node.find(best_pair.first); if (it != steer_by_node.end()) sbe = &it->second; }
@@ -288,10 +332,24 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                     g_damped++; continue;
                 }
                 // G2: computed-gain test -- the new end must beat the incumbent end by x1.5
-                double incumbent = 0.0;
-                for (auto& cd : cands)
-                    if (cd.target >= 0 && cd.target < (int)names.size() &&
-                        names[cd.target] == ex->second) { incumbent = cd.score; break; }
+                // VANILLA'S RULE (0x1BD206): move only if the new placement beats the country's
+                // LEAST profitable current merchant by x1.5 -- not this node's incumbent. The
+                // worst placement is what a move actually gives up.
+                double incumbent = 1e300;
+                for (auto& [key2, tgt2] : assign::g_table) {
+                    if (key2.first != c) continue;
+                    auto nf2 = std::find(names.begin(), names.end(), key2.second);
+                    auto tf2 = std::find(names.begin(), names.end(), tgt2);
+                    if (nf2 == names.end() || tf2 == names.end()) continue;
+                    int n2 = (int)(nf2 - names.begin()), t2 = (int)(tf2 - names.begin());
+                    const std::map<int, double>* sbe2 = nullptr;
+                    { auto it = steer_by_node.find(n2); if (it != steer_by_node.end()) sbe2 = &it->second; }
+                    double mp2 = 0.0;
+                    { auto it = my_power_by_node.find(n2); if (it != my_power_by_node.end()) mp2 = it->second; }
+                    for (auto& cd : ai::candidates_at(orient, ac, n2, undirected_adj, sbe2, mp2))
+                        if (cd.target == t2 && cd.score < incumbent) incumbent = cd.score;
+                }
+                if (incumbent > 1e299) incumbent = 0.0;
                 if (best.score < 1.5 * incumbent) { g_damped++; continue; }
                 g_flips[key]++;
             }
@@ -307,9 +365,21 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             g_hold_tick[key] = tick;
             // G1: is the chosen end Phi_w-OUTGOING (the tab group the engine can index) or
             // Phi_w-INCOMING (the group vanilla cannot express at all)?
+            // G1 counts against the ENGINE's declared outgoing list -- the tab group vanilla can
+            // index -- not the live Phi_w orientation, which flips and made the count read 0.
             bool outgoing = false;
-            if (best.node < (int)phi_out_adj.size())
-                for (int m : phi_out_adj[best.node]) if (m == best.target) { outgoing = true; break; }
+            {
+                uintptr_t nd = 0;
+                for (auto& s2 : sim) if (s2.name == names[best.node]) { nd = s2.obj; break; }
+                uintptr_t def = nd ? livetrade::fq(nd + 0xA8) : 0;
+                if (def && livetrade::validate_region(def + 0x98, 16)) {
+                    uintptr_t b = livetrade::fq(def + 0x98), e = livetrade::fq(def + 0xA0);
+                    for (uintptr_t p = b; b && e > b && p + 0x78 <= e; p += 0x78) {
+                        uintptr_t t = livetrade::validate_region(p + 0x30, 8) ? livetrade::fq(p + 0x30) : 0;
+                        if (t && livetrade::def_key(t) == names[best.target]) { outgoing = true; break; }
+                    }
+                }
+            }
             if (outgoing) g_phi_out++; else g_phi_in++;
             if (best.node != here) g_moved_nodes++;
             placed++;
@@ -320,7 +390,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     int worst_flip = 0;
     for (auto& [k, n] : g_flips) if (n > worst_flip) worst_flip = n;
     log << "  [ai] scan: " << live_countries.size() << " countries with power, "
-        << g_wants_move << " merchants whose best placement is elsewhere (envoy travel not driven); " << g_vacated << " entries vacated; "
+        << g_wants_move << " merchants whose best placement is elsewhere (envoy travel not driven); " << g_vacated << " entries vacated; " << g_not_homeward << " ends rejected as not homeward; "
         << triggers << " merchants moved by vanilla, " << placed
         << " re-placed by us; table now " << assign::g_table.size() << " entries\n";
     log << "  [G1] placements by tab group: " << g_phi_out << " on Phi_w-outgoing ends, "

@@ -19,7 +19,9 @@
 //
 // So: forward panels with ordinal 0 get the aliased shields removed; reverse panels are left to
 // the engine. Removal is box->vt[0x270](box, holder, 0) = 0x163D8B0, which unlinks the holder's
-// list node; the holder is then ours to destroy through its own deleting destructor (vt[0],
+// list node ONLY -- disassembled: 0x1530240 frees the 0x20-byte node via 0xDF1A0 and drops the
+// reverse registration via 0x4741B0, and never touches the child itself. So the holder is
+// then ours to destroy through its own deleting destructor (vt[0],
 // 0xFC6D40 -> 0x152E030 frees the held window, then operator delete). Done after g_orig each
 // frame, because the engine rebuilds the row whenever its count gate fails -- which, with our
 // removals, is every frame; that is the per-frame cost the trace priced and accepted.
@@ -51,6 +53,13 @@ constexpr int       BOX_RELAYOUT   = 0x2C0;
 constexpr int       BOX_HEAD       = 0x100;
 constexpr int       HOLDER_WINDOW  = 0x40;
 constexpr int       ICON_HANDLE    = 0x1E8;
+constexpr int       BOX_APPEND     = 0x260;     // box vtbl: append child (holder), relayout flag
+constexpr int       BOX_CLEAR      = 0x278;     // box vtbl: clear all (deletes the children)
+constexpr uintptr_t GUI_MANAGER    = 0x23494F0; // *(CGui**)
+constexpr uintptr_t HOLDER_CTOR    = 0x152DF80; // (holder, gui, const std::string* windowName)
+constexpr uintptr_t SHIELD_SETUP   = 0x10B44B0; // (iface, elem, handle, setFrame, clickable, defTooltip, flagA, flagB)
+constexpr uintptr_t TEMPLATE_STR   = 0x232B4C0; // the engine static std::string trade_node_trader
+constexpr uintptr_t ENGINE_NEW     = 0x1A332D4;
 
 using FnUpdate  = void (__fastcall*)(uintptr_t);
 using FnFindBox = uintptr_t (__fastcall*)(uintptr_t, const char*);
@@ -58,12 +67,18 @@ using FnFindIcon= uintptr_t (__fastcall*)(uintptr_t, const char*);
 using FnRemove  = void (__fastcall*)(uintptr_t, uintptr_t, int);
 using FnRelayout= void (__fastcall*)(uintptr_t);
 using FnDtor    = void (__fastcall*)(uintptr_t, unsigned);
+using FnAppend  = void (__fastcall*)(uintptr_t, uintptr_t, int);
+using FnNew     = void* (__fastcall*)(size_t);
+using FnHolderCtor  = uintptr_t (__fastcall*)(uintptr_t, uintptr_t, uintptr_t);
+using FnShieldSetup = void (__fastcall*)(uintptr_t, uintptr_t, uint64_t, bool, bool, bool, uint8_t, uint8_t);
 
 inline FnUpdate g_orig = nullptr;
 inline bool g_installed = false;
 inline uint64_t g_cleared = 0;      // aliased shields removed from forward link-#0 panels
 inline uint64_t g_inspected = 0, g_shields = 0;   // forward-#0 panels seen / shields walked
 inline uint64_t g_rev_panels = 0, g_rev_with_shields = 0, g_rev_shields = 0;   // reverse panels drawn
+inline uint64_t g_rev_removed = 0;   // engine-drawn shields cleared from reverse panels
+inline uint64_t g_rev_added = 0;     // shields we drew on reverse panels from the table
 
 // the ordinal a FORWARD panel represents: its entry's target within its source's outgoing vector
 inline int panel_ordinal(uintptr_t lv) {
@@ -106,30 +121,101 @@ inline void __fastcall update_hook(uintptr_t panel) {
     if (!panel || !livetrade::validate_region(panel + PANEL_LINKVIEW, 8)) return;
     uintptr_t lv = livetrade::fq(panel + PANEL_LINKVIEW);
     if (!lv) return;
-    if (revpanel::is_reverse(lv)) {
-        // MEASURE, do not touch: how many shields did the engine put on this reverse panel?
+    if (const revpanel::RevInfo* ri = revpanel::reverse_info(lv)) {
+        // A REVERSE PANEL'S ROW IS BUILT BY US, FROM THE TABLE. The engine cannot build it: every
+        // reverse end at a node is +0xA8 = 0 and the engine's ordinal search collapses every
+        // reverse panel to 0, so it draws the SAME records on all of them -- and a Phi_w link-#0
+        // merchant (vanilla's own, no table entry) is copied onto every non-Phi_w panel at the
+        // node. Pruning after the fact cannot tell those copies apart. So: clear everything the
+        // engine drew here, then add exactly one shield per table entry whose target is this
+        // panel's far node, using the engine's own holder ctor and shield setup (OFFSETS.md).
         g_rev_panels++;
+        std::string node_key = livetrade::def_key(ri->owner_def);
+        std::string far_key  = livetrade::def_key(ri->other_def);
         uintptr_t w2 = livetrade::fq(panel + PANEL_WINDOW);
-        if (w2 && livetrade::validate_region(w2, 8)) {
-            uintptr_t wv2 = livetrade::fq(w2);
-            if (wv2 && livetrade::validate_region(wv2 + WIN_FIND_BOX, 8)) {
-                auto fb2 = (FnFindBox)livetrade::fq(wv2 + WIN_FIND_BOX);
-                uintptr_t bx = fb2 ? fb2(w2, "director_flags") : 0;
-                if (bx && livetrade::validate_region(bx + BOX_HEAD, 16)) {
-                    int n = 0;
-                    for (uintptr_t nd = livetrade::fq(bx + BOX_HEAD); nd && n < 64 && livetrade::validate_region(nd, 0x20); nd = livetrade::fq(nd + 0x10)) n++;
-                    if (n) { g_rev_with_shields++; g_rev_shields += n; }
-                }
-            }
+        if (node_key.empty() || far_key.empty() || !w2 || !livetrade::validate_region(w2, 8)) return;
+        uintptr_t wv2 = livetrade::fq(w2);
+        if (!wv2 || !livetrade::validate_region(wv2 + WIN_FIND_BOX, 8)) return;
+        auto fb2 = (FnFindBox)livetrade::fq(wv2 + WIN_FIND_BOX);
+        uintptr_t bx = fb2 ? fb2(w2, "director_flags") : 0;
+        if (!bx || !livetrade::validate_region(bx + BOX_HEAD, 16)) return;
+        uintptr_t bvt2 = livetrade::fq(bx);
+        if (!bvt2 || !livetrade::validate_region(bvt2 + BOX_CLEAR, 8)) return;
+        auto clear2    = (FnRelayout)livetrade::fq(bvt2 + BOX_CLEAR);
+        auto append2   = (FnAppend)livetrade::fq(bvt2 + BOX_APPEND);
+        auto relayout2 = (FnRelayout)livetrade::fq(bvt2 + BOX_RELAYOUT);
+        if (!clear2 || !append2 || !relayout2) return;
+        // who belongs here: every country whose table entry at this node targets far_key
+        std::vector<int> want;
+        for (auto& [key, target] : assign::g_table)
+            if (key.second == node_key && target == far_key) want.push_back(livetrade::country_index_of(key.first));
+        // the engine's row is wrong by construction; clear it (vt[0x278] deletes the children)
+        int had = 0;
+        for (uintptr_t nd = livetrade::fq(bx + BOX_HEAD); nd && had < 64 && livetrade::validate_region(nd, 0x20); nd = livetrade::fq(nd + 0x10)) had++;
+        if (had) { clear2(bx); g_rev_removed += had; }
+        if (want.empty()) return;
+        // add ours, from the source node's records (the handle at rec+0x10 is copied, never built)
+        uintptr_t node = 0;
+        {
+            uintptr_t mgr = livetrade::trade_manager();
+            int idx = livetrade::validate_region(ri->owner_def + 0xD8, 4) ? livetrade::fi(ri->owner_def + 0xD8) : 0;
+            uintptr_t base = mgr ? livetrade::rq(mgr + 0x18) : 0;
+            int32_t cnt = 0; if (mgr) livetrade::safe_read(mgr + 0x24, &cnt, 4);
+            if (base && idx > 0 && idx < cnt) node = base + (uintptr_t)idx * 0x138;
         }
+        if (!node) return;
+        uintptr_t rbase = livetrade::rq(node + 0x18); int rcnt = livetrade::ri(node + 0x24);
+        if (!rbase || rcnt <= 0 || rcnt > 4096 || !livetrade::validate_region(rbase, (size_t)rcnt * 0xC0)) return;
+        uintptr_t gui = livetrade::rq(livetrade::module_base() + GUI_MANAGER);
+        uintptr_t g = livetrade::game_singleton();
+        uintptr_t iface = 0;
+        if (g && livetrade::validate_region(g + 0x1E00, 8)) {
+            uintptr_t p1 = livetrade::fq(g + 0x1E00);
+            if (p1 && livetrade::validate_region(p1 + 0x58, 8)) iface = livetrade::fq(p1 + 0x58);
+        }
+        if (!gui || !iface) return;
+        auto hnew   = (FnNew)(livetrade::module_base() + ENGINE_NEW);
+        auto hctor  = (FnHolderCtor)(livetrade::module_base() + HOLDER_CTOR);
+        auto ssetup = (FnShieldSetup)(livetrade::module_base() + SHIELD_SETUP);
+        uintptr_t tmpl = livetrade::module_base() + TEMPLATE_STR;
+        int prov = livetrade::validate_region(ri->owner_def + 0xDC, 4) ? livetrade::fi(ri->owner_def + 0xDC) : 0;
+        int added = 0;
+        for (int cidx : want) {
+            if (cidx < 0 || cidx >= rcnt) continue;
+            uintptr_t rec = rbase + (uintptr_t)cidx * 0xC0;
+            if ((livetrade::fi(rec + 0x14) & 0xFFFF) != cidx) continue;
+            uint64_t handle = livetrade::fq(rec + 0x10);
+            uintptr_t h = (uintptr_t)hnew(0x50);
+            if (!h) continue;
+            hctor(h, gui, tmpl);
+            uintptr_t hw = livetrade::fq(h + HOLDER_WINDOW);
+            if (!hw || !livetrade::validate_region(hw, 8)) continue;
+            uintptr_t hwvt = livetrade::fq(hw);
+            FnFindIcon fi2 = (hwvt && livetrade::validate_region(hwvt + WIN_FIND_ICON, 8)) ? (FnFindIcon)livetrade::fq(hwvt + WIN_FIND_ICON) : nullptr;
+            uintptr_t icon = fi2 ? fi2(hw, "trade_node_trader_shield") : 0;
+            if (!icon) continue;
+            ssetup(iface, icon, handle, true, true, false, 1, 0);
+            if (livetrade::validate_region(icon + 0x10, 4)) *(int32_t*)(icon + 0x10) = prov;
+            append2(bx, h, 0);
+            added++;
+        }
+        if (added) { relayout2(bx); g_rev_added += added; }
         return;
     }
-    if (panel_ordinal(lv) != 0) return;                  // only link #0 collects the aliases
+    // EVERY forward panel, not only ordinal 0. Measured: forward-#0 panels saw 104,066 shields and
+    // removed none, while Austria stood on every forward panel out of rheinland. Its table entry
+    // (rheinland -> wien) is a FORWARD end, so the old "is this a reverse steerer" test kept it --
+    // but the engine had drawn it on every panel whose ordinal search collapsed to its record. The
+    // rule is the same as the reverse side's: a shield belongs on a panel only if the country's
+    // real target is this panel's far node.
     g_inspected++;
     if (assign::g_table.empty()) return;
     uintptr_t srcdef = livetrade::fq(lv + revpanel::LV_SRCDEF);
+    uintptr_t fentry = livetrade::fq(lv + revpanel::LV_ENTRY);
     std::string node_key = livetrade::def_key(srcdef);
-    if (node_key.empty()) return;
+    std::string far_key  = (fentry && livetrade::validate_region(fentry + 0x30, 8))
+                             ? livetrade::def_key(livetrade::fq(fentry + 0x30)) : std::string();
+    if (node_key.empty() || far_key.empty()) return;
 
     uintptr_t win = livetrade::fq(panel + PANEL_WINDOW);
     if (!win || !livetrade::validate_region(win, 8)) return;
@@ -167,7 +253,12 @@ inline void __fastcall update_hook(uintptr_t panel) {
         uint64_t handle = livetrade::fq(icon + ICON_HANDLE);
         g_shields++;
         int cidx = (int)(int16_t)(handle >> 32);
-        if (!steers_reverse_here(cidx, node_key, srcdef)) continue;
+        // Keep unless the table says this country targets a DIFFERENT far node here. No table
+        // entry means an engine-native steerer, kept on whatever panel the engine drew it.
+        bool alias = false;
+        for (auto& [key, target] : assign::g_table)
+            if (key.second == node_key && livetrade::country_index_of(key.first) == cidx) { alias = (target != far_key); break; }
+        if (!alias) continue;
         remove(box, h, 0);
         uintptr_t hvt = livetrade::fq(h);
         if (hvt && livetrade::validate_region(hvt, 8)) {

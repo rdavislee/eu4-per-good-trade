@@ -295,3 +295,34 @@ vptrs** (the list sub-object begins at `+0xF0`, its vptr `0x1D90318`), **`+0x100
 
 On a FORWARD panel for link #0 the list is **empty after Update** across 10,932 inspections --
 the engine does not draw reverse-end (`+0xA8 = 0`) records there, so no alias removal is needed.
+
+## Box child removal is unlink-only (disassembled 2026-08-25)
+
+`CGuiOverlappingElementsBox::vt[0x270]` = `0x163D8B0` forwards to the list sub-object's
+`vt[0x40]` = `0x1530240`, which scans from `subobj+0x10` for `node->payload == child`
+(`0x1530260`), frees the 0x20-byte LIST NODE via `0xDF1A0` (`0x153026E`, operand `rdx` = the
+node), then tail-jumps to `0x4741B0(child, subobj+8)` to drop the child's reverse registration.
+It never calls the child's destructor and never `operator delete`s the child. So after
+`vt[0x270]` the holder is the caller's to destroy -- `flagfix.h`'s `vt[0](holder, 1)` after
+removal is correct, not a double-free. 2048 live removals in one run without a fault agree.
+
+## Drawing a country shield on a trade-link panel (shield-creation trace, 2026-08-25)
+
+The engine row builder (0x13FDBE0..0x13FDDB0) inlines two helpers:
+- **`0x152DF80` holder ctor**: `Holder* (Holder* this, CGui* gui, const std::string* windowName)`.
+  Holder is 0x50 bytes from operator new (`0x1A332D4`); `+0x40` = the CGuiWindow built from the
+  "trade_node_trader" template. The engine keeps a static MSVC std::string of that name at
+  `0x232B4C0` (`{ptr@0, size=0x11@+0x10, cap=0x1F@+0x18}`); pass that.
+- **`0x10B44B0` shield setup**: `f(iface rcx, elem rdx, uint64 handle r8, bool setFrame r9b,
+  bool clickable [rsp+0x20], bool defaultTooltip [rsp+0x28], u8 flagA [rsp+0x30], u8 flagB [rsp+0x38])`.
+  The panel passes `(1,1,0,1,0)`. `iface = *(*(*(0x233FE78)+0x1E00)+0x58)`. Sets `icon+0x1E8` =
+  handle, the frame index, click delegates, then `vt[0x300]` and `vt[0x88]`.
+- CGui manager: `*(void**)0x23494F0`. `window->vt[0xC8](window, "trade_node_trader_shield")` finds
+  the icon; it returns a non-NULL fallback on a miss, so always build from the template.
+- Append: `box->vt[0x260](box, holder, 0)`; then `box->vt[0x2C0](box)` once. Clear all: `vt[0x278]`
+  (deletes the children).
+- `icon+0x10` = the source definition location province; no reader found, set for fidelity.
+
+The country handle is `*(uint64*)(rec+0x10)` -- copy it, never synthesise (the validity byte at
+bits 56..63 matters). Shields we add are wiped by the engine count gate on the next frame, so they
+are re-added from the Update hook every frame, the same cost the removal path already pays.

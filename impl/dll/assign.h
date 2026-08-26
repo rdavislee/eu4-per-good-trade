@@ -105,6 +105,9 @@ inline int merge(std::vector<econ::NodeStandings>& st, const std::vector<std::st
                 applied++; g_merge_applied++;
                 break;
             }
+        // The found branch above is now redundant with read_standings_field, which reads a
+        // table-owned placement directly; it stays as the fallback for a standing built
+        // elsewhere. The not-found branch below is the only path that still adds anything.
         if (!found) {
             // the country holds no power here yet; a merchant present is still +2 power
             // (MERCHANT_MAX_POWER_BONUS) and steers, so it belongs in the standings.

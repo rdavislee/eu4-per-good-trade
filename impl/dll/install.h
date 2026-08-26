@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 #include "livetrade.h"
+#include "assign.h"
 #include "../src/economy.h"
 #include "arrows.h"
 
@@ -198,6 +199,8 @@ inline std::vector<econ::NodeStandings> read_standings_field(
         std::map<int, std::vector<int>>& collect_nodes_out) {
     auto byname = live_by_name(sim);
     int N = (int)field_names.size();
+    std::map<std::string, int> fidx_of;
+    for (int i = 0; i < N; i++) fidx_of[field_names[i]] = i;
     std::vector<econ::NodeStandings> st(N);
     collect_nodes_out.clear();
     for (int fn = 0; fn < N; fn++) {
@@ -229,7 +232,23 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             if (s.power < 0) s.power = 0;
             s.collects = c.has_trader ? (c.type == 0) : c.has_capital;
             s.steer_to = -1;
-            if (c.has_trader && c.type == 1 && c.steer_link >= 0 &&
+            // A TABLE-OWNED PLACEMENT IS READ FROM THE TABLE, NOT THE RECORD. syncrec writes a
+            // reverse end as +0xA8 = 0, so deriving steer_to from the record here yielded the
+            // FORWARD link #0 target -- silently wrong whenever merge did not overwrite it
+            // (a name miss, a poll reload, a vacated node). And the +2 merchant-present power
+            // that merge granted a country with no other standing vanished the next tick,
+            // because the record then existed with val 0 and merge took the found branch.
+            // Both are one rule: if the table has this (country, node), the table decides
+            // the target and the standing carries at least MERCHANT_MAX_POWER_BONUS.
+            auto tab = assign::g_table.find({c.tag_index, field_names[fn]});
+            if (tab != assign::g_table.end()) {
+                auto tf = fidx_of.find(tab->second);
+                if (tf != fidx_of.end()) {
+                    s.steer_to = tf->second;
+                    s.collects = false;
+                    if (s.power < 2.0) s.power = 2.0;
+                }
+            } else if (c.has_trader && c.type == 1 && c.steer_link >= 0 &&
                 fn < (int)link_targets.size() &&
                 c.steer_link < (int)link_targets[fn].size())
                 s.steer_to = link_targets[fn][c.steer_link];

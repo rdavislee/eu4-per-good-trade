@@ -91,6 +91,17 @@ and `max_pow` +0x4C so the engine's cap does not clip it), so the node window, t
 scorers and the daily AI all see it, and the collector split uses it. A country receiving power
 at a node where it had no standing gets one (and the engine already has a record slot there).
 
+**Three clarifications (review 2026-08-26).** (1) The weight is price alone: a good claims its
+price share of m's fifth on the strength of having an upstream edge at m, whether or not a unit of
+it moves there this month -- deliberate, so the split does not chase monthly flow noise. (2) A
+country that receives power at a node where it had no standing becomes transfer-eligible there
+under 1.8's reach rule for the goods it collects downstream of; that is an intended economic effect
+of the ~1,400 new standings, not a side effect. (3) `val` (+0x48) excludes the subject/overlord
+transfers (every engine reader adds t_in - t_out after the cap), so the model writes P minus those
+transfers into val and the node totals +0xC8/+0xD0/+0xD4 from P, so that every share the engine
+displays or the AI consumes has the model's numerator AND denominator. World power under the split
+is ~5% below vanilla's aggregate (one fifth per source instead of one per upstream neighbour).
+
 **No feedback, by construction.** The source of every fifth is the record's PROVINCIAL power
 (`+0x28`), never the standing's total: power received at a node is never re-sent from it (one
 hop, never chains -- spec 1.9's own rule), and the write-back cannot ratchet because the engine

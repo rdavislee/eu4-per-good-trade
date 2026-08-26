@@ -39,6 +39,7 @@
 #include "syncrec.h"
 #include "flagfix.h"
 #include "clickfix.h"
+#include "envoy.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -459,6 +460,7 @@ inline int apply(uintptr_t mgr) {
         ai::Orient orient = aiwire::build_orient(g_plan.N, per_good, g_plan.graphs, inj_field);
         std::ofstream la(g_log, std::ios::app);
         aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
+        envoy::dispatch_wants(&la);   // a no-op until the send-merchant command is established
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);
     auto gross = econ::gross_link_flows(shown);                  // WITH steering bonus

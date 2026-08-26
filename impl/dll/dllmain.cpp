@@ -34,6 +34,7 @@
 #include "revpanel.h"
 #include "flagfix.h"
 #include "clickfix.h"
+#include "envoy.h"
 #include "ticklive.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
@@ -404,6 +405,12 @@ static void run_install(const std::string& logpath) {
                         log << "  reverse-panel steer_button click routed to the table (prologue hook at 0x13FD5F0)" << (char)10;
                     else
                         log << "  click hook NOT installed: " << cerr << (char)10;
+                    // ...and the mechanic that SENDS a merchant to the node the plan chose.
+                    std::string eerr;
+                    if (envoy::install(logpath, &eerr))
+                        log << "  send-merchant dispatch installed" << (char)10;
+                    else
+                        log << "  send-merchant dispatch NOT installed: " << eerr << (char)10;
                 }
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))

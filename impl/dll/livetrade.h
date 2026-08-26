@@ -63,29 +63,53 @@ inline int32_t ri(uintptr_t p) { int32_t v = 0; safe_read(p, &v, 4); return v; }
 // 10^5 fields, and a syscall each turns a millisecond of arithmetic into seconds of stall (a
 // hitch measured in the running game). validate_region() checks a whole contiguous structure
 // once; after that the fields inside it are read directly.
-inline long long g_validate_calls = 0;   // per-tick cost counter (VirtualQuery each)
 // PER-TICK REGION CACHE. Every validate_region was a VirtualQuery syscall -- 13,339 of them in
-// one AI phase, measured, which is most of that phase's ~125 ms. Within a monthly tick the
-// engine's heap regions do not move, so each VirtualQuery's answer ([base, base+size) and its
-// verdict) is remembered and a span inside a known region is answered without the syscall.
-// Cleared at the start of every apply() (tick_cache_reset) so nothing survives a month.
-struct RegionInfo { uintptr_t base, end; bool ok; };
-inline std::vector<RegionInfo> g_region_cache;
-inline long long g_validate_syscalls = 0;
-inline void tick_cache_reset() { g_region_cache.clear(); g_validate_calls = 0; g_validate_syscalls = 0; }
+// one AI phase, measured, which was most of that phase's ~125 ms. Within the monthly tick hook the
+// engine's committed regions do not go away underneath us, so a POSITIVE VirtualQuery answer
+// ([base, base+size) committed and readable) is remembered and a span wholly inside a known
+// region is answered without the syscall. Four rules, each from a reviewed failure:
+//   1. only positive verdicts are cached. A negative answer for free/reserved space carries the
+//      WHOLE hole as its RegionSize -- gigabytes -- and caching it would deny everything the
+//      engine commits there later in the tick (a new GUI holder, a merchant construction).
+//   2. the fast path is live only INSIDE apply() (t_in_tick). Per-frame callers (flagfix,
+//      revpanel, clickfix) run for minutes between ticks -- and for ever while paused -- so they
+//      keep the syscall path, exactly as before the cache existed.
+//   3. thread_local. The solver thread, the attach worker and the game thread all call this;
+//      a shared vector would be raced. Each thread has its own; only the game thread sets
+//      t_in_tick, so the others never take the fast path.
+//   4. dedup on push and evict-all when full, so a straddling span cannot fill the cache with
+//      duplicates and freeze learning behind a 4k-entry linear scan.
+struct RegionInfo { uintptr_t base, end; };
+inline thread_local std::vector<RegionInfo> t_region_cache;
+inline thread_local bool t_in_tick = false;
+inline thread_local long long g_validate_calls = 0;      // whole-tick counters, reset with the cache
+inline thread_local long long g_validate_syscalls = 0;
+constexpr size_t REGION_CACHE_MAX = 1024;
+inline void tick_cache_begin() { t_region_cache.clear(); t_in_tick = true; g_validate_calls = 0; g_validate_syscalls = 0; }
+inline void tick_cache_end()   { t_region_cache.clear(); t_in_tick = false; }
+struct TickCacheScope { TickCacheScope() { tick_cache_begin(); } ~TickCacheScope() { tick_cache_end(); } };
 inline bool validate_region(uintptr_t p, size_t n) {
     g_validate_calls++;
     uintptr_t end = p + n;
-    // fast path: the whole span inside one cached region
-    for (auto it = g_region_cache.rbegin(); it != g_region_cache.rend(); ++it)
-        if (p >= it->base && end <= it->end) return it->ok;
+    if (t_in_tick)
+        for (auto it = t_region_cache.rbegin(); it != t_region_cache.rend(); ++it)
+            if (p >= it->base && end <= it->end) return true;
     MEMORY_BASIC_INFORMATION mbi{};
     while (p < end) {
         g_validate_syscalls++;
-        if (!VirtualQuery((void*)p, &mbi, sizeof(mbi))) return false;
-        bool ok = mbi.State == MEM_COMMIT && (mbi.Protect & 0xFF) != PAGE_NOACCESS && !(mbi.Protect & PAGE_GUARD);
-        if (g_region_cache.size() < 4096) g_region_cache.push_back({(uintptr_t)mbi.BaseAddress, (uintptr_t)mbi.BaseAddress + mbi.RegionSize, ok});
-        if (!ok) return false;
+        if (VirtualQuery((void*)p, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
+        if (mbi.State != MEM_COMMIT) return false;
+        DWORD prot = mbi.Protect & 0xFF;
+        if (prot == PAGE_NOACCESS || (mbi.Protect & PAGE_GUARD)) return false;
+        if (t_in_tick) {
+            uintptr_t rb = (uintptr_t)mbi.BaseAddress, re = rb + mbi.RegionSize;
+            bool dup = false;
+            for (auto& r : t_region_cache) if (r.base == rb && r.end == re) { dup = true; break; }
+            if (!dup) {
+                if (t_region_cache.size() >= REGION_CACHE_MAX) t_region_cache.clear();
+                t_region_cache.push_back({rb, re});
+            }
+        }
         p = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
     }
     return true;

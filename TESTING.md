@@ -50,6 +50,13 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   (§1.8), so any mismatch is a read or ÷12 bug. (Total/incoming/outgoing legitimately differ —
   the routing changed; local must not.)
 
+  **Measured 2026-08-26 (pgt_h3k, clean 1444 start, observer).** B3: in trade map mode every link
+  carries two panels (the engine's forward panel plus the DLL's reverse panel built from the
+  merchant table), each with its own >= 0 figure; E4's per-tick assertion reports
+  `DISPLAYED-TOTAL=0` negatives on all 24 ticks. B1: relink installs Phi_w into the definition graph
+  every tick (`[relink] applied: 2-3 links reversed`); the engine-list-vs-Phi_w equality check is
+  the `[B1]` line (see below).
+
 ## C. ★ Merchant assignment on any link end
 
 - **C1. ★ Tabs and buttons.** Open a node window. PASS: connected-node tabs across the top,
@@ -88,6 +95,15 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
 - **D5. Conduit behaviour.** `cape_of_good_hope` (zero local production at 1444): PASS — nonzero
   through-flow on most goods' views (28 of 29 carry flow through it on the reference; `paper`
   routes none), local value 0.
+
+  **Measured 2026-08-26 (pgt_h3k).** Selecting cloves through the `pgt.VIEW` harness: the arrow
+  layer re-orients 74 of 159 links away from Phi_w (`[arrows] view=cloves ... re-oriented 74 drawn
+  routes`), every European panel reads 0.00, and nonzero cloves flow radiates only from
+  the_moluccas (1.5 / 0.31 / 0.29 leaving it; 0.2 / 0.02 at malacca; 0.01 philippines) -- the
+  single-source spot-check. RESIDUALS: (1) the player-facing province-click trigger and the
+  trade-goods province colouring are not built -- the view is selected by marker only; (2) in the
+  per-good view each link still shows both panels, the reverse one reading 0.00, where D2 asks for
+  one direction only; (3) D3's sink list is not yet logged per view.
 
 ## E. ★ Monthly ticks — the money is right
 

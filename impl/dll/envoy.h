@@ -108,6 +108,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                     const std::vector<std::vector<int>>& undirected_adj,
                     const std::vector<econ::GoodFlow>& per_good,
                     int tick, std::ofstream* lg) {
+    const int player_idx = aiwire::player_country_index();
     if (!g_installed) return 0;
     // DO OUR PLACEMENTS STICK? Every (country,node) we sent to is in g_sent_tick; count how
     // many still have one of that country's merchants standing there this tick.
@@ -131,6 +132,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
     for (int c : countries) {
         int cidx = livetrade::country_index_of(c);
         if (aiwire::g_shard >= 0 && (cidx % 3) != aiwire::g_shard) continue;   // same shard as step
+        if (player_idx >= 0 && cidx == player_idx) continue;   // never send the human's merchants
         int home = -1;
         for (int fn = 0; fn < (int)st.size() && home < 0; fn++)
             for (auto& e : st[fn].entries) if (e.country == c && e.is_capital) { home = fn; break; }
@@ -145,8 +147,12 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         // a country whose free merchant could not be placed last pass will not place now either
         // (the plan is the same until the standings move); skip it for the dwell floor
         { auto ns = g_nothing_tick.find(c); if (ns != g_nothing_tick.end() && tick - ns->second < (int)ai::DWELL_FLOOR_MONTHS) continue; }
+        // a node is OCCUPIED by a merchant that is posted there (action 2) OR still travelling
+        // there (action 1): sending a second one to a node the first has not reached yet
+        // force-places it instantly, and when the first arrives its record is already claimed
+        // (SetTrader is gated on has_trader == 0) -- one merchant stranded (reviewed defect).
         std::set<int> standing;
-        for (auto& m : ms) if (m.action == 2) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
+        for (auto& m : ms) if ((m.action == 2 || m.action == 1) && m.node_index >= 0) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
         const auto& plan = aiwire::cached_plan((int)names.size(), home, k, undirected_adj, st, c);
         int sent_here = 0;
         for (auto& pl : plan) {
@@ -158,7 +164,10 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
             {
                 uintptr_t nd0 = node_obj(sim, names[pl.node]);
                 uintptr_t rb = nd0 ? livetrade::rq(nd0 + 0x18) : 0; int rc = nd0 ? livetrade::ri(nd0 + 0x24) : 0;
-                if (rb && cidx >= 0 && cidx < rc && livetrade::validate_region(rb + (uintptr_t)cidx * 0xC0 + 0xAE, 1)
+                // same slot check syncrec applies: the record at [cidx] must carry this country's
+                // index at +0x14, or the array is not index-dense and this is another country's byte
+                if (rb && cidx >= 0 && cidx < rc && livetrade::validate_region(rb + (uintptr_t)cidx * 0xC0, 0xC0)
+                    && (livetrade::fi(rb + (uintptr_t)cidx * 0xC0 + 0x14) & 0xFFFF) == cidx
                     && livetrade::fb(rb + (uintptr_t)cidx * 0xC0 + 0xAE) != 0) { g_stale_record++; continue; }
             }
             auto key = std::make_pair(c, pl.node);

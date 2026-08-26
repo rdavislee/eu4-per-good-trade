@@ -23,6 +23,7 @@
 #pragma once
 #include <windows.h>
 #include <atomic>
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <string>
@@ -253,7 +254,7 @@ inline void frame_view_poll() {
 
 inline int apply(uintptr_t mgr) {
     // PHASE PROFILE (H3): where the monthly cost goes. Marks are cumulative ms since apply() began.
-    livetrade::tick_cache_reset();
+    livetrade::TickCacheScope tick_cache;   // fast validate_region for the duration of apply() only
     LARGE_INTEGER ph_f, ph_t0, ph_t; QueryPerformanceFrequency(&ph_f); QueryPerformanceCounter(&ph_t0);
     std::string ph_line;
     auto PH = [&](const char* name) { QueryPerformanceCounter(&ph_t); ph_line += std::string(" ") + name + "=" + std::to_string((int)(1000.0 * (double)(ph_t.QuadPart - ph_t0.QuadPart) / (double)ph_f.QuadPart)); };
@@ -474,8 +475,8 @@ inline int apply(uintptr_t mgr) {
         aiwire::g_flowmat = &flowmat;
         aiwire::g_shard = (int)(g_ticks.load() % 3);
         frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear();
-        livetrade::g_validate_calls = 0;
-        aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
+        { int pidx = aiwire::player_country_index(); la << "  [ai] player country index=" << pidx << (pidx < 0 ? " (observer: every country is AI)" : "") << (char)10;
+          aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), pidx, la, &per_good); }
         PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
         PH("dispatch");
@@ -525,6 +526,26 @@ inline int apply(uintptr_t mgr) {
     // 2. now derive the node figures from those final records
     PH("linkvalue");
     int wrote = install::install_aggregate(sim, g_plan.names, agg, viewmode::per_good());
+    // D3 (TESTING.md): in a per-good view a sink is a node with NO outgoing edge in that good's
+    // graph and its window shows collected_share == 1. Log the good's sinks with the share the
+    // model wrote, so the count (2-8 per good) and the identity are checkable without a click.
+    if (viewmode::per_good() && !shown.empty()) {
+        const econ::GoodFlow& gf = shown[0];
+        std::ofstream ld(g_log, std::ios::app);
+        int sinks = 0, full = 0;
+        std::string list;
+        for (int n = 0; n < g_plan.N && n < (int)gf.is_sink.size(); n++) {
+            if (!gf.is_sink[n]) continue;
+            sinks++;
+            double cs = n < (int)gf.collected_share.size() ? gf.collected_share[n] : 0.0;
+            if (cs >= 0.999999) full++;
+            char b[160]; snprintf(b, sizeof b, " %s(in=%.3f cs=%.3f)", g_plan.names[n].c_str(),
+                     n < (int)gf.incoming.size() ? gf.incoming[n] / 12.0 : 0.0, cs);
+            list += b;
+        }
+        ld << "[D3] view=" << viewmode::g_selected_name << " sinks=" << sinks << " with collected_share==1: "
+           << full << " |" << list << (char)10;
+    }
     // 3. the outgoing figure = the sum of this node's own outgoing rows, so the per-link
     //    amounts add up to it. Safe now that every link has a record at both ends.
     // NOT install_outgoing_sums: it summed node+0x88, which is the steer-share array, not

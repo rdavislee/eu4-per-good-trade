@@ -44,18 +44,35 @@ namespace aiwire {
 inline const frontier::FlowMatrix* g_flowmat = nullptr;
 inline int g_shard = -1;   // -1 = all countries; 0..2 = only countries with index % 3 == shard
 // plan() is deterministic for (country, k) within a tick; step and dispatch both need it
-inline std::map<int, std::vector<frontier::Placement>> g_plan_cache;   // per country per tick
+inline std::map<std::pair<int, int>, std::vector<frontier::Placement>> g_plan_cache;   // per (country, k) per tick
 inline long long g_plan_cache_hits = 0;
 inline const std::vector<frontier::Placement>& cached_plan(int N, int home, int k,
         const std::vector<std::vector<int>>& adj, const std::vector<econ::NodeStandings>& st, int c) {
-    auto key = c;   // k differs between step (posted merchants) and dispatch (all merchants); the
-                    // larger plan is a superset ordered by score, so one plan per country serves both
+    // keyed on (country, k). Keying on the country alone let step's k = posted merchants fill the
+    // cache first, and dispatch -- asking for k = all merchants -- got the truncated plan back and
+    // had nothing to send the free merchants to (reviewed defect). Both now ask for all merchants.
+    auto key = std::make_pair(c, k);
     auto it = g_plan_cache.find(key);
     if (it != g_plan_cache.end()) { g_plan_cache_hits++; return it->second; }
     return g_plan_cache[key] = frontier::plan(N, home, k, adj, st, *g_flowmat, c);
 }
 
 struct Merchant { int id = 0; int action = 0; int node_index = -1; };
+
+// THE HUMAN'S COUNTRY, as an index into the manager array, or -1 when there is none (observer).
+// game+0x1E60 is the player's country handle, +0x1E66 the game mode (7 = observing) and
+// +0x1E6F the observer flag (the fields clickfix reads for the same purpose); a handle's bytes
+// 4..5 are the index, the engine's own idiom (booklog). In observer mode EVERY country is AI,
+// including the one being watched, so the answer is -1 there.
+inline int player_country_index() {
+    uintptr_t g = livetrade::game_singleton();
+    if (!g || !livetrade::validate_region(g + 0x1E60, 16)) return -1;
+    uint8_t mode = livetrade::fb(g + 0x1E66), obs = livetrade::fb(g + 0x1E6F);
+    if (mode == 7 && obs != 0) return -1;
+    uint64_t h = livetrade::fq(g + 0x1E60);
+    if (!h) return -1;
+    return (int)(int16_t)(h >> 32);
+}
 
 inline uintptr_t country_mgr_array() {
     uintptr_t db = livetrade::rq(livetrade::module_base() + 0x233D8D0);
@@ -165,9 +182,27 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) live_countries.insert(e.country);
 
     LARGE_INTEGER qf, qt; QueryPerformanceFrequency(&qf); double t_merch = 0, t_plan = 0, t_weak = 0; auto now = [&](){ QueryPerformanceCounter(&qt); return 1000.0 * (double)qt.QuadPart / (double)qf.QuadPart; };
+    // VACATE FIRST, FOR EVERY COUNTRY IN THE TABLE -- not only the live ones below. A country that
+    // lost its last merchant, or all its trade power, never reached the per-country vacate and its
+    // entries persisted for ever: merge kept injecting a phantom power=2 steering standing for a
+    // merchant that no longer exists (reviewed defect). Same shard cadence as the scoring loop.
+    {
+        std::set<int> table_countries;
+        for (auto& [key, tgt] : assign::g_table) table_countries.insert(key.first);
+        for (int c : table_countries) {
+            if (g_shard >= 0 && (livetrade::country_index_of(c) % 3) != g_shard) continue;
+            auto ms0 = merchants_of(livetrade::country_index_of(c));
+            std::set<std::string> posted_at;
+            for (auto& m : ms0) if (m.action == 2 && m.node_index >= 0) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) posted_at.insert(names[f->second]); }
+            std::vector<std::string> gone;
+            for (auto& [key, tgt] : assign::g_table)
+                if (key.first == c && !posted_at.count(key.second)) gone.push_back(key.second);
+            for (auto& n : gone) { assign::clear(c, n); g_vacated++; }
+        }
+    }
     for (int c : live_countries) {
         if (g_shard >= 0 && (livetrade::country_index_of(c) % 3) != g_shard) continue;   // amortised over the cadence
-        if (c == player_country) continue;                 // spec 3.14 is about the AI
+        if (player_country >= 0 && livetrade::country_index_of(c) == player_country) continue;   // spec 3.14 is about the AI; the human keeps their own merchants
         // `c` is the RAW tag dword from the node record (+0x14), whose low 16 bits are the
         // country's index into the manager array and whose byte 3 is a validity tag. Passing the
         // raw value as an array index silently found nothing at all.
@@ -307,8 +342,11 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& [id, nd] : cur) { auto f0 = eng_to_field.find(nd); if (f0 != eng_to_field.end()) posted_node[id] = f0->second; }
         std::set<int> standing_at;
         for (auto& [id, n2] : posted_node) standing_at.insert(n2);
-        int k = (int)posted_node.size();
-        if (k <= 0) continue;
+        // plan for EVERY merchant the country has (posted, travelling, free) -- the same k dispatch
+        // uses -- and act only on the planned nodes a merchant already stands at. The greedy plan is
+        // prefix-stable, so the first posted_node.size() entries are the posted-only plan anyway.
+        int k = (int)ms.size();
+        if (posted_node.empty()) continue;
         if (changed.empty()) continue;                       // no merchant to evaluate: no plan (652 -> few plan() calls)
         double t1 = now(); const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c); t_plan += now() - t1;
         g_frontier_cands += (long long)plan.size();
@@ -317,6 +355,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (int n2 : standing_at) network.insert(n2);
         double t2 = now();
         double weakest = 1e300;
+        std::map<std::string, double> cur_val;   // stand node -> value of the placement there (-1: target off-network)
         for (auto& [key, tgt] : assign::g_table) {
             if (key.first != c) continue;
             auto nf = std::find(names.begin(), names.end(), key.second);
@@ -324,7 +363,10 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             if (nf == names.end() || tf == names.end()) continue;
             double v = frontier::added_value((int)names.size(), home, network, undirected_adj, st, *g_flowmat, c,
                                              (int)(nf - names.begin()), (int)(tf - names.begin()));
-            if (v < weakest) weakest = v;
+            cur_val[key.second] = v;
+            // a placement whose target is not connected home is worth nothing, but folding it into
+            // the min as 0 made 1.5 x weakest == 0 and switched the gain test off for everyone
+            if (v >= 0 && v < weakest) weakest = v;
         }
         if (weakest > 1e299) weakest = 0.0; t_weak += now() - t2;
         for (auto& pl : plan) {
@@ -334,9 +376,11 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
                 if (ex->second == names[pl.target]) continue;                 // already there
+                auto cv = cur_val.find(key.second);
+                bool misplaced = (cv != cur_val.end() && cv->second < 0);     // its target is off the network: fix now
                 auto ht = g_hold_tick.find(key);
-                if (ht != g_hold_tick.end() && tick - ht->second < (int)ai::DWELL_FLOOR_MONTHS) { g_damped++; continue; }
-                if (pl.added < 1.5 * weakest) { g_damped++; continue; }       // vanilla's x1.5 vs the weakest
+                if (!misplaced && ht != g_hold_tick.end() && tick - ht->second < (int)ai::DWELL_FLOOR_MONTHS) { g_damped++; continue; }
+                if (!misplaced && pl.added < 1.5 * weakest) { g_damped++; continue; }   // vanilla's x1.5 vs the weakest
                 g_flips[key]++;
             }
             assign::set(c, names[pl.node], names[pl.target]);

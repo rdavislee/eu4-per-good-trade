@@ -88,12 +88,16 @@ inline std::vector<int> network_parents(int N, int home, const std::set<int>& ne
     return parent;
 }
 
-// the product of shares along the path from `entry` (a network node) home, INCLUDING home
+// the product of shares along the path from `entry` (a network node) home, INCLUDING home.
+// Every node on the path except home is a network node -- one where this country has (or is
+// planning) a merchant -- so the merchant-present floor applies at each of them, not only at
+// the node being scored. Without it the network cannot grow past one hop into territory where
+// the country has no propagated power: the second hop's path share read 0 (reviewed defect).
 inline double path_share(const std::vector<econ::NodeStandings>& st, const std::vector<int>& parent,
                          int entry, int home, int country) {
     double p = 1.0; int cur = entry; int guard = 0;
     while (cur >= 0 && guard++ < 256) {
-        p *= share_at(st, cur, country);
+        p *= share_at(st, cur, country, cur == home ? 0.0 : MERCHANT_PRESENT_POWER);
         if (cur == home) return p;
         cur = parent[cur];
     }
@@ -175,15 +179,20 @@ inline std::vector<Placement> plan(int N, int home, int k,
     return chosen;
 }
 
-// the added value of an EXISTING placement (stand at node, steer toward target), same walk
+// the added value of an EXISTING placement (stand at node, steer toward target): the SAME
+// metric candidates() scores -- flow x the merchant's own share at its stand node (floored,
+// it is standing there) x the path product home -- so the x1.5 comparison is like against like.
+// Returns -1 when the target is not connected to home through the network: the placement is
+// worth nothing AND must not be folded into a min as a 0, which would disable the gain test.
 inline double added_value(int N, int home, const std::set<int>& network,
                           const std::vector<std::vector<int>>& adj,
                           const std::vector<econ::NodeStandings>& st,
                           const FlowMatrix& F,
                           int country, int node, int target) {
     std::vector<int> parent = network_parents(N, home, network, adj);
-    if (target < 0 || target >= N || parent[target] < 0) return 0.0;
-    return flow_of(F, node, target) * path_share(st, parent, target, home, country);
+    if (target < 0 || target >= N || parent[target] < 0) return -1.0;
+    double s_node = share_at(st, node, country, MERCHANT_PRESENT_POWER);
+    return flow_of(F, node, target) * s_node * path_share(st, parent, target, home, country);
 }
 
 } // namespace frontier

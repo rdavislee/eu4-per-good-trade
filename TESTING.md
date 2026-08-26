@@ -197,14 +197,17 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   - E1 636/636 countries agree (worst 0.0019 ducats), E4 CLEAN throughout.
   Run: `touch dllbuild/pgt.AI; bash run.sh pgt_sil2.dll 4`; read `[G1]`, `[G2]`, `[envoy] ... still hold one`.
 
-  **Measured 2026-08-26 (pgt_h3q, commit dad208b, 11 ticks).** With RECALL enabled -- a posted
-  merchant standing off its country's plan is re-placed on a planned node when that node beats it
-  by x1.5 -- 37 recalls, 34 refused by the x1.5 test, the engine cleared every old record itself
-  (has_trader 1->0). Plan drift 0-12 of ~220 planned countries per tick (one node in, one out).
-  G1 226 of 791 placements (28%) on Phi_w-INCOMING ends; G2 worst churn 0 target changes; 565 of
-  609 sent-to nodes still hold a merchant; E1 655/655; E4 CLEAN. The human's country is excluded
-  from step and dispatch (observer's index holds no trade power, so observer runs drive every
-  country).
+  **Measured 2026-08-26 (pgt_h3t, commit 684d630+, 10 ticks).** RECALL: a posted merchant standing
+  off its plan is re-placed on a planned node when that node beats it by x1.5, victims and
+  candidates scored on the same network (home + standing + planned), dwell keyed on the last tick
+  a node was sent to or recalled from, at most 2 recalls per country per tick. 24 recalls landed,
+  16 refused by the x1.5 test; every recalled envoy still at its target 1 and 3 ticks later
+  (23/0, 20/0); the engine clears the old record and detaches the old construction itself.
+  G1 232 of 832 placements (27%) on Phi_w-INCOMING ends; G2 worst churn 0 target changes; 593 of
+  600 sent-to nodes still hold a merchant (1 lost, 6 vacated by our own recall); E1 660/660; E4
+  CLEAN. The human is excluded from step and dispatch. Cadence (spec 3.14, reserved for the user):
+  the working default -- computed gain x1.5 plus a 3-month dwell -- fires 1-3 times per tick
+  world-wide, i.e. rarely, as the prior expected.
 
 ## H. Determinism, saves, performance
 

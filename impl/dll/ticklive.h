@@ -474,7 +474,7 @@ inline int apply(uintptr_t mgr) {
         PH("flowmat");
         aiwire::g_flowmat = &flowmat;
         aiwire::g_shard = (int)(g_ticks.load() % 3);
-        frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear();
+        frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear(); aiwire::g_plan_cache_hits = 0; aiwire::merchants_memo_reset();
         { int pidx = aiwire::player_country_index();
           bool live = false; for (auto& ns0 : st) for (auto& e0 : ns0.entries) if (e0.power > 0 && livetrade::country_index_of(e0.country) == pidx) live = true;
           la << "  [ai] player country index=" << pidx << (pidx < 0 ? " (observer: every country is AI)" : (live ? " -- a LIVE trading country, excluded from the AI" : " -- holds no trade power anywhere (excluding it changes nothing)")) << (char)10;

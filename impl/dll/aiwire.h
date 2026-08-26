@@ -87,7 +87,17 @@ inline uintptr_t country_by_index(int idx) {
 }
 
 // every merchant a country owns, with the node it currently sits at
-inline std::vector<Merchant> merchants_of(int country_idx) {
+// per-tick memo: step, dispatch and the stickiness count all read the same countries in one tick,
+// and nothing between them creates or destroys an envoy (our own moves update the memo below)
+inline std::map<int, std::vector<Merchant>> g_merchants_memo;
+inline std::vector<Merchant> merchants_of_uncached(int country_idx);
+inline const std::vector<Merchant>& merchants_of(int country_idx) {
+    auto it = g_merchants_memo.find(country_idx);
+    if (it != g_merchants_memo.end()) return it->second;
+    return g_merchants_memo[country_idx] = merchants_of_uncached(country_idx);
+}
+inline void merchants_memo_reset() { g_merchants_memo.clear(); }
+inline std::vector<Merchant> merchants_of_uncached(int country_idx) {
     std::vector<Merchant> out;
     uintptr_t c = country_by_index(country_idx);
     if (!c || !livetrade::validate_region(c + 0x1480, 8)) return out;

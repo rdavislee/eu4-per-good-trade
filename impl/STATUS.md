@@ -192,3 +192,16 @@ steer along -- residual, fix = relink ALLOUT). C2 MEASURED PASS (player click on
 bordeaux steers exactly the goods oriented that way). C1: incoming tabs read ????? only with relink on
 (vanilla lists name them) -- probe queued. B1 EQUAL each tick; D3 logged. H3 ~130 ms tick, ~230 ms
 frame gap vs vanilla ~90.
+
+**2026-08-26, user session fixes (276c21e):** (1) REACH -- natives placed merchants at Sevilla; the
+plan is now gated by the engine's own CanSendMerchantTo (0x3532C0) on the node's location province, and
+dispatch refuses what the engine would (New World homes placed only at New World nodes). (2) STEER
+BUTTON -- the panel's ordinal search misses on our reverse views (collapses to 0 = a reverse-end
+record), and the engine never writes the frame on those panels (reads 0); flagfix now sets
+steer_button+0x64 from the table after the engine's Update, and forward-panel clicks write the table
+too. User confirmed one lit edge at Bordeaux. (3) C1 tab labels: vanilla fog of war, not relink.
+(4) crashlog.h: vectored handler with a self-test; found the ALLOUT death at eu4.exe+0x1BAEA1 (an AI
+loop over node indices reading the NULL node's records once reverse-end entries exist) -- ALLOUT stays
+OFF until that walk is understood; end nodes (genua) therefore still cannot steer in the engine.
+(5) nocollect v2 on the OUTER SetTrader 0xB596E0 with record_for without slot check, poison
+experiment (engine scores the ordinal for 19 of 20), sweep every tick.

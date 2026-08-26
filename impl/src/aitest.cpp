@@ -114,9 +114,10 @@ int main(int argc, char** argv) {
     }
     // 2. Phi_w (wealth) for the vanilla subtraction
     {
-        vector<double> bw(N); for (int n = 0; n < N; n++) bw[n] = f.node_wealth[n];
-        // the aggregate orientation is the one the DLL installs; main.cpp derives it from the same drain -- reuse the first graph as a stand-in is WRONG, so recompute from wealth supply/demand as main.cpp does
-        drain::Result rw = drain::run(g, bw, f.tie_cost_edge, f.node_wealth, f.node_wealth, vector<double>(N, 0.0));
+        // Phi_w exactly as the resolver derives it (spec 1.6): b = aggregate, s = 1/N, c = s - b
+        vector<double> bagg = field::b_aggregate(f), sw(N, 1.0 / N), cw(N);
+        for (int n = 0; n < N; n++) cw[n] = sw[n] - bagg[n];
+        drain::Result rw = drain::run(g, bagg, f.tie_cost_edge, f.node_wealth, sw, cw);
         vector<vector<int>> downs(N); for (auto& [u, v] : rw.directed) downs[u].push_back(v);
         auto pp_at = econ::pp_index(N, st);
         for (int n = 0; n < N; n++) for (auto& e : st[n].entries) { e.own = e.power - econ::prop_from(pp_at, downs[n], e.country); e.has_own = true; }

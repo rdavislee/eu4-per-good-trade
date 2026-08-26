@@ -205,3 +205,13 @@ loop over node indices reading the NULL node's records once reverse-end entries 
 OFF until that walk is understood; end nodes (genua) therefore still cannot steer in the engine.
 (5) nocollect v2 on the OUTER SetTrader 0xB596E0 with record_for without slot check, poison
 experiment (engine scores the ordinal for 19 of 20), sweep every tick.
+
+**2026-08-26, D3 v2 (c28ced0..24162dd):** trade-power propagation split by price-weighted goods along
+each good's graph (impl/DEPARTURES.md D3): a fifth of provincial power, divided among the goods by price,
+each portion to the upstream neighbours in that good's graph; power stays per node; the model writes val/
+max_pow and power_fraction back. Source is provincial power only (no chaining). Measured: E1 664/664 on
+three runs, E4 CLEAN, G1 42% reverse ends (was 30-33%), Tunis receives 2.61 at genua from 0, 1,396 new
+standings world-wide; Genoa's window shows Aragon and Provence steering from Genoa. End nodes steer
+(pgt_h4v: the four end-node guards relaxed; 0xB53C77 is a signed compare). Offline: aitest applies the
+v2 split (pp approximated by val -- the save has no per-country province_power): Aragon's top pick is
+genua -> valencia. H3: tick 123 ms after dropping VirtualProtect from the record writes (was 402).

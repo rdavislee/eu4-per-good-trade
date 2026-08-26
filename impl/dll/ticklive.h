@@ -356,6 +356,36 @@ inline int apply(uintptr_t mgr) {
         for (auto& [u, v] : installed) if (u >= 0 && u < g_plan.N) downs[u].push_back(v);
         for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++)
             for (auto& e : st[fn].entries) { e.own = e.power - econ::prop_from(pp_at, downs[fn], e.country); e.has_own = true; }
+}
+{   // D3 v2: the fifth split among each node's neighbours by price-weighted goods, along each good's graph
+    auto split = econ::propagation_split(g_plan.N, g_plan.graphs, g_plan.prices);
+    auto recv  = econ::propagation_received(g_plan.N, pp_at, split);
+    int added  = econ::apply_split_propagation(g_plan.N, st, recv);
+    int wrote_p = livetrade::marker_present("NOWRITE") ? 0 : install::write_power_to_records(sim, g_plan.names, st);
+    std::ofstream lp(g_log, std::ios::app);
+    lp << "  [d3] split propagation: " << added << " standings added where a country receives power it had none of; " << wrote_p << " record powers written" << (char)10;
+    // PROBE (pgt.D3PROBE = node name): who receives what there
+    if (livetrade::marker_present("D3PROBE")) {
+        std::string want; { std::ifstream f(livetrade::self_dir() + std::string(1, (char)92) + "pgt.D3PROBE"); std::getline(f, want); }
+        while (!want.empty() && (want.back() == (char)13 || want.back() == (char)10 || want.back() == (char)32)) want.pop_back();
+        for (int fn = 0; fn < g_plan.N; fn++) if (g_plan.names[fn] == want) {
+            lp << "  [d3/probe] " << want << ": neighbours receiving from here ";
+            for (auto& [n2, sh] : split[fn]) lp << g_plan.names[n2] << "=" << sh << " ";
+            lp << (char)10 << "  [d3/probe] " << want << ": received power by country: ";
+            {   // the largest receivers, then every country whose trade capital is at a NEIGHBOUR (the user's test: Tunis at Genoa)
+                std::vector<std::pair<double, int>> top; for (auto& [c, r] : recv[fn]) top.push_back({r, c});
+                std::sort(top.begin(), top.end(), [](auto& a, auto& b) { return a.first > b.first; });
+                for (size_t i = 0; i < top.size() && i < 12; i++) lp << "#" << livetrade::country_index_of(top[i].second) << "=" << top[i].first << " ";
+                lp << (char)10 << "  [d3/probe] " << want << ": by trade capital of the neighbour countries: ";
+                for (auto& [n2, sh] : split[fn]) for (auto& e : st[n2].entries) if (e.is_capital) {
+                    auto rit = recv[fn].find(e.country); double r = rit == recv[fn].end() ? 0.0 : rit->second;
+                    double now = 0; for (auto& e2 : st[fn].entries) if (e2.country == e.country) { now = e2.power; break; }
+                    lp << g_plan.names[n2] << ":#" << livetrade::country_index_of(e.country) << " receives " << r << " (power here now " << now << ") ";
+                }
+            }
+            lp << (char)10;
+        }
+    }
     }
 
     std::vector<std::vector<std::vector<double>>> power_g_all;    // D3: per-good power, parallel to per_good
@@ -369,9 +399,9 @@ inline int apply(uintptr_t mgr) {
             for (int n = 0; n < g_plan.N; n++) inj[n] = inject[slot][n] * g_plan.prices[k];
         const std::vector<std::vector<char>>* R =
             k < g_plan.reach.size() ? &g_plan.reach[k] : nullptr;
-        power_g_all.push_back(econ::per_good_power(g_plan.N, g_plan.graphs[k], st, pp_at));   // D3: this good's power
+
         per_good.push_back(
-            econ::route(g_plan.N, g_plan.graphs[k], inj, st, collect_nodes, 0.05, R, &power_g_all.back()));
+            econ::route(g_plan.N, g_plan.graphs[k], inj, st, collect_nodes, 0.05, R));
         inj_field.push_back(std::move(inj));
     }
 
@@ -629,7 +659,7 @@ inline int apply(uintptr_t mgr) {
         // DEPARTURE D3: the model owns the division. Shares are written FIRST, then the prediction
         // is made from the model's own shares (not a read-back), so E1 tests write + pass 10 + pool.
         if (!livetrade::marker_present("NOSHARE")) {
-            int wrote_sh = install::install_power_shares(sim, g_plan.names, st, &per_good, &power_g_all);
+            int wrote_sh = install::install_power_shares(sim, g_plan.names, st);
             std::ofstream lsh(g_log, std::ios::app); lsh << "  [share] wrote " << wrote_sh << " power fractions from the per-good collector shares" << (char)10;
             predict_income_from_model(pool_monthly);
         } else predict_income(sim, g_plan.names, pool_monthly);

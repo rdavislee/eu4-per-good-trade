@@ -60,6 +60,70 @@ inline double prop_from(const std::vector<std::map<int, double>>& pp_at, const s
     for (int m : downs) { if (m < 0 || m >= (int)pp_at.size()) continue; auto it = pp_at[m].find(country); if (it != pp_at[m].end() && it->second >= PROP_THRESHOLD) p += it->second / PROP_DIVIDER; }
     return p;
 }
+// DEPARTURE D3 v2 (user, 2026-08-26): trade power stays ONE number per node. What becomes
+// good-aware is how a node's fifth is DIVIDED among its neighbours: the fifth is split among the
+// goods by price, and each good's portion goes to the neighbours upstream of m in THAT good's
+// graph (equally among them if several). Goods with no upstream neighbour at m take no share, so
+// the fifth is fully distributed whenever anything flows into m.
+//   split[m][n] = sum over goods g with n in U_g(m) of  (w_g / |U_g(m)|)  /  sum over goods g with U_g(m) != {} of w_g
+//   received_c(n) = sum over m of [pp_c(m) >= 2] * pp_c(m)/5 * split[m][n]
+//   P_c(n) = own_c(n) + received_c(n)      (own = the engine's aggregate minus vanilla's full fifths)
+inline std::vector<std::map<int, double>> propagation_split(int N,
+        const std::vector<std::vector<std::pair<int, int>>>& graphs, const std::vector<double>& prices) {
+    std::vector<std::map<int, double>> split(N);      // m -> (n -> share of m's fifth)
+    std::vector<double> denom(N, 0.0);
+    std::vector<std::vector<std::vector<int>>> up(graphs.size());   // [g][m] = upstream neighbours of m in g
+    for (size_t g = 0; g < graphs.size(); g++) {
+        up[g].assign(N, {});
+        for (auto& [u, v] : graphs[g]) if (u >= 0 && u < N && v >= 0 && v < N) up[g][v].push_back(u);
+        double w = g < prices.size() ? prices[g] : 1.0; if (w <= 0) w = 1.0;
+        for (int m = 0; m < N; m++) if (!up[g][m].empty()) denom[m] += w;
+    }
+    for (size_t g = 0; g < graphs.size(); g++) {
+        double w = g < prices.size() ? prices[g] : 1.0; if (w <= 0) w = 1.0;
+        for (int m = 0; m < N; m++) {
+            if (up[g][m].empty() || denom[m] <= 0) continue;
+            double per = (w / (double)up[g][m].size()) / denom[m];
+            for (int n : up[g][m]) split[m][n] += per;
+        }
+    }
+    return split;
+}
+// received power by (node, country) under the split rule
+inline std::vector<std::map<int, double>> propagation_received(int N, const std::vector<std::map<int, double>>& pp_at,
+                                                                const std::vector<std::map<int, double>>& split) {
+    std::vector<std::map<int, double>> recv(N);
+    for (int m = 0; m < N && m < (int)pp_at.size(); m++)
+        for (auto& [c, pp] : pp_at[m]) {
+            if (pp < PROP_THRESHOLD) continue;
+            double F = pp / PROP_DIVIDER;
+            for (auto& [n, sh] : split[m]) if (n >= 0 && n < N) recv[n][c] += F * sh;
+        }
+    return recv;
+}
+// apply: every standing's power becomes own + received (clamped at 0, merchant floor kept), and a
+// country that receives power at a node where it had no standing gets one (the engine has a
+// record slot for every country at every node, so it can be written there too)
+inline int apply_split_propagation(int N, std::vector<NodeStandings>& st, const std::vector<std::map<int, double>>& recv) {
+    int added = 0;
+    for (int n = 0; n < N && n < (int)st.size(); n++) {
+        std::map<int, double> left = n < (int)recv.size() ? recv[n] : std::map<int, double>{};
+        for (auto& e : st[n].entries) {
+            double base = e.has_own ? e.own : e.power;
+            double r = 0; auto it = left.find(e.country); if (it != left.end()) { r = it->second; left.erase(it); }
+            double v = base + r; if (v < 0) v = 0;
+            if (e.merchant_floor && v < 2.0) v = 2.0;
+            e.power = v;
+        }
+        for (auto& [c, r] : left) {
+            if (r <= 0) continue;
+            Standing s{}; s.country = c; s.power = r; s.own = 0; s.has_own = true; s.pp = 0; s.collects = false; s.steer_to = -1;
+            st[n].entries.push_back(s); added++;
+        }
+    }
+    return added;
+}
+
 inline std::vector<std::vector<double>> per_good_power(int N, const std::vector<std::pair<int, int>>& directed,
                                                        const std::vector<NodeStandings>& st,
                                                        const std::vector<std::map<int, double>>& pp_at) {

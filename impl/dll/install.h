@@ -327,6 +327,40 @@ inline int install_links(const std::vector<livetrade::SimNode>& sim,
 // good dependence, so a good-independent share multiplies a per-good sum and the sum collapses
 // to one scalar. The share is therefore over COLLECTORS only: a country that steers takes none
 // of the pool (its value was already forwarded).
+// DEPARTURE D3 v2: the model's trade power is written back to the record so the node window, the
+// engine's own scorers and the daily AI all see it: +0x48 val, and +0x4C max_pow so the engine's
+// min(val, max_pow*max_demand) does not clip it. The engine recomputes both from scratch at the
+// start of every month (0xB51290/0xB51360), so this is a per-month overlay, not a drift.
+inline int write_power_to_records(const std::vector<livetrade::SimNode>& sim,
+                                  const std::vector<std::string>& field_names,
+                                  const std::vector<econ::NodeStandings>& st) {
+    auto byname = live_by_name(sim);
+    int wrote = 0;
+    for (int fn = 0; fn < (int)field_names.size() && fn < (int)st.size(); fn++) {
+        auto it = byname.find(field_names[fn]);
+        if (it == byname.end()) continue;
+        uintptr_t node = sim[it->second].obj;
+        if (!node || !livetrade::validate_region(node + 0x18, 16)) continue;
+        uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
+        if (!rb || rc <= 0 || rc > 4096 || !livetrade::validate_region(rb, (size_t)rc * 0xC0)) continue;
+        for (auto& e : st[fn].entries) {
+            int idx = livetrade::country_index_of(e.country);
+            if (idx < 0 || idx >= rc) continue;
+            uintptr_t rec = rb + (uintptr_t)idx * 0xC0;
+            int32_t v = (int32_t)(e.power * 1000.0 + 0.5); if (v < 0) v = 0;
+            double md = livetrade::fi(rec + 0x44) / 1000.0;
+            int32_t mp = md > 0 ? (int32_t)(e.power / md * 1000.0 + 0.5) : v;
+            DWORD old = 0;
+            if (!VirtualProtect((void*)(rec + 0x44), 12, PAGE_READWRITE, &old)) continue;
+            *(int32_t*)(rec + 0x48) = v;
+            *(int32_t*)(rec + 0x4C) = mp;
+            VirtualProtect((void*)(rec + 0x44), 12, old, &old);
+            wrote++;
+        }
+    }
+    return wrote;
+}
+
 inline std::map<std::pair<int, std::string>, double> g_written_share;   // (country index, node) -> share written this tick (E1 diagnostics)
 inline std::vector<std::map<int, double>> g_share_by_node;   // [field node] country index -> share the MODEL computed this tick (E1 predicts from this)
 inline int install_power_shares(const std::vector<livetrade::SimNode>& sim,
@@ -345,29 +379,11 @@ inline int install_power_shares(const std::vector<livetrade::SimNode>& sim,
         auto it = byname.find(field_names[fn]);
         if (it == byname.end()) continue;
         const auto& E = st[fn].entries;
-        // per-entry share
+        // per-entry share: the collectors' share of the node power (D3 v2: power is per node again)
         std::vector<double> share(E.size(), 0.0);
-        double tot_collected = 0;
-        if (per_good && power_g_all && per_good->size() == power_g_all->size()) {
-            for (size_t g = 0; g < per_good->size(); g++) {
-                const econ::GoodFlow& F = (*per_good)[g];
-                if (fn >= (int)F.collected.size()) continue;
-                double cg = F.collected[fn]; if (cg <= 0) continue;
-                const auto& P = (*power_g_all)[g];
-                double pcol = 0;
-                for (size_t i = 0; i < E.size(); i++) if (E[i].collects && fn < (int)P.size() && i < P[fn].size() && P[fn][i] > 0) pcol += P[fn][i];
-                if (pcol <= 0) continue;
-                tot_collected += cg;
-                for (size_t i = 0; i < E.size(); i++) if (E[i].collects && fn < (int)P.size() && i < P[fn].size() && P[fn][i] > 0) share[i] += cg * P[fn][i] / pcol;
-            }
-        }
-        if (tot_collected > 0) { for (auto& x : share) x /= tot_collected; }
-        else {   // nothing collected here this month: fall back to the aggregate collector share
-            double collector_power = 0;
-            auto base = [&](const econ::Standing& e) { double v = e.has_own ? e.own : e.power; return v > 0 ? v : 0.0; };
-            for (auto& e : E) if (e.collects) collector_power += base(e);
-            for (size_t i = 0; i < E.size(); i++) share[i] = (collector_power > 0 && E[i].collects) ? base(E[i]) / collector_power : 0.0;
-        }
+        double collector_power = 0;
+        for (auto& e : E) if (e.collects && e.power > 0) collector_power += e.power;
+        for (size_t i = 0; i < E.size(); i++) share[i] = (collector_power > 0 && E[i].collects && E[i].power > 0) ? E[i].power / collector_power : 0.0;
         for (size_t i = 0; i < E.size(); i++) if (share[i] > 0) g_share_by_node[fn][livetrade::country_index_of(E[i].country)] = share[i];
         // write EVERY raw slot: a record read_standings filters out (nothing there) could still carry
         // the engine's -1 (0xB52B93) and yield negative income in pass 10 (reviewed)

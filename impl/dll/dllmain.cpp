@@ -35,6 +35,7 @@
 #include "flagfix.h"
 #include "clickfix.h"
 #include "envoy.h"
+#include "aisilence.h"
 #include "ticklive.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
@@ -411,6 +412,12 @@ static void run_install(const std::string& logpath) {
                         log << "  send-merchant dispatch installed" << (char)10;
                     else
                         log << "  send-merchant dispatch NOT installed: " << eerr << (char)10;
+                    // ...and vanilla's own merchant AI is silenced so it cannot undo ours.
+                    std::string serr;
+                    if (aisilence::install(&serr))
+                        log << "  vanilla merchant AI silenced (call at 0x1B831D -> NOPs)" << (char)10;
+                    else
+                        log << "  vanilla merchant AI NOT silenced: " << serr << (char)10;
                 }
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))

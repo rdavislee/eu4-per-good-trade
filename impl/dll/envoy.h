@@ -107,6 +107,18 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                     const std::vector<econ::GoodFlow>& per_good,
                     int tick, std::ofstream* lg) {
     if (!g_installed) return 0;
+    // DO OUR PLACEMENTS STICK? Every (country,node) we sent to is in g_sent_tick; count how
+    // many still have one of that country's merchants standing there this tick.
+    { int still = 0, gone = 0;
+      std::map<int, std::set<int>> where;   // country -> field nodes with a posted merchant
+      std::map<int, int> e2f;
+      for (int fn = 0; fn < (int)names.size(); fn++) for (auto& s : sim) if (s.name == names[fn]) { e2f[s.index] = fn; break; }
+      for (auto& [key, t0] : g_sent_tick) {
+          int c = key.first; if (!where.count(c)) { for (auto& m : aiwire::merchants_of(livetrade::country_index_of(c))) if (m.action == 2) { auto f = e2f.find(m.node_index); if (f != e2f.end()) where[c].insert(f->second); } }
+          if (where[c].count(key.second)) still++; else gone++;
+      }
+      if (lg && (still || gone)) *lg << "  [envoy] of " << (still + gone) << " nodes we ever sent a merchant to, " << still << " still hold one, " << gone << " do not" << (char)10;
+    }
     int sent = 0;
     std::set<int> countries;
     for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) countries.insert(e.country);
@@ -136,6 +148,19 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
             // the table entry is what routing and syncrec read; write it now
             assign::set(c, names[pl.node], names[pl.target]);
             g_sent_tick[key] = tick;
+            // G1: is this end one the engine can index (declared outgoing) or a reverse end?
+            {
+                bool outgoing = false;
+                uintptr_t def = nd ? livetrade::fq(nd + 0xA8) : 0;
+                if (def && livetrade::validate_region(def + 0x98, 16)) {
+                    uintptr_t b2 = livetrade::fq(def + 0x98), e2 = livetrade::fq(def + 0xA0);
+                    for (uintptr_t p2 = b2; b2 && e2 > b2 && p2 + 0x78 <= e2; p2 += 0x78) {
+                        uintptr_t t = livetrade::validate_region(p2 + 0x30, 8) ? livetrade::fq(p2 + 0x30) : 0;
+                        if (t && livetrade::def_key(t) == names[pl.target]) { outgoing = true; break; }
+                    }
+                }
+                if (outgoing) aiwire::g_phi_out++; else aiwire::g_phi_in++;
+            }
             standing.insert(pl.node);
             sent++;
         }

@@ -31,6 +31,8 @@ namespace assign {
 // (country tag index, node name) -> target node name
 inline std::map<std::pair<int, std::string>, std::string> g_table;
 inline bool g_dirty = false;
+inline int g_merge_applied = 0, g_merge_kept_collector = 0, g_merge_added = 0, g_merge_noname = 0;
+inline std::string g_merge_noname_example;
 
 inline void set(int country, const std::string& node, const std::string& target) {
     g_table[{country, node}] = target;
@@ -75,21 +77,32 @@ inline int merge(std::vector<econ::NodeStandings>& st, const std::vector<std::st
     for (auto& [key, target] : g_table) {
         auto nf = fidx.find(key.second);
         auto tf = fidx.find(target);
-        if (nf == fidx.end() || tf == fidx.end()) continue;
+        if (nf == fidx.end() || tf == fidx.end()) {
+            g_merge_noname++;
+            if (g_merge_noname_example.empty()) g_merge_noname_example = key.second + " -> " + target;
+            continue;
+        }
         econ::NodeStandings& ns = st[nf->second];
         bool found = false;
         for (auto& e : ns.entries)
             if (e.country == key.first) {
-                // A merchant the engine says is COLLECTING here stays a collector. This
-                // table only adds steering on ends the engine has no index for; it must
-                // never convert a collector, because that is the country's income at
-                // this node and the engine is the authority on what its merchant is
-                // doing. Unconditionally clearing `collects` was how Venice -- over half
-                // the power in venice, collecting -- saw almost all of it forwarded.
-                if (e.collects) { found = true; break; }
+                // THE TABLE IS THE DECISION. An earlier guard here refused to convert a merchant
+                // the engine marked as collecting -- and vetoed every placement the AI made: 96
+                // table entries, merge applied=0, kept_collector=107, measured. The AI has ALREADY
+                // weighed collecting against steering (score_collect vs score_steer with the x1.5
+                // margin, aiwire.h), so a table entry for a collecting merchant is the outcome of
+                // that comparison, not a mistake to be corrected. Protecting home-node collectors
+                // from being pushed onto links is the AI's job, and it does it upstream.
+                // A steering merchant is NOT a collector. econ::route takes the collect branch
+                // FIRST (`if (s.collects) { pc += power; continue; }`) and never reads
+                // steer_to for a collecting standing -- so setting steer_to while leaving
+                // collects=true wrote a placement the router silently ignored. That is the
+                // exact state measured after the guard above was removed: 101 placements,
+                // merge applied=0, no reverse target ever reaching a standing.
                 e.steer_to = tf->second;      // steer, not collect (spec 1.7)
+                e.collects = false;
                 found = true;
-                applied++;
+                applied++; g_merge_applied++;
                 break;
             }
         if (!found) {
@@ -101,7 +114,7 @@ inline int merge(std::vector<econ::NodeStandings>& st, const std::vector<std::st
             s.collects = false;
             s.steer_to = tf->second;
             ns.entries.push_back(s);
-            applied++;
+            applied++; g_merge_added++;
         }
     }
     return applied;

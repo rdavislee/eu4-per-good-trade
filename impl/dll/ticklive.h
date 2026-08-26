@@ -37,6 +37,7 @@
 #include "viewmode.h"
 #include "assign.h"
 #include "syncrec.h"
+#include "flagfix.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -290,6 +291,22 @@ inline int apply(uintptr_t mgr) {
     int assigned = assign::merge(st, g_plan.names);
     // ...and the engine records are made to say the same, so the map draws what is routed
     { std::ofstream lsr(g_log, std::ios::app); syncrec::apply(sim, &lsr); }
+    // The table's contents, by node pair, so a claim like "rheinland-saxony carries merchants on
+    // both ends" is read off the log rather than inferred from counters. Once a year.
+    if (g_ticks.load() >= 4 && g_ticks.load() <= 8) {
+        std::ofstream lt(g_log, std::ios::app);
+        std::map<std::pair<std::string, std::string>, int> by_edge;
+        for (auto& [key, target] : assign::g_table) by_edge[{key.second, target}]++;
+        lt << "  [table] " << assign::g_table.size() << " placements on " << by_edge.size()
+           << " directed ends; merge applied=" << assign::g_merge_applied
+           << " noname=" << assign::g_merge_noname << " (e.g. " << assign::g_merge_noname_example << ")"
+           << " kept_collector="
+           << assign::g_merge_kept_collector << " added_new=" << assign::g_merge_added
+           << "; flagfix cleared " << flagfix::g_cleared << " reverse flag rows so far"
+           << (char)10;
+        for (auto& [e, n] : by_edge)
+            lt << "     " << e.first << " -> " << e.second << " : " << n << " merchant(s)" << (char)10;
+    }
     if (assigned && (g_ticks.load() % 12) == 0) {
         std::ofstream la(g_log, std::ios::app);
         la << "  [assign] " << assigned << " DLL-owned merchant assignments active\n";

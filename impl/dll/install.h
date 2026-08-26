@@ -231,6 +231,7 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             s.power = std::min(c.val, capped > 0 ? capped : c.val) + c.t_in - c.t_out;
             if (s.power < 0) s.power = 0;
             s.collects = c.has_trader ? (c.type == 0) : c.has_capital;
+            s.is_capital = c.has_capital;
             s.steer_to = -1;
             // A TABLE-OWNED PLACEMENT IS READ FROM THE TABLE, NOT THE RECORD. syncrec writes a
             // reverse end as +0xA8 = 0, so deriving steer_to from the record here yielded the

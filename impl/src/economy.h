@@ -32,6 +32,7 @@ struct Standing {
     double power;       // modified trade power at this node (merchant bonuses etc. included)
     bool collects;      // collecting here: home node, or a merchant collecting
     int steer_to;       // link end this country's merchant steers toward (node index), or -1
+    bool is_capital = false;   // this node is the country's trade capital (home)
 };
 
 struct NodeStandings { std::vector<Standing> entries; };

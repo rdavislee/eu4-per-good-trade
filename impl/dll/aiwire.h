@@ -35,6 +35,7 @@
 #include "assign.h"
 #include "../src/ai.h"
 #include "../src/economy.h"
+#include "../src/frontier.h"
 
 namespace aiwire {
 
@@ -99,7 +100,8 @@ inline long long g_kept_collecting = 0;
 inline long long g_moved_nodes = 0;
 inline long long g_wants_move = 0;
 inline long long g_vacated = 0;           // table entries dropped because the merchant left
-inline long long g_not_homeward = 0;      // candidate ends rejected for pointing away from home
+inline long long g_frontier_cands = 0;    // frontier edges scored
+inline long long g_rej_unreach = 0, g_rej_at_home = 0, g_rej_farther = 0;   // why
 constexpr int CADENCE_TICKS = 3;          // each merchant reconsidered every N months
 inline int g_evals = 0;
 
@@ -268,120 +270,84 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                 if (e.country == c) { my_power_by_node[fn] = e.power; continue; }
                 if (!e.collects && e.steer_to >= 0) steer_by_node[fn][e.steer_to] += e.power;
             }
+        // ---- THE FRONTIER MODEL (src/frontier.h) ----------------------------------------
+        // Home is the trade capital. The network is home plus every node this country's placed
+        // merchants stand at. Candidates are the frontier edges, scored by flow x product of
+        // power shares along the network path home x share at home.
+        int home = -1;
+        for (int fn = 0; fn < (int)st.size() && home < 0; fn++)
+            for (auto& e : st[fn].entries) if (e.country == c && e.is_capital) { home = fn; break; }
+        if (home < 0) continue;                              // no trade capital: nothing to grow from
+        if (!per_good) continue;
+        // The network is home PLUS every node a merchant of this country already stands at:
+        // the user's model grows the network FROM placed merchants, so a posted merchant is
+        // a network node, not a candidate to be tested against one that excludes it. Seeding
+        // with home alone left 1,289 merchants "off their frontier" and 39 placed, measured.
+        std::set<int> network{home};
+        std::map<int,int> posted_node;   // merchant id -> field node it stands at
+        for (auto& [id, nd] : cur) { auto f0 = eng_to_field.find(nd); if (f0 != eng_to_field.end()) posted_node[id] = f0->second; }
+        std::vector<std::pair<int,int>> mine;                // (node, target) of my current placements
+        for (auto& [key, tgt] : assign::g_table) {
+            if (key.first != c) continue;
+            auto nf = std::find(names.begin(), names.end(), key.second);
+            auto tf = std::find(names.begin(), names.end(), tgt);
+            if (nf == names.end() || tf == names.end()) continue;
+            int n2 = (int)(nf - names.begin()), t2 = (int)(tf - names.begin());
+            network.insert(n2); mine.push_back({n2, t2});
+        }
         for (auto& [id, eng_node] : changed) {
             auto f = eng_to_field.find(eng_node);
             if (f == eng_to_field.end()) continue;
             int here = f->second;
-            // THE WHOLE FIELD, not just the node the merchant sits on. Offering only `here`'s ends
-            // meant a merchant collecting at saxony was never asked whether steering from
-            // rheinland TOWARD saxony pays more -- the exact case spec 3.14 is about, and why no
-            // reverse end was ever exercised. best_placement scores every (node, link-end) pair
-            // the country can reach; the current node is always among them.
-            // Only HOMEWARD ends are candidates. best_placement has no gate, so the candidate
-            // set is built here: every (node, end) the country can reach whose end is nearer
-            // home than the node, scored with the competition maps.
-            std::pair<int,int> best_pair{-1,-1}; double best_sc = 0.0;
-            for (int n : eligible) {
-                const std::map<int, double>* sbe0 = nullptr;
-                { auto it = steer_by_node.find(n); if (it != steer_by_node.end()) sbe0 = &it->second; }
-                double mp0 = 0.0;
-                { auto it = my_power_by_node.find(n); if (it != my_power_by_node.end()) mp0 = it->second; }
-                for (auto& cd : ai::candidates_at(orient, ac, n, undirected_adj, sbe0, mp0)) {
-                    if (!homeward(cd.node, cd.target)) { g_not_homeward++; continue; }
-                    if (cd.score > best_sc) { best_sc = cd.score; best_pair = {cd.node, cd.target}; }
-                }
-            }
-            if (best_pair.first < 0) continue;              // steers nothing anywhere -> stays
-            const std::map<int, double>* sbe = nullptr;
-            { auto it = steer_by_node.find(best_pair.first); if (it != steer_by_node.end()) sbe = &it->second; }
-            double mp = 0.0;
-            { auto it = my_power_by_node.find(best_pair.first); if (it != my_power_by_node.end()) mp = it->second; }
-            auto cands = ai::candidates_at(orient, ac, best_pair.first, undirected_adj, sbe, mp);
-            const ai::Candidate* bestp = nullptr;
-            for (auto& cd : cands) if (cd.target == best_pair.second) { bestp = &cd; break; }
-            if (!bestp || bestp->score <= 0) continue;
-            const ai::Candidate& best = *bestp;
             g_evals++;
-            // A merchant COLLECTING here has an income already. Steering anywhere must beat it by
-            // the same x1.5 margin the steer-vs-steer test uses, or it stays: otherwise every
-            // home-node collector would be pushed onto a link, the regression that emptied
-            // P_collect at north_sea. score_collect is the spec's own figure -- the country's
-            // share of this node's collectible pool.
-            {
-                bool collecting_here = false;
-                for (auto& e : st[here].entries)
-                    if (e.country == c && e.collects) { collecting_here = true; break; }
-                if (collecting_here) {
-                    double pool = 0, coll_pow = 0;
-                    if (per_good)
-                        for (auto& F : *per_good)
-                            if (here < (int)F.collected.size()) pool += F.collected[here];
-                    for (auto& e : st[here].entries)
-                        if (e.collects && e.power > 0) coll_pow += e.power;
-                    double keep = ai::score_collect(orient, ac, here, pool, coll_pow);
-                    if (best.score < 1.5 * keep) { g_kept_collecting++; continue; }
-                }
+            if (here == home) continue;                      // at home it collects; nothing to steer inward
+            // A merchant at `here` steers an edge OUT of here toward the network. For its own
+            // evaluation `here` is the OUTSIDE end: the network is home plus every OTHER
+            // merchant's node. Putting its own node into the network made both ends inside, no
+            // edge was a frontier edge, and placements went to zero (measured).
+            std::set<int> net = network;
+            for (auto& [id2, n2] : posted_node) if (id2 != id) net.insert(n2);
+            net.erase(here);
+            auto cands = frontier::candidates((int)names.size(), home, net, undirected_adj, st, *per_good, c);
+            g_frontier_cands += (long long)cands.size();
+            const frontier::Placement* best = nullptr;
+            for (auto& cd : cands) if (cd.node == here) { best = &cd; break; }
+            if (!best) { g_wants_move++; continue; }        // no network neighbour: off the frontier
+            // the least profitable current merchant, walked on the same network
+            double weakest = 1e300;
+            for (auto& [n2, t2] : mine) {
+                double v = frontier::added_value((int)names.size(), home, net, undirected_adj, st, *per_good, c, n2, t2);
+                if (v < weakest) weakest = v;
             }
-            auto key = std::make_pair(c, names[best.node]);
+            if (weakest > 1e299) weakest = 0.0;
+            auto key = std::make_pair(c, names[here]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
-                if (ex->second == names[best.target]) continue;   // already there; no dirty write
-                // G2: dwell floor -- a placement is not reconsidered for a few months
+                if (ex->second == names[best->target]) continue;      // already there
                 auto ht = g_hold_tick.find(key);
-                if (ht != g_hold_tick.end() && tick - ht->second < (int)ai::DWELL_FLOOR_MONTHS) {
-                    g_damped++; continue;
-                }
-                // G2: computed-gain test -- the new end must beat the incumbent end by x1.5
-                // VANILLA'S RULE (0x1BD206): move only if the new placement beats the country's
-                // LEAST profitable current merchant by x1.5 -- not this node's incumbent. The
-                // worst placement is what a move actually gives up.
-                double incumbent = 1e300;
-                for (auto& [key2, tgt2] : assign::g_table) {
-                    if (key2.first != c) continue;
-                    auto nf2 = std::find(names.begin(), names.end(), key2.second);
-                    auto tf2 = std::find(names.begin(), names.end(), tgt2);
-                    if (nf2 == names.end() || tf2 == names.end()) continue;
-                    int n2 = (int)(nf2 - names.begin()), t2 = (int)(tf2 - names.begin());
-                    const std::map<int, double>* sbe2 = nullptr;
-                    { auto it = steer_by_node.find(n2); if (it != steer_by_node.end()) sbe2 = &it->second; }
-                    double mp2 = 0.0;
-                    { auto it = my_power_by_node.find(n2); if (it != my_power_by_node.end()) mp2 = it->second; }
-                    for (auto& cd : ai::candidates_at(orient, ac, n2, undirected_adj, sbe2, mp2))
-                        if (cd.target == t2 && cd.score < incumbent) incumbent = cd.score;
-                }
-                if (incumbent > 1e299) incumbent = 0.0;
-                if (best.score < 1.5 * incumbent) { g_damped++; continue; }
+                if (ht != g_hold_tick.end() && tick - ht->second < (int)ai::DWELL_FLOOR_MONTHS) { g_damped++; continue; }
+                // x1.5 against the weakest merchant in the portfolio (vanilla, 0x1BD206)
+                if (best->added < 1.5 * weakest) { g_damped++; continue; }
                 g_flips[key]++;
+            } else if (weakest > 0 && best->added < 1.5 * weakest && (int)mine.size() >= (int)cur.size()) {
+                g_damped++; continue;                               // no spare merchant and not worth a swap
             }
-            // A MERCHANT ONLY STEERS WHERE IT STANDS. The engine posts a merchant at ONE node;
-            // its record anywhere else has has_trader = 0 and cannot steer. Until the envoy is
-            // physically moved (the travel mechanic, not driven yet), a placement at another
-            // node is a plan the map cannot show and the record cannot hold. So the field-wide
-            // search decides WHETHER this merchant should move; the placement is written only
-            // when best.node == here, and the move itself is left to vanilla, which the
-            // cadence re-evaluates once it lands.
-            if (best.node != here) { g_wants_move++; continue; }
-            assign::set(c, names[best.node], names[best.target]);
+            assign::set(c, names[here], names[best->target]);
             g_hold_tick[key] = tick;
-            // G1: is the chosen end Phi_w-OUTGOING (the tab group the engine can index) or
-            // Phi_w-INCOMING (the group vanilla cannot express at all)?
-            // G1 counts against the ENGINE's declared outgoing list -- the tab group vanilla can
-            // index -- not the live Phi_w orientation, which flips and made the count read 0.
+            network.insert(here);
             bool outgoing = false;
             {
-                uintptr_t nd = 0;
-                for (auto& s2 : sim) if (s2.name == names[best.node]) { nd = s2.obj; break; }
+                uintptr_t nd = 0; for (auto& s2 : sim) if (s2.name == names[here]) { nd = s2.obj; break; }
                 uintptr_t def = nd ? livetrade::fq(nd + 0xA8) : 0;
                 if (def && livetrade::validate_region(def + 0x98, 16)) {
-                    uintptr_t b = livetrade::fq(def + 0x98), e = livetrade::fq(def + 0xA0);
-                    for (uintptr_t p = b; b && e > b && p + 0x78 <= e; p += 0x78) {
-                        uintptr_t t = livetrade::validate_region(p + 0x30, 8) ? livetrade::fq(p + 0x30) : 0;
-                        if (t && livetrade::def_key(t) == names[best.target]) { outgoing = true; break; }
+                    uintptr_t b2 = livetrade::fq(def + 0x98), e2 = livetrade::fq(def + 0xA0);
+                    for (uintptr_t p2 = b2; b2 && e2 > b2 && p2 + 0x78 <= e2; p2 += 0x78) {
+                        uintptr_t t = livetrade::validate_region(p2 + 0x30, 8) ? livetrade::fq(p2 + 0x30) : 0;
+                        if (t && livetrade::def_key(t) == names[best->target]) { outgoing = true; break; }
                     }
                 }
             }
             if (outgoing) g_phi_out++; else g_phi_in++;
-            if (best.node != here) g_moved_nodes++;
             placed++;
         }
     }
@@ -390,9 +356,9 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     int worst_flip = 0;
     for (auto& [k, n] : g_flips) if (n > worst_flip) worst_flip = n;
     log << "  [ai] scan: " << live_countries.size() << " countries with power, "
-        << g_wants_move << " merchants whose best placement is elsewhere (envoy travel not driven); " << g_vacated << " entries vacated; " << g_not_homeward << " ends rejected as not homeward; "
-        << triggers << " merchants moved by vanilla, " << placed
-        << " re-placed by us; table now " << assign::g_table.size() << " entries\n";
+        << g_wants_move << " merchants standing off their frontier; " << g_vacated << " entries vacated; "
+        << g_frontier_cands << " frontier edges scored; " << triggers << " merchants moved by vanilla, "
+        << placed << " re-placed by us; table now " << assign::g_table.size() << " entries" << (char)10;
     log << "  [G1] placements by tab group: " << g_phi_out << " on Phi_w-outgoing ends, "
         << g_phi_in << " on Phi_w-INCOMING ends"
         << (tot ? " (" : "") << (tot ? (int)(100.0 * g_phi_in / tot) : 0) << (tot ? "%)" : "")

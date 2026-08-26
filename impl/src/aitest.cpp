@@ -90,18 +90,45 @@ int main(int argc, char** argv) {
             if (cs.has_capital) { collect_nodes[s.country].push_back(it->second); home_of[s.country] = it->second; }
         }
     }
+    // DEPARTURE D3 v2 (impl/DEPARTURES.md): the split propagation, so this fixture models the live
+    // tick and not vanilla's. The save carries no per-country province_power, so pp is taken as
+    // val here (an over-estimate where val already holds received fifths) -- fixture only.
+    for (auto& ns : st) for (auto& e : ns.entries) e.pp = e.power;
+    {
+        // Phi_w for the vanilla subtraction: every good routed below shares the field's graphs; use
+        // the aggregate orientation from drain::run on wealth (the same call main.cpp makes)
+    }
     // inject[g][n]: annual trade_value of counted provinces of good g in node n
     vector<vector<double>> inject(f.goods.size(), vector<double>(N, 0.0));
     for (auto& r : f.rows) { auto g = f.gidx.find(r.good); if (g != f.gidx.end() && r.node >= 0 && r.node < N) inject[g->second][r.node] += r.trade_value; }
     // route every live good on its solved orientation
     drain::Graph g; g.N = f.N; g.und = tn.und; g.edges_und = tn.edges_und;   // as main.cpp builds it
-    vector<econ::GoodFlow> per_good;
+    // 1. every live good's graph
+    vector<vector<pair<int, int>>> graphs; vector<double> prices; vector<int> live_idx;
     for (int gi = 0; gi < (int)f.goods.size(); gi++) {
         if (!f.live[gi]) continue;
         vector<double> b(N); for (int n = 0; n < N; n++) b[n] = f.S[gi][n] - f.C[gi][n];
         drain::Result r = drain::run(g, b, f.tie_cost_edge, f.node_wealth, f.S[gi], f.C[gi]);
-        per_good.push_back(econ::route(N, r.directed, inject[gi], st, collect_nodes, 0.05));
+        graphs.push_back(r.directed); live_idx.push_back(gi);
+        prices.push_back(field::price_of(f.goods[gi], sd.current_prices, base_prices));
     }
+    // 2. Phi_w (wealth) for the vanilla subtraction
+    {
+        vector<double> bw(N); for (int n = 0; n < N; n++) bw[n] = f.node_wealth[n];
+        // the aggregate orientation is the one the DLL installs; main.cpp derives it from the same drain -- reuse the first graph as a stand-in is WRONG, so recompute from wealth supply/demand as main.cpp does
+        drain::Result rw = drain::run(g, bw, f.tie_cost_edge, f.node_wealth, f.node_wealth, vector<double>(N, 0.0));
+        vector<vector<int>> downs(N); for (auto& [u, v] : rw.directed) downs[u].push_back(v);
+        auto pp_at = econ::pp_index(N, st);
+        for (int n = 0; n < N; n++) for (auto& e : st[n].entries) { e.own = e.power - econ::prop_from(pp_at, downs[n], e.country); e.has_own = true; }
+        auto split = econ::propagation_split(N, graphs, prices);
+        auto recv  = econ::propagation_received(N, pp_at, split);
+        int added  = econ::apply_split_propagation(N, st, recv);
+        printf("D3 v2 split propagation applied offline: %d standings added%c", added, 10);
+    }
+    // 3. route every live good on the v2 standings
+    vector<econ::GoodFlow> per_good;
+    for (size_t k = 0; k < graphs.size(); k++)
+        per_good.push_back(econ::route(N, graphs[k], inject[live_idx[k]], st, collect_nodes, 0.05));
     frontier::FlowMatrix FM = frontier::flow_matrix(N, per_good);
     printf("routed %zu goods over %d nodes; %zu countries with a trade capital\n\n", per_good.size(), N, home_of.size());
 

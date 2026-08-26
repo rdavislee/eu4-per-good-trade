@@ -505,10 +505,11 @@ inline std::vector<CountryStanding> read_standings(uintptr_t node) {
 inline bool write_power_fraction(uintptr_t rec, double frac) {
     int32_t v = (int32_t)(frac * 1000.0 + 0.5);
     if (v < 0) v = 0; if (v > 1000) v = 1000;
-    DWORD old = 0;
-    if (!VirtualProtect((void*)(rec + 0x2C), 4, PAGE_READWRITE, &old)) return false;
-    *(int32_t*)(rec + 0x2C) = v;
-    VirtualProtect((void*)(rec + 0x2C), 4, old, &old);
+    // the record arrays are heap memory (operator new), already PAGE_READWRITE: a VirtualProtect
+    // pair per slot cost ~280 ms a tick across ~112k slots (H3 regression, 2026-08-26). Write only
+    // when the value differs; the region was validated by the caller.
+    int32_t* p = (int32_t*)(rec + 0x2C);
+    if (*p != v) *p = v;
     return true;
 }
 

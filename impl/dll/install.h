@@ -350,11 +350,9 @@ inline int write_power_to_records(const std::vector<livetrade::SimNode>& sim,
             int32_t v = (int32_t)(e.power * 1000.0 + 0.5); if (v < 0) v = 0;
             double md = livetrade::fi(rec + 0x44) / 1000.0;
             int32_t mp = md > 0 ? (int32_t)(e.power / md * 1000.0 + 0.5) : v;
-            DWORD old = 0;
-            if (!VirtualProtect((void*)(rec + 0x44), 12, PAGE_READWRITE, &old)) continue;
-            *(int32_t*)(rec + 0x48) = v;
-            *(int32_t*)(rec + 0x4C) = mp;
-            VirtualProtect((void*)(rec + 0x44), 12, old, &old);
+            int32_t* pv = (int32_t*)(rec + 0x48); int32_t* pm = (int32_t*)(rec + 0x4C);   // heap, RW; write on change
+            if (*pv != v) *pv = v;
+            if (*pm != mp) *pm = mp;
             wrote++;
         }
     }

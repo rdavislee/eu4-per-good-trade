@@ -57,7 +57,7 @@ inline const std::vector<frontier::Placement>& cached_plan(int N, int home, int 
     return g_plan_cache[key] = frontier::plan(N, home, k, adj, st, *g_flowmat, c);
 }
 
-struct Merchant { int id = 0; int action = 0; int node_index = -1; };
+struct Merchant { int id = 0; int action = 0; int node_index = -1; uintptr_t envoy = 0; };
 
 // THE HUMAN'S COUNTRY, as an index into the manager array, or -1 when there is none (observer).
 // game+0x1E60 is the player's country handle, +0x1E66 the game mode (7 = observing) and
@@ -102,6 +102,7 @@ inline std::vector<Merchant> merchants_of(int country_idx) {
         uintptr_t e = livetrade::fq(p);
         if (!e || !livetrade::validate_region(e, 0x48)) continue;
         Merchant m;
+        m.envoy = e;
         m.id = livetrade::fi(e + 0x44);
         m.action = livetrade::fi(e + 0x18);
         uintptr_t constr = livetrade::fq(e + 0x10);

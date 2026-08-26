@@ -81,10 +81,11 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
         // A node with NO outgoing links must keep +0xAC == 0: 0xB53AB0 computes N-1 = -1 and
         // a steering record there both crashes on a negative ordinal and drops the country
         // from the collector set at a Phi_w sink, where spec 1.8 collects 100%. Skip it.
-        {
+        {   // END nodes are written like any reverse end (type 1, +0xA8 = 0): 0xB53C77 compares the
+            // ordinal SIGNED against N-1 = -1 and exits, and the per-link reads hit the slack buffer.
             uintptr_t d = livetrade::fq(node + 0xA8);
             uintptr_t ob = d ? livetrade::fq(d + 0x98) : 0, oe = d ? livetrade::fq(d + 0xA0) : 0;
-            if (!ob || oe <= ob) { endnode++; continue; }
+            if (!ob || oe <= ob) endnode++;   // counted only
         }
         // Only a record the engine already marks as holding a merchant may be set to steer.
         // Fabricating has_trader=1 grants the +10% income bonus and the merchant power bonus

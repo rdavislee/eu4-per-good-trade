@@ -220,12 +220,17 @@ inline int clamp_steer_indices(const std::vector<livetrade::SimNode>& sim) {
             // from a sink, so the record is demoted to COLLECT (+0xAC, 0 = collect / 1 = steer),
             // which is also what spec 1.8 says a sink does: it forwards nothing.
             if (n == 0) {
+                // END NODE: the ordinal is clamped to 0 but the record is NOT demoted to collect any
+                // more. The two reads that made type 1 here look fatal are covered: 0xB5654D /
+                // 0x13FC24D read a slack-padded buffer (outlinks::resize gives end nodes a real
+                // zero-filled array) and 0xB53C77 is a SIGNED compare (0 > N-1 = -1 exits). A merchant
+                // steering a reverse end at genua stays a steerer -- no -50% collecting penalty (user).
                 DWORD old = 0;
-                if (VirtualProtect((void*)(rec + 0xA8), 8, PAGE_READWRITE, &old)) {
-                    if (idx != 0) *(int32_t*)(rec + 0xA8) = 0;
-                    if (*(uint8_t*)(rec + 0xAC) != 0) { *(uint8_t*)(rec + 0xAC) = 0; g_demoted++; }
+                if (idx != 0 && VirtualProtect((void*)(rec + 0xA8), 8, PAGE_READWRITE, &old)) {
+                    *(int32_t*)(rec + 0xA8) = 0;
                     VirtualProtect((void*)(rec + 0xA8), 8, old, &old);
                 }
+                if (*(uint8_t*)(rec + 0xAC) != 0) g_demoted++;   // counted, no longer changed
                 continue;
             }
             if (idx >= n || idx < 0) {

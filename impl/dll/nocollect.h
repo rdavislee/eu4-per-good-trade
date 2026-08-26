@@ -86,7 +86,7 @@ inline void on_set_trader(detour::Regs* r) {
     if ((r->r8 & 0xFF) != 0) return;                           // already transfer
     g_type0++;
     uintptr_t node = r->rcx; uint64_t handle = r->rdx;
-    if (!node_has_outgoing(node)) { g_kept_end++; return; }    // nothing to steer along
+    if (!node_has_outgoing(node)) g_kept_end++;                // counted; type 1 at an END node is safe (relink.h, syncrec.h notes)
     uintptr_t rec = record_for(node, handle);
     if (!rec) return;                                          // cannot see the record: leave the engine alone
     if (livetrade::fb(rec + 0xAD) != 0) { g_kept_capital++; return; }
@@ -127,7 +127,7 @@ inline int sweep(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg) 
             if (livetrade::fb(rec + 0xAE) == 0) continue;               // no trader
             if (livetrade::fb(rec + 0xAD) != 0) { cap_here++; continue; }   // a merchant at its own capital
             if (livetrade::fb(rec + 0xAC) != 0) continue;               // already transferring
-            if (!has_out) { end_here++; continue; }                     // engine has nothing to steer along
+            if (!has_out) end_here++;                                   // counted; converted like any other record
             uint64_t handle = livetrade::fq(rec + 0x10);
             int outc = 0;
             { uintptr_t def = livetrade::fq(node + 0xA8); outc = (int)((livetrade::fq(def + 0xA0) - livetrade::fq(def + 0x98)) / 0x78); }

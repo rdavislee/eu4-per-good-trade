@@ -104,7 +104,7 @@ inline std::vector<Merchant> merchants_of(int country_idx) {
         Merchant m;
         m.envoy = e;
         m.id = livetrade::fi(e + 0x44);
-        m.action = livetrade::fi(e + 0x18);
+        m.action = livetrade::fb(e + 0x18);      // a byte, read the same way free_envoy reads it
         uintptr_t constr = livetrade::fq(e + 0x10);
         if (constr && livetrade::validate_region(constr + 0x80, 8)) {
             uintptr_t node = livetrade::fq(constr + 0x80);

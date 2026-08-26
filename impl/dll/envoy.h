@@ -59,6 +59,12 @@ inline uint64_t g_sent = 0, g_no_free = 0, g_no_node = 0, g_stale_record = 0;
 inline std::map<std::pair<int, int>, int> g_sent_tick;   // (country, node) -> tick, dwell
 inline std::map<int, int> g_nothing_tick;                  // country -> tick it last placed nothing
 inline std::map<int, std::set<int>> g_prev_plan;           // country -> planned node set last time it was planned
+inline std::map<std::pair<int, int>, int> g_touched_tick;  // (country, node) -> tick we last SENT TO or RECALLED FROM it (the dwell key)
+inline std::set<std::pair<int, int>> g_vacated_on_purpose; // (country, node) we recalled a merchant from -- not a failed placement
+struct Landing { uintptr_t envoy; int target_eng; int tick; int cidx; };
+inline std::vector<Landing> g_landings;                    // recalls to re-check 1 and 3 ticks later
+inline uint64_t g_land_ok1 = 0, g_land_bad1 = 0, g_land_ok3 = 0, g_land_bad3 = 0;
+inline uint64_t g_no_free_country = 0;                     // countries with no free merchant this tick (dispatch's own count)
 inline uint64_t g_recall_own = 0;                          // recalls whose victim was OUR OWN earlier placement
 inline std::string g_log;
 inline bool g_installed = false;
@@ -105,7 +111,8 @@ inline bool send(int country_idx, uintptr_t node, std::ofstream* lg, const std::
 constexpr uintptr_t SET_TRADER = 0xB5E290;    // (rec, bool hasTrader, u8 type) -- syncrec's
 using FnSetTrader = void (__fastcall*)(uintptr_t, bool, uint8_t);
 inline uint64_t g_recalled = 0, g_recall_stale = 0, g_recall_refused = 0;
-constexpr int RECALL_CAP_PER_TICK = 40;      // observation cap while the engine's behaviour on re-placement is being measured
+constexpr int RECALL_CAP_PER_TICK = 60;      // world-wide per tick, observation cap
+constexpr int RECALL_BUDGET_PER_COUNTRY = 2; // per country per tick: `continue` after a refusal must not become a stampede      // observation cap while the engine's behaviour on re-placement is being measured
 
 // this country's per-node trade record at `node`, or 0 (index-dense array, slot-checked like syncrec)
 inline uintptr_t record_at(uintptr_t node, int cidx) {
@@ -135,28 +142,36 @@ inline std::string engine_steer_target(uintptr_t node, uintptr_t rec) {
 // set (the 0x775C14 pattern: envoy freed, ClearTrader never called) it is cleared here with
 // SetTrader(rec, false, 1) -- otherwise syncrec would keep a phantom merchant there.
 inline bool recall_send(int country_idx, uintptr_t envoy, uintptr_t old_node, uintptr_t node,
-                        std::ofstream* lg, const std::string& old_name, const std::string& node_name) {
+                        std::ofstream* lg, const std::string& old_name, const std::string& node_name, int tick) {
     uintptr_t c = aiwire::country_by_index(country_idx);
     if (!c || !node || !envoy || !old_node) return false;
     uintptr_t old_rec = record_at(old_node, country_idx);
     int before = old_rec ? livetrade::fb(old_rec + 0xAE) : -1;
-    int act0 = livetrade::fi(envoy + ENVOY_ACTION);
+    int act0 = livetrade::fb(envoy + ENVOY_ACTION);
+    uintptr_t mc0 = livetrade::validate_region(envoy + 0x10, 8) ? livetrade::fq(envoy + 0x10) : 0;   // the construction it owns now
+    int target_eng = livetrade::validate_region(node + 0x120, 4) ? livetrade::fi(node + 0x120) : -1;
     auto place = (FnPlace)(livetrade::module_base() + PLACE_MERCHANT);
     place(c, envoy, 1, node, -1, 1);
     int after = old_rec ? livetrade::fb(old_rec + 0xAE) : -1;
-    int act1 = livetrade::fi(envoy + ENVOY_ACTION);
+    int act1 = livetrade::fb(envoy + ENVOY_ACTION);
+    uintptr_t mc1 = livetrade::validate_region(envoy + 0x10, 8) ? livetrade::fq(envoy + 0x10) : 0;
+    // does the OLD construction still claim this envoy? (a leaked live alias would re-assert the old post)
+    uintptr_t old_back = (mc0 && mc0 != mc1 && livetrade::validate_region(mc0 + 0x48, 8)) ? livetrade::fq(mc0 + 0x48) : 0;
     int newnode = -1;
     { uintptr_t constr = livetrade::validate_region(envoy + 0x10, 8) ? livetrade::fq(envoy + 0x10) : 0;
       if (constr && livetrade::validate_region(constr + 0x80, 8)) { uintptr_t nn = livetrade::fq(constr + 0x80); if (nn && livetrade::validate_region(nn + 0x120, 4)) newnode = livetrade::fi(nn + 0x120); } }
     bool stale = (after == 1);
     if (stale) { ((FnSetTrader)(livetrade::module_base() + SET_TRADER))(old_rec, false, 1); g_recall_stale++; }
     int cleared = old_rec ? livetrade::fb(old_rec + 0xAE) : -1;
-    g_recalled++;
+    bool landed = (newnode >= 0 && newnode == target_eng);
+    if (landed) { g_recalled++; g_landings.push_back({envoy, target_eng, tick, country_idx}); }
     if (lg) *lg << "  [recall] country#" << country_idx << " merchant#" << livetrade::fi(envoy + ENVOY_ID)
                 << " " << old_name << " -> " << node_name << ": old has_trader " << before << "->" << after
                 << (stale ? " (engine left it set; cleared by SetTrader -> " + std::to_string(cleared) + ")" : "")
-                << "; envoy action " << act0 << "->" << act1 << "; now at engine node " << newnode << (char)10;
-    return true;
+                << "; action " << act0 << "->" << act1 << "; construction 0x" << std::hex << mc0 << "->0x" << mc1 << std::dec
+                << (mc0 == mc1 ? " (same)" : (old_back == envoy ? " (OLD ONE STILL CLAIMS THE ENVOY)" : " (old one detached)"))
+                << "; landed at engine node " << newnode << (landed ? " OK" : " MISMATCH -- not recorded") << (char)10;
+    return landed;
 }
 
 // One pass per AI tick, after aiwire::step: for each country, for each planned node with no
@@ -175,11 +190,27 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
       std::map<int, std::set<int>> where;   // country -> field nodes with a posted merchant
       std::map<int, int> e2f;
       for (int fn = 0; fn < (int)names.size(); fn++) for (auto& s : sim) if (s.name == names[fn]) { e2f[s.index] = fn; break; }
+      int vacated = 0;
       for (auto& [key, t0] : g_sent_tick) {
+          if (g_vacated_on_purpose.count(key)) { vacated++; continue; }   // we recalled it ourselves: not a failed placement
           int c = key.first; if (!where.count(c)) { for (auto& m : aiwire::merchants_of(livetrade::country_index_of(c))) if (m.action == 2) { auto f = e2f.find(m.node_index); if (f != e2f.end()) where[c].insert(f->second); } }
           if (where[c].count(key.second)) still++; else gone++;
       }
-      if (lg && (still || gone)) *lg << "  [envoy] of " << (still + gone) << " nodes we ever sent a merchant to, " << still << " still hold one, " << gone << " do not" << (char)10;
+      if (lg && (still || gone)) *lg << "  [envoy] of " << (still + gone + vacated) << " nodes we ever sent a merchant to, " << still << " still hold one, " << gone << " do not, " << vacated << " vacated by our own recall" << (char)10;
+      // LANDING VERIFICATION: is each recalled envoy still at its target 1 and 3 ticks later?
+      { int ok1 = 0, bad1 = 0, ok3 = 0, bad3 = 0;
+        for (auto& L : g_landings) {
+            int age = tick - L.tick; if (age != 1 && age != 3) continue;
+            int now_at = -1;
+            if (livetrade::validate_region(L.envoy, 0x48)) { uintptr_t mc = livetrade::fq(L.envoy + 0x10);
+                if (mc && livetrade::validate_region(mc + 0x80, 8)) { uintptr_t nn = livetrade::fq(mc + 0x80); if (nn && livetrade::validate_region(nn + 0x120, 4)) now_at = livetrade::fi(nn + 0x120); } }
+            bool ok = (now_at == L.target_eng);
+            if (age == 1) { if (ok) ok1++; else bad1++; } else { if (ok) ok3++; else bad3++; }
+        }
+        g_land_ok1 += ok1; g_land_bad1 += bad1; g_land_ok3 += ok3; g_land_bad3 += bad3;
+        if (lg && (ok1 || bad1 || ok3 || bad3)) *lg << "  [recall/verify] +1 tick: " << ok1 << " still at target, " << bad1 << " not; +3 ticks: " << ok3 << " still, " << bad3 << " not (run totals " << g_land_ok1 << "/" << g_land_bad1 << ", " << g_land_ok3 << "/" << g_land_bad3 << ")" << (char)10;
+        if (g_landings.size() > 4000) g_landings.erase(g_landings.begin(), g_landings.begin() + 2000);
+      }
     }
     int sent = 0, recalls_this_tick = 0, drift_countries = 0, drift_nodes = 0, planned_countries = 0, recall_own_tick = 0;
     std::set<int> countries;
@@ -204,7 +235,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         // (the old "no free merchant: skip the country" gate is gone: a country with none free can
         //  still RECALL an off-plan merchant below, and that is most of the world's merchants)
         { bool any_free = false; for (auto& m : ms) if (m.action == 0) { any_free = true; break; }
-          if (!any_free) g_no_free++; }
+          if (!any_free) g_no_free_country++; }
         // a country whose free merchant could not be placed last pass will not place now either
         // (the plan is the same until the standings move); skip it for the dwell floor
         { auto ns = g_nothing_tick.find(c); if (ns != g_nothing_tick.end() && tick - ns->second < (int)ai::DWELL_FLOOR_MONTHS) continue; }
@@ -227,6 +258,9 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         }
         int sent_here = 0, recalls_here = 0;
         std::set<uintptr_t> moved_envoys;
+        std::set<int> plan_nodes; for (auto& q : plan) plan_nodes.insert(q.node);
+        std::set<int> score_net{home}; for (int sn : standing) score_net.insert(sn); for (int pn : plan_nodes) score_net.insert(pn);
+        std::map<int, double> victim_value;   // stand node -> value on score_net, memoised for the tick
         for (auto& pl : plan) {
             if (standing.count(pl.node)) continue;               // aiwire handles the ones already there
             if (pl.node == home) continue;                        // never at the capital
@@ -243,49 +277,64 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                     && livetrade::fb(rb + (uintptr_t)cidx * 0xC0 + 0xAE) != 0) { g_stale_record++; continue; }
             }
             auto key = std::make_pair(c, pl.node);
-            auto it = g_sent_tick.find(key);
-            if (it != g_sent_tick.end() && tick - it->second < (int)ai::DWELL_FLOOR_MONTHS) continue;
+            auto it = g_touched_tick.find(key);
+            if (it != g_touched_tick.end() && tick - it->second < (int)ai::DWELL_FLOOR_MONTHS) continue;
             uintptr_t nd = node_obj(sim, names[pl.node]);
+            if (!nd) { g_no_node++; continue; }                      // name did not resolve: not a recall case
             bool placed_here = send(cidx, nd, lg, names[pl.node]);
+            bool recalled_here = false;
             if (!placed_here) {
                 // NO FREE MERCHANT. The user's rule: move only if this candidate beats the LEAST
-                // profitable current merchant by x1.5. Current merchants standing at planned nodes
-                // are the plan itself; the candidates for recall are the posted ones standing OFF
-                // the plan, valued by the same metric (their table target, else the engine's own
-                // steer target; -1 when that target is not connected home = worth nothing).
-                if (recalls_this_tick >= RECALL_CAP_PER_TICK) break;
-                std::set<int> plan_nodes; for (auto& q : plan) plan_nodes.insert(q.node);
-                std::set<int> network{home}; for (int sn : standing) network.insert(sn);
-                double weakest = 1e300; const aiwire::Merchant* victim = nullptr; int victim_node = -1;
+                // profitable current merchant by x1.5. Victims are the posted merchants standing OFF
+                // the plan, valued by THE SAME METRIC ON THE SAME NETWORK the candidate was scored in
+                // -- home + standing + planned nodes, built once per country and never shrunk within
+                // the tick. (Scoring victims on the standing network alone made every placement the
+                // plan had just created worth -1 as a victim, which won the min and bypassed the
+                // x1.5 test: 42 recalls, 9 refusals, self-sustaining -- reviewed.)
+                if (recalls_this_tick >= RECALL_CAP_PER_TICK || recalls_here >= RECALL_BUDGET_PER_COUNTRY) continue;
+                double weakest = 1e300; const aiwire::Merchant* victim = nullptr; int victim_node = -1; bool any_valid = false;
                 for (auto& m : ms) {
                     if (m.action != 2 || m.node_index < 0 || !m.envoy) continue;
                     if (moved_envoys.count(m.envoy)) continue;              // already re-placed this tick (snapshot is stale)
                     auto f = eng_to_field.find(m.node_index); if (f == eng_to_field.end()) continue;
                     int fnode = f->second;
                     if (plan_nodes.count(fnode) || fnode == home) continue;   // on the plan: not a victim
-                    auto st0 = g_sent_tick.find(std::make_pair(c, fnode));
-                    if (st0 != g_sent_tick.end() && tick - st0->second < (int)ai::DWELL_FLOOR_MONTHS) continue;   // dwell
-                    int tgt = -1;
-                    auto te = assign::g_table.find(std::make_pair(c, names[fnode]));
-                    std::string tname = te != assign::g_table.end() ? te->second : engine_steer_target(node_obj(sim, names[fnode]), record_at(node_obj(sim, names[fnode]), cidx));
-                    for (int i2 = 0; i2 < (int)names.size(); i2++) if (names[i2] == tname) { tgt = i2; break; }
-                    double v = tgt >= 0 ? frontier::added_value((int)names.size(), home, network, undirected_adj, st, *aiwire::g_flowmat, c, fnode, tgt) : -1.0;
+                    auto tt = g_touched_tick.find(std::make_pair(c, fnode));
+                    if (tt != g_touched_tick.end() && tick - tt->second < (int)ai::DWELL_FLOOR_MONTHS) continue;   // dwell
+                    double v;
+                    auto memo = victim_value.find(fnode);
+                    if (memo != victim_value.end()) v = memo->second;
+                    else {
+                        int tgt = -1;
+                        auto te = assign::g_table.find(std::make_pair(c, names[fnode]));
+                        uintptr_t vobj = node_obj(sim, names[fnode]);
+                        std::string tname = te != assign::g_table.end() ? te->second : engine_steer_target(vobj, record_at(vobj, cidx));
+                        for (int i2 = 0; i2 < (int)names.size(); i2++) if (names[i2] == tname) { tgt = i2; break; }
+                        v = tgt >= 0 ? frontier::added_value((int)names.size(), home, score_net, undirected_adj, st, *aiwire::g_flowmat, c, fnode, tgt) : -1.0;
+                        victim_value[fnode] = v;
+                    }
+                    if (v < 0) continue;                                    // not evaluable on this network: never a victim
+                    any_valid = true;
                     if (v < weakest) { weakest = v; victim = &m; victim_node = fnode; }
                 }
-                if (!victim) break;                                   // nothing to recall: stop for this country
-                if (weakest > 0 && pl.added < 1.5 * weakest) { g_recall_refused++; break; }   // plan is ordered: later entries are weaker still
+                if (!victim || !any_valid) continue;                       // nothing recallable for this entry
+                if (pl.added < 1.5 * weakest) { g_recall_refused++; continue; }   // NOT break: the greedy plan is not sorted by added
+                if (!recall_send(cidx, victim->envoy, node_obj(sim, names[victim_node]), nd, lg, names[victim_node], names[pl.node], tick)) continue;
                 { auto own = g_sent_tick.find(std::make_pair(c, victim_node));
                   if (own != g_sent_tick.end()) { g_recall_own++; recall_own_tick++;
-                      if (lg) *lg << "  [recall/own] country#" << cidx << " victim at " << names[victim_node] << " was OUR placement " << (tick - own->second) << " ticks ago, worth " << weakest << " vs candidate " << names[pl.node] << " worth " << pl.added << (char)10; } }
-                if (!recall_send(cidx, victim->envoy, node_obj(sim, names[victim_node]), nd, lg, names[victim_node], names[pl.node])) break;
+                      if (lg) *lg << "  [recall/own] country#" << cidx << " victim at " << names[victim_node] << " was OUR placement " << (tick - own->second) << " ticks ago, worth " << weakest << " vs candidate " << names[pl.node] << " worth " << pl.added << (char)10; }
+                  g_vacated_on_purpose.insert(std::make_pair(c, victim_node)); }
                 assign::clear(c, names[victim_node]);
+                g_touched_tick[std::make_pair(c, victim_node)] = tick;       // dwell on the node we just emptied too (no ping-pong)
                 standing.erase(victim_node);
                 moved_envoys.insert(victim->envoy);
-                recalls_this_tick++; recalls_here++;
+                recalls_this_tick++; recalls_here++; recalled_here = true;
             }
             // the table entry is what routing and syncrec read; write it now
             assign::set(c, names[pl.node], names[pl.target]);
             g_sent_tick[key] = tick;
+            g_touched_tick[key] = tick;
+            g_vacated_on_purpose.erase(key);
             // G1: is this end one the engine can index (declared outgoing) or a reverse end?
             {
                 bool outgoing = false;
@@ -300,14 +349,14 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
                 if (outgoing) aiwire::g_phi_out++; else aiwire::g_phi_in++;
             }
             standing.insert(pl.node);
-            sent++; sent_here++;
+            if (recalled_here) { /* counted in recalls_here */ } else { sent++; sent_here++; }
         }
         if (sent_here == 0 && recalls_here == 0) g_nothing_tick[c] = tick;
     }
     if (lg && planned_countries) *lg << "  [plan/drift] " << drift_countries << " of " << planned_countries << " planned countries changed their planned node set since last planned; " << drift_nodes << " node changes in total" << (char)10;
-    if (lg && recalls_this_tick) *lg << "  [envoy] recalled " << recalls_this_tick << " (" << recall_own_tick << " of them our own placements; " << g_recall_own << " ever)" << " -- " << " off-plan merchants this tick (" << g_recalled << " total; " << g_recall_stale << " old records the engine left set; " << g_recall_refused << " refused by the x1.5 test)" << (char)10;
+    if (lg && recalls_this_tick) *lg << "  [envoy] recalled " << recalls_this_tick << " (" << recall_own_tick << " of them our own placements; " << g_recall_own << " ever)" << " off-plan merchants this tick (" << g_recalled << " landed in total; " << g_recall_stale << " old records the engine left set; " << g_recall_refused << " refused by the x1.5 test)" << (char)10;
     if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
-                        << g_sent << " total; " << g_no_free << " refused: no free merchant; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
+                        << g_sent << " total; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
     return sent;
 }
 

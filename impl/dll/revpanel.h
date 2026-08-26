@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -482,7 +483,17 @@ inline int add_reverse(std::ofstream* lg) {
                             if (d > total * 0.45) d = total * 0.45;
                             for (int step = 0; step < 8; step++) {
                                 double ax = 0, az = 0;
-                                point_at_arc(p3, np, ti, d + step * MIN_SEP, &ax, &az);
+                                // NEVER PAST THE MIDPOINT. Each overlap retry steps another
+                                // MIN_SEP outward, and on a short ribbon (wien -> pest is five
+                                // points) 45% + 7 x 25 overshoots the whole thing: the walker
+                                // runs off the FAR end and the panel lands exactly on the node
+                                // it points at -- anchor == p0 == pest, measured. Clamp every
+                                // candidate to our half; when even that collides, prefer a
+                                // slightly-overlapping panel at the right node over a clean one
+                                // at the wrong node.
+                                double dd = d + step * MIN_SEP;
+                                if (dd > total * 0.45) dd = total * 0.45;
+                                point_at_arc(p3, np, ti, dd, &ax, &az);
                                 bool clear = true;
                                 for (auto& q : placed) {
                                     double dx = ax - q.first, dz = az - q.second;
@@ -556,8 +567,20 @@ inline int add_reverse(std::ofstream* lg) {
             const float* a = (const float*)(v + LV_ANCHOR);
             uintptr_t ent = livetrade::fq(v + LV_ENTRY);
             std::string other = ent ? def_key(livetrade::fq(ent + 0x30)) : "?";
+            // the ribbon's two ends and the forward anchor, so "which end is the source" can be
+            // checked against what was actually drawn rather than assumed
+            uintptr_t pb = livetrade::fq(v + LV_POLY), pe = livetrade::fq(v + LV_POLY + 8);
+            int np = (pb && pe > pb) ? (int)((pe - pb) / 12) : 0;
+            std::string ends = "?";
+            if (np >= 2 && livetrade::validate_region(pb, (size_t)np * 12)) {
+                const float* p3 = (const float*)pb;
+                char buf[160];
+                snprintf(buf, sizeof buf, "p0=(%.0f,%.0f) pN=(%.0f,%.0f) np=%d",
+                         p3[0], p3[2], p3[(np-1)*3+0], p3[(np-1)*3+2], np);
+                ends = buf;
+            }
             *lg << "    [wien] " << (is_reverse(v) ? "reverse" : "forward") << " -> " << other
-                << " anchor=(" << a[0] << "," << a[2] << ")" << (char)10;
+                << " anchor=(" << a[0] << "," << a[2] << ") " << ends << (char)10;
             at.push_back({a[0], a[2]});
         }
         for (size_t i = 0; i < at.size(); i++)

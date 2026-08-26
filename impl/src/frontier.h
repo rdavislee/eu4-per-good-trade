@@ -27,11 +27,22 @@ namespace frontier {
 
 struct Placement { int node; int target; double added; };   // stand at `node`, steer toward `target`
 
-// share of ALL trade power at n held by `country`; 0 if none
-inline double share_at(const std::vector<econ::NodeStandings>& st, int n, int country) {
+// A merchant present at a node holds MERCHANT_MAX_POWER_BONUS (+2) of trade power there, whatever
+// else it holds (spec 1.7). This is what keeps a REVERSE end from scoring zero: the engine
+// propagates power upstream only along Phi_w links (spec 1.9), so at a node downstream of the
+// country in Phi_w it has no propagated power at all -- its share read off the standings is
+// exactly 0 and the whole product is 0. Every reverse candidate was dying here, silently, long
+// before the x1.5 test. The merchant's own presence is the floor.
+constexpr double MERCHANT_PRESENT_POWER = 2.0;
+
+// share of ALL trade power at n held by `country`; `floor_mine` lifts the country's own power
+// to at least that much (the merchant-present bonus at a node it would stand on)
+inline double share_at(const std::vector<econ::NodeStandings>& st, int n, int country,
+                       double floor_mine = 0.0) {
     if (n < 0 || n >= (int)st.size()) return 0.0;
     double mine = 0, tot = 0;
     for (auto& e : st[n].entries) { if (e.power > 0) { tot += e.power; if (e.country == country) mine += e.power; } }
+    if (mine < floor_mine) { tot += floor_mine - mine; mine = floor_mine; }
     return tot > 0 ? mine / tot : 0.0;
 }
 
@@ -91,11 +102,37 @@ inline std::vector<Placement> candidates(int N, int home, const std::set<int>& n
             if (network.count(outside)) continue;         // not a frontier edge
             double f = flow_toward(per_good, outside, inside);
             if (f <= 0) continue;                         // nothing moves inward here
-            out.push_back({outside, inside, f * ps});
+            // the merchant would stand at `outside`: its own presence is +2 there, so its
+            // share at the entry node is never zero even where nothing propagates
+            double s_out = share_at(st, outside, country, MERCHANT_PRESENT_POWER);
+            out.push_back({outside, inside, f * s_out * ps});
         }
     }
     std::sort(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.added > b.added; });
     return out;
+}
+
+// what a merchant earns COLLECTING at n: the node's collectible pool (sum over goods of
+// value x collected_share) times the country's share of all power there. This is the
+// alternative every steer candidate must beat: Ming at hangzhou (a Phi_w sink) collects
+// a share of everything pooled there, which is why it does not push north to beijing.
+// Collecting anywhere but the trade capital halves the country's power there:
+// TRADE_NON_CAPITAL_OFFICE = -0.50 (defines.lua:1200; spec 3.14 treats it as a POWER modifier,
+// so it enters the share, not the payout). This is what stops "collect at every node you
+// hold power in" from ever scoring: off home you keep half the share, and the +2 merchant
+// presence is halved with it.
+constexpr double OFF_HOME_POWER_MULT = 0.5;
+
+inline double collect_value(const std::vector<econ::NodeStandings>& st,
+                            const std::vector<econ::GoodFlow>& per_good, int n, int country, int home) {
+    double pool = 0;
+    for (auto& F : per_good) if (n >= 0 && n < (int)F.collected.size()) pool += F.collected[n];
+    if (n < 0 || n >= (int)st.size()) return 0.0;
+    double mine = 0, tot = 0;
+    for (auto& e : st[n].entries) { if (e.power > 0) { tot += e.power; if (e.country == country) mine += e.power; } }
+    if (mine < MERCHANT_PRESENT_POWER) { tot += MERCHANT_PRESENT_POWER - mine; mine = MERCHANT_PRESENT_POWER; }
+    if (n != home) { tot -= mine * (1.0 - OFF_HOME_POWER_MULT); mine *= OFF_HOME_POWER_MULT; }
+    return tot > 0 ? pool * (mine / tot) : 0.0;
 }
 
 // the added value of an EXISTING placement (stand at node, steer toward target), same walk

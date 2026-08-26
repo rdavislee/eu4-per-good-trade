@@ -230,7 +230,11 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             double capped = std::max(0.0, c.max_pow * c.max_demand);
             s.power = std::min(c.val, capped > 0 ? capped : c.val) + c.t_in - c.t_out;
             if (s.power < 0) s.power = 0;
-            s.collects = c.has_trader ? (c.type == 0) : c.has_capital;
+            // USER DECISION 2026-08-26 (spec 3.14 says collect/steer is vanilla; this diverges):
+            // merchants never collect. The only place a country collects is its trade capital,
+            // without a merchant, and a merchant cannot be placed there. So collecting is
+            // has_capital alone; a merchant record is always a steerer.
+            s.collects = c.has_capital;
             s.is_capital = c.has_capital;
             s.steer_to = -1;
             // A TABLE-OWNED PLACEMENT IS READ FROM THE TABLE, NOT THE RECORD. syncrec writes a

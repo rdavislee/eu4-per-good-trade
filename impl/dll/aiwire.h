@@ -101,6 +101,7 @@ inline long long g_moved_nodes = 0;
 inline long long g_wants_move = 0;
 inline long long g_vacated = 0;           // table entries dropped because the merchant left
 inline long long g_frontier_cands = 0;    // frontier edges scored
+inline int g_why_logged = 0;
 inline long long g_rej_unreach = 0, g_rej_at_home = 0, g_rej_farther = 0;   // why
 constexpr int CADENCE_TICKS = 3;          // each merchant reconsidered every N months
 inline int g_evals = 0;
@@ -320,6 +321,16 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                 if (v < weakest) weakest = v;
             }
             if (weakest > 1e299) weakest = 0.0;
+            // Merchants never collect (user decision 2026-08-26), so there is no collecting value
+            // to beat: every merchant steers, and the only comparison is against the weakest
+            // steering merchant in the portfolio.
+            if (g_why_logged < 40) {
+                g_why_logged++;
+                log << "    [why] country#" << c << " at " << names[here] << ": best=" << names[best->target]
+                    << " added=" << best->added << " weakest=" << weakest << " x1.5=" << 1.5 * weakest
+                    << " merchants=" << mine.size() << "/" << cur.size() << " cands_here="
+                    << std::count_if(cands.begin(), cands.end(), [&](const frontier::Placement& q){ return q.node == here; }) << (char)10;
+            }
             auto key = std::make_pair(c, names[here]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {

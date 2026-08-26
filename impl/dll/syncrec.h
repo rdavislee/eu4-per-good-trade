@@ -61,7 +61,7 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
         def_by_key[k]  = livetrade::fq(s.obj + 0xA8);
     }
     auto set_trader = (FnSetTrader)(livetrade::module_base() + SET_TRADER);
-    int fwd = 0, rev = 0, missing = 0, same = 0, endnode = 0, nomerchant = 0;
+    int fwd = 0, rev = 0, missing = 0, same = 0, endnode = 0, nomerchant = 0, atcapital = 0;
     for (auto& [key, target] : assign::g_table) {
         int country = key.first;
         auto nit = node_by_key.find(key.second);
@@ -90,6 +90,10 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
         // Fabricating has_trader=1 grants the +10% income bonus and the merchant power bonus
         // for a merchant the country does not own.
         if (livetrade::fb(rec + 0xAE) == 0) { nomerchant++; continue; }
+        // No merchant at the trade capital (user decision 2026-08-26): the capital collects by
+        // has_capital alone and a merchant there would be a collecting merchant, which no
+        // longer exists. Leave the record as the engine has it.
+        if (livetrade::fb(rec + 0xAD) != 0) { atcapital++; continue; }
         int ord = forward_ordinal(livetrade::fq(node + 0xA8), tit->second);
         int32_t want_idx = ord >= 0 ? ord : 0;
         bool already = livetrade::fb(rec + 0xAE) != 0 && livetrade::fb(rec + 0xAC) == 1 &&
@@ -106,7 +110,7 @@ inline void apply(const std::vector<livetrade::SimNode>& sim, std::ofstream* lg)
     if (lg && (fwd || rev))
         *lg << "  [syncrec] engine records aligned to the table: " << fwd << " forward steers, "
             << rev << " reverse ends (index 0, target from the table), " << same
-            << " already right, " << missing << " with no record yet, " << endnode << " skipped at end nodes, " << nomerchant << " skipped (no merchant posted)" << (char)10;
+            << " already right, " << missing << " with no record yet, " << endnode << " skipped at end nodes, " << nomerchant << " skipped (no merchant posted), " << atcapital << " skipped (at trade capital)" << (char)10;
 }
 
 } // namespace syncrec

@@ -280,81 +280,62 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             for (auto& e : st[fn].entries) if (e.country == c && e.is_capital) { home = fn; break; }
         if (home < 0) continue;                              // no trade capital: nothing to grow from
         if (!per_good) continue;
-        // The network is home PLUS every node a merchant of this country already stands at:
-        // the user's model grows the network FROM placed merchants, so a posted merchant is
-        // a network node, not a candidate to be tested against one that excludes it. Seeding
-        // with home alone left 1,289 merchants "off their frontier" and 39 placed, measured.
-        std::set<int> network{home};
+        // FOLLOW THE PLAN. frontier::plan(k) is the portfolio the offline test proved right on
+        // the 1444 save (Ming: hangzhou->beijing, xian->beijing -- reverse ends toward home).
+        // For each planned edge whose stand-node holds one of this country's posted merchants,
+        // write that placement; a planned edge with no merchant standing there is what the
+        // country WANTS but cannot have until its envoy travels, which is not driven yet.
         std::map<int,int> posted_node;   // merchant id -> field node it stands at
         for (auto& [id, nd] : cur) { auto f0 = eng_to_field.find(nd); if (f0 != eng_to_field.end()) posted_node[id] = f0->second; }
-        std::vector<std::pair<int,int>> mine;                // (node, target) of my current placements
+        std::set<int> standing_at;
+        for (auto& [id, n2] : posted_node) standing_at.insert(n2);
+        int k = (int)posted_node.size();
+        if (k <= 0) continue;
+        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, *per_good, c);
+        g_frontier_cands += (long long)plan.size();
+        // the weakest CURRENT placement, for the x1.5 move test
+        std::set<int> network{home};
+        for (int n2 : standing_at) network.insert(n2);
+        double weakest = 1e300;
         for (auto& [key, tgt] : assign::g_table) {
             if (key.first != c) continue;
             auto nf = std::find(names.begin(), names.end(), key.second);
             auto tf = std::find(names.begin(), names.end(), tgt);
             if (nf == names.end() || tf == names.end()) continue;
-            int n2 = (int)(nf - names.begin()), t2 = (int)(tf - names.begin());
-            network.insert(n2); mine.push_back({n2, t2});
+            double v = frontier::added_value((int)names.size(), home, network, undirected_adj, st, *per_good, c,
+                                             (int)(nf - names.begin()), (int)(tf - names.begin()));
+            if (v < weakest) weakest = v;
         }
-        for (auto& [id, eng_node] : changed) {
-            auto f = eng_to_field.find(eng_node);
-            if (f == eng_to_field.end()) continue;
-            int here = f->second;
+        if (weakest > 1e299) weakest = 0.0;
+        for (auto& pl : plan) {
             g_evals++;
-            if (here == home) continue;                      // at home it collects; nothing to steer inward
-            // A merchant at `here` steers an edge OUT of here toward the network. For its own
-            // evaluation `here` is the OUTSIDE end: the network is home plus every OTHER
-            // merchant's node. Putting its own node into the network made both ends inside, no
-            // edge was a frontier edge, and placements went to zero (measured).
-            std::set<int> net = network;
-            for (auto& [id2, n2] : posted_node) if (id2 != id) net.insert(n2);
-            net.erase(here);
-            auto cands = frontier::candidates((int)names.size(), home, net, undirected_adj, st, *per_good, c);
-            g_frontier_cands += (long long)cands.size();
-            const frontier::Placement* best = nullptr;
-            for (auto& cd : cands) if (cd.node == here) { best = &cd; break; }
-            if (!best) { g_wants_move++; continue; }        // no network neighbour: off the frontier
-            // the least profitable current merchant, walked on the same network
-            double weakest = 1e300;
-            for (auto& [n2, t2] : mine) {
-                double v = frontier::added_value((int)names.size(), home, net, undirected_adj, st, *per_good, c, n2, t2);
-                if (v < weakest) weakest = v;
-            }
-            if (weakest > 1e299) weakest = 0.0;
-            // Merchants never collect (user decision 2026-08-26), so there is no collecting value
-            // to beat: every merchant steers, and the only comparison is against the weakest
-            // steering merchant in the portfolio.
-            if (g_why_logged < 40) {
-                g_why_logged++;
-                log << "    [why] country#" << c << " at " << names[here] << ": best=" << names[best->target]
-                    << " added=" << best->added << " weakest=" << weakest << " x1.5=" << 1.5 * weakest
-                    << " merchants=" << mine.size() << "/" << cur.size() << " cands_here="
-                    << std::count_if(cands.begin(), cands.end(), [&](const frontier::Placement& q){ return q.node == here; }) << (char)10;
-            }
-            auto key = std::make_pair(c, names[here]);
+            if (!standing_at.count(pl.node)) { g_wants_move++; continue; }   // no merchant there yet
+            auto key = std::make_pair(c, names[pl.node]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
-                if (ex->second == names[best->target]) continue;      // already there
+                if (ex->second == names[pl.target]) continue;                 // already there
                 auto ht = g_hold_tick.find(key);
                 if (ht != g_hold_tick.end() && tick - ht->second < (int)ai::DWELL_FLOOR_MONTHS) { g_damped++; continue; }
-                // x1.5 against the weakest merchant in the portfolio (vanilla, 0x1BD206)
-                if (best->added < 1.5 * weakest) { g_damped++; continue; }
+                if (pl.added < 1.5 * weakest) { g_damped++; continue; }       // vanilla's x1.5 vs the weakest
                 g_flips[key]++;
-            } else if (weakest > 0 && best->added < 1.5 * weakest && (int)mine.size() >= (int)cur.size()) {
-                g_damped++; continue;                               // no spare merchant and not worth a swap
             }
-            assign::set(c, names[here], names[best->target]);
+            assign::set(c, names[pl.node], names[pl.target]);
             g_hold_tick[key] = tick;
-            network.insert(here);
+            if (g_why_logged < 40) {
+                g_why_logged++;
+                log << "    [plan] country#" << c << " home=" << names[home] << ": stand " << names[pl.node]
+                    << " -> " << names[pl.target] << " added=" << pl.added << " weakest=" << weakest << (char)10;
+            }
+            // G1: against the ENGINE's declared outgoing list
             bool outgoing = false;
             {
-                uintptr_t nd = 0; for (auto& s2 : sim) if (s2.name == names[here]) { nd = s2.obj; break; }
+                uintptr_t nd = 0; for (auto& s2 : sim) if (s2.name == names[pl.node]) { nd = s2.obj; break; }
                 uintptr_t def = nd ? livetrade::fq(nd + 0xA8) : 0;
                 if (def && livetrade::validate_region(def + 0x98, 16)) {
                     uintptr_t b2 = livetrade::fq(def + 0x98), e2 = livetrade::fq(def + 0xA0);
                     for (uintptr_t p2 = b2; b2 && e2 > b2 && p2 + 0x78 <= e2; p2 += 0x78) {
                         uintptr_t t = livetrade::validate_region(p2 + 0x30, 8) ? livetrade::fq(p2 + 0x30) : 0;
-                        if (t && livetrade::def_key(t) == names[best->target]) { outgoing = true; break; }
+                        if (t && livetrade::def_key(t) == names[pl.target]) { outgoing = true; break; }
                     }
                 }
             }

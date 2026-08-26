@@ -1,44 +1,41 @@
-// THE REVERSE PANEL MUST NOT WEAR SOMEONE ELSE'S MERCHANTS (spec 1.7, 1.12).
+// A MERCHANT STEERING A REVERSE END MUST NOT ALSO APPEAR ON FORWARD LINK #0 (spec 1.7, 1.12).
 //
-// Observed in game: at north_sea, the reverse panels toward st_lawrence and white_sea both showed
-// Norway's shield -- the same merchant the north_sea -> lubeck panel shows. The engine was
-// claiming Norway steers to three places at once.
+// The engine's flag row (0x13FD7B0) admits a record iff, among other gates, rec+0xA8 equals the
+// panel's link ordinal -- and it derives that ordinal by searching the source node's outgoing
+// vector, leaving it at its zero init on a miss (0x13FD894). syncrec.h writes a merchant steering a
+// REVERSE end as type=1, +0xA8 = 0, because +0xA8 is read unbounded by five consumers and can hold
+// no sentinel. Two consequences follow, one wanted and one not:
 //
-// The mechanism, read out of the flag builder 0x13FD7B0. It derives the link's ordinal by walking
-// the SOURCE node's definition outgoing vector (def+0x98, stride 0x78) and comparing each
-// entry+0x30 against [LinkView+0x80]->+0x30 (0x13FD83C..0x13FD899). The result register is
-// zero-initialised at 0x13FD835 (`xor r12d,r12d`) and written ONLY on a match; the no-match path
-// at 0x13FD894 jumps straight out, so a failed search yields ordinal 0 rather than "not found".
-// The row then admits every record whose +0xA8 equals that ordinal (0x13FD9C1), i.e. everyone
-// steering along the node's link #0.
+//   WANTED: on the reverse panel the ordinal search misses, collapses to 0, and the record with
+//   +0xA8 == 0 is selected -- the engine draws the reverse merchant on the reverse panel by itself,
+//   with a working tooltip (0x13FCCA3 reads only icon+0x1E8). The shield-creation trace found
+//   this is the only STABLE way to get a shield: anything we add ourselves trips the count gate
+//   at 0x13FD57B and is wiped by the next frame's full rebuild.
 //
-// A reverse view fails that search by construction: it asks the target node's outgoing list for a
-// link back to the source, and the graph is a DAG. So every reverse panel at a node collapses onto
-// that node's link #0 and inherits its merchants. Worse, when the node has 0 or 1 outgoing links
-// the ordinal test is skipped entirely (0x13FD9BC `cmp ecx,1; jle`) and EVERY steering country
-// there is drawn.
+//   NOT WANTED: on the source node's FORWARD panel for link #0 the same record is selected too,
+//   so the merchant shows up on a link it does not steer. The earlier version of this file
+//   cleared the whole row on REVERSE panels -- backwards: it hid the shields that were right and
+//   left the aliased ones in place.
 //
-// Vanilla panels never reach the default -- their entry really is in the outgoing list -- so this
-// is purely an artefact of the injected views, and the correct behaviour for them is to show no
-// engine-derived merchants at all. The engine cannot express a merchant steering along a link it
-// has no index for; that is the whole reason assign::g_table exists (see assign.h).
+// So: forward panels with ordinal 0 get the aliased shields removed; reverse panels are left to
+// the engine. Removal is box->vt[0x270](box, holder, 0) = 0x163D8B0, which unlinks the holder's
+// list node; the holder is then ours to destroy through its own deleting destructor (vt[0],
+// 0xFC6D40 -> 0x152E030 frees the held window, then operator delete). Done after g_orig each
+// frame, because the engine rebuilds the row whenever its count gate fails -- which, with our
+// removals, is every frame; that is the per-frame cost the trace priced and accepted.
 //
-// Interception: the panel's vtable is 0x1D823C0 and its per-frame Update is slot +0x10
-// (0x13FCD80). Swapping that slot lets the original run -- so the value, the button state and the
-// forward panels are all untouched -- and then clears the flag row on our panels only. Clearing
-// after Update covers BOTH ways the row gets populated: the full rebuild at 0x13FD7B0 and the
-// incremental diff inside Update (0x13FD238..0x13FD57E), which reuses shields and never calls the
-// rebuild.
-//
-// The clear itself is the engine's own, copied from 0x13FD7D2..0x13FD7FF:
-//     child = window->vtbl[0xE8](window, "director_flags")   // the name is a raw const char*
-//     child->vtbl[0x278](child)                              // clear the container
+// Child list of the box (CGuiOverlappingElementsBox, vtable 0x1DA4910): {head,tail,count} at
+// box+0x100/+0x108/+0x110, nodes are 0x20 bytes {payload@0, prev@8, next@0x10}. The holder's
+// window is at holder+0x40; the shield icon is window->vt[0xC8](window,"trade_node_trader_shield")
+// and carries the 8-byte country handle at icon+0x1E8, whose bytes 4..5 are the country index.
 #pragma once
 #include <windows.h>
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "livetrade.h"
 #include "revpanel.h"
+#include "assign.h"
 
 namespace flagfix {
 
@@ -47,36 +44,112 @@ constexpr int       VT_UPDATE      = 0x10;      // per-frame Update
 constexpr uintptr_t PANEL_UPDATE   = 0x13FCD80;
 constexpr int       PANEL_WINDOW   = 0x08;      // GUI window, written by the ctor at 0x13FB8A5
 constexpr int       PANEL_LINKVIEW = 0x38;      // zeroed by the ctor at 0x13FB97B
-constexpr int       WIN_FIND_CHILD = 0xE8;      // window vtbl slot: (win, const char* name)
-constexpr int       ELEM_CLEAR     = 0x278;     // element vtbl slot: (elem)
+constexpr int       WIN_FIND_BOX   = 0xE8;      // window vtbl: FindOverlappingElementsBox(const char*)
+constexpr int       WIN_FIND_ICON  = 0xC8;      // window vtbl: FindIcon(const char*)
+constexpr int       BOX_REMOVE     = 0x270;     // box vtbl: remove one child (holder), relayout flag
+constexpr int       BOX_RELAYOUT   = 0x2C0;
+constexpr int       BOX_HEAD       = 0x100;
+constexpr int       HOLDER_WINDOW  = 0x40;
+constexpr int       ICON_HANDLE    = 0x1E8;
 
-using FnUpdate = void (__fastcall*)(uintptr_t);
-using FnFind   = uintptr_t (__fastcall*)(uintptr_t, const char*);
-using FnClear  = void (__fastcall*)(uintptr_t);
+using FnUpdate  = void (__fastcall*)(uintptr_t);
+using FnFindBox = uintptr_t (__fastcall*)(uintptr_t, const char*);
+using FnFindIcon= uintptr_t (__fastcall*)(uintptr_t, const char*);
+using FnRemove  = void (__fastcall*)(uintptr_t, uintptr_t, int);
+using FnRelayout= void (__fastcall*)(uintptr_t);
+using FnDtor    = void (__fastcall*)(uintptr_t, unsigned);
 
 inline FnUpdate g_orig = nullptr;
 inline bool g_installed = false;
-inline uint64_t g_cleared = 0;
+inline uint64_t g_cleared = 0;      // aliased shields removed from forward link-#0 panels
+
+// the ordinal a FORWARD panel represents: its entry's target within its source's outgoing vector
+inline int panel_ordinal(uintptr_t lv) {
+    uintptr_t srcdef = livetrade::fq(lv + revpanel::LV_SRCDEF);
+    uintptr_t entry  = livetrade::fq(lv + revpanel::LV_ENTRY);
+    if (!srcdef || !entry || !livetrade::validate_region(entry + 0x30, 8)) return -1;
+    uintptr_t tgt = livetrade::fq(entry + 0x30);
+    if (!livetrade::validate_region(srcdef + 0x98, 16)) return -1;
+    uintptr_t b = livetrade::fq(srcdef + 0x98), e = livetrade::fq(srcdef + 0xA0);
+    if (!b || e <= b || (e - b) > 0x78 * 64) return -1;
+    int i = 0;
+    for (uintptr_t p = b; p + 0x78 <= e; p += 0x78, i++)
+        if (livetrade::validate_region(p + 0x30, 8) && livetrade::fq(p + 0x30) == tgt) return i;
+    return -1;
+}
+
+// does our table say this country steers a REVERSE end at `node_key`?
+inline bool steers_reverse_here(int country_index, const std::string& node_key, uintptr_t srcdef) {
+    for (auto& [key, target] : assign::g_table) {
+        if (key.second != node_key) continue;
+        if (livetrade::country_index_of(key.first) != country_index) continue;
+        // reverse iff the target is NOT in the source's outgoing vector
+        uintptr_t b = livetrade::fq(srcdef + 0x98), e = livetrade::fq(srcdef + 0xA0);
+        for (uintptr_t p = b; b && e > b && p + 0x78 <= e; p += 0x78) {
+            uintptr_t t = livetrade::validate_region(p + 0x30, 8) ? livetrade::fq(p + 0x30) : 0;
+            if (t && livetrade::def_key(t) == target) return false;   // a forward end
+        }
+        return true;
+    }
+    return false;
+}
 
 inline void __fastcall update_hook(uintptr_t panel) {
-    if (g_orig) g_orig(panel);                  // let the engine do everything it normally does
+    if (g_orig) g_orig(panel);                  // the engine builds the row exactly as it wants
     if (!panel || !livetrade::validate_region(panel + PANEL_LINKVIEW, 8)) return;
     uintptr_t lv = livetrade::fq(panel + PANEL_LINKVIEW);
-    if (!lv || !revpanel::is_reverse(lv)) return;       // forward panels are correct already
+    if (!lv || revpanel::is_reverse(lv)) return;         // reverse panels: the engine is right
+    if (panel_ordinal(lv) != 0) return;                  // only link #0 collects the aliases
+    if (assign::g_table.empty()) return;
+    uintptr_t srcdef = livetrade::fq(lv + revpanel::LV_SRCDEF);
+    std::string node_key = livetrade::def_key(srcdef);
+    if (node_key.empty()) return;
+
     uintptr_t win = livetrade::fq(panel + PANEL_WINDOW);
     if (!win || !livetrade::validate_region(win, 8)) return;
     uintptr_t wvt = livetrade::fq(win);
-    if (!wvt || !livetrade::validate_region(wvt + WIN_FIND_CHILD, 8)) return;
-    auto find = (FnFind)livetrade::fq(wvt + WIN_FIND_CHILD);
-    if (!find) return;
-    uintptr_t child = find(win, "director_flags");
-    if (!child || !livetrade::validate_region(child, 8)) return;
-    uintptr_t cvt = livetrade::fq(child);
-    if (!cvt || !livetrade::validate_region(cvt + ELEM_CLEAR, 8)) return;
-    auto clear = (FnClear)livetrade::fq(cvt + ELEM_CLEAR);
-    if (!clear) return;
-    clear(child);
-    g_cleared++;
+    if (!wvt || !livetrade::validate_region(wvt + WIN_FIND_BOX, 8)) return;
+    auto find_box = (FnFindBox)livetrade::fq(wvt + WIN_FIND_BOX);
+    if (!find_box) return;
+    uintptr_t box = find_box(win, "director_flags");
+    if (!box || !livetrade::validate_region(box + BOX_HEAD, 24)) return;
+    uintptr_t bvt = livetrade::fq(box);
+    if (!bvt || !livetrade::validate_region(bvt + BOX_RELAYOUT, 8)) return;
+    auto remove   = (FnRemove)livetrade::fq(bvt + BOX_REMOVE);
+    auto relayout = (FnRelayout)livetrade::fq(bvt + BOX_RELAYOUT);
+    if (!remove || !relayout) return;
+
+    // snapshot the holders first: removal unlinks nodes under us
+    std::vector<uintptr_t> holders;
+    for (uintptr_t nd = livetrade::fq(box + BOX_HEAD); nd && livetrade::validate_region(nd, 0x20);
+         nd = livetrade::fq(nd + 0x10)) {
+        uintptr_t h = livetrade::fq(nd);
+        if (h) holders.push_back(h);
+        if (holders.size() > 64) break;
+    }
+    int removed = 0;
+    for (uintptr_t h : holders) {
+        if (!livetrade::validate_region(h + HOLDER_WINDOW, 8)) continue;
+        uintptr_t hw = livetrade::fq(h + HOLDER_WINDOW);
+        if (!hw || !livetrade::validate_region(hw, 8)) continue;
+        uintptr_t hwvt = livetrade::fq(hw);
+        if (!hwvt || !livetrade::validate_region(hwvt + WIN_FIND_ICON, 8)) continue;
+        auto find_icon = (FnFindIcon)livetrade::fq(hwvt + WIN_FIND_ICON);
+        if (!find_icon) continue;
+        uintptr_t icon = find_icon(hw, "trade_node_trader_shield");
+        if (!icon || !livetrade::validate_region(icon + ICON_HANDLE, 8)) continue;
+        uint64_t handle = livetrade::fq(icon + ICON_HANDLE);
+        int cidx = (int)(int16_t)(handle >> 32);
+        if (!steers_reverse_here(cidx, node_key, srcdef)) continue;
+        remove(box, h, 0);
+        uintptr_t hvt = livetrade::fq(h);
+        if (hvt && livetrade::validate_region(hvt, 8)) {
+            auto dtor = (FnDtor)livetrade::fq(hvt);
+            if (dtor) dtor(h, 1);                        // frees the held window, then the holder
+        }
+        removed++;
+    }
+    if (removed) { relayout(box); g_cleared += removed; }
 }
 
 // Swap the vtable slot. Verified against the expected original first: on any other build the slot

@@ -135,6 +135,28 @@ inline double collect_value(const std::vector<econ::NodeStandings>& st,
     return tot > 0 ? pool * (mine / tot) : 0.0;
 }
 
+// THE PORTFOLIO: where a country's k merchants should stand. Greedy, exactly as the user
+// described the network growing: start from home, take the best frontier edge, add its outside
+// node to the network (the merchant now stands there and it is a place value can be funnelled
+// through), re-score the new frontier, repeat k times. Later merchants can therefore reach nodes
+// two or more hops out -- but only through a path of earlier merchants, which is the BFS.
+inline std::vector<Placement> plan(int N, int home, int k,
+                                   const std::vector<std::vector<int>>& adj,
+                                   const std::vector<econ::NodeStandings>& st,
+                                   const std::vector<econ::GoodFlow>& per_good,
+                                   int country) {
+    std::vector<Placement> chosen;
+    if (home < 0 || home >= N || k <= 0) return chosen;
+    std::set<int> network{home};
+    for (int i = 0; i < k; i++) {
+        auto cands = candidates(N, home, network, adj, st, per_good, country);
+        if (cands.empty() || cands.front().added <= 0) break;   // nothing left worth a merchant
+        chosen.push_back(cands.front());
+        network.insert(cands.front().node);
+    }
+    return chosen;
+}
+
 // the added value of an EXISTING placement (stand at node, steer toward target), same walk
 inline double added_value(int N, int home, const std::set<int>& network,
                           const std::vector<std::vector<int>>& adj,

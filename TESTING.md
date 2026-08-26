@@ -148,6 +148,16 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   true); treasure fleets are always granted and route by the §1.10 ladder with privateers
   skimming en route (§1.11, §3.12).
 
+  **Measured 2026-08-26 (commit 981ddb5+), clean 1444 start, 24 monthly ticks, vanilla's merchant AI
+  silenced (aisilence.h), ours dispatching through the engine's own 0x3BAD90:**
+  - G1: 716 AI placements, **192 (26%) on Phi_w-INCOMING ends** -- the tab group vanilla cannot
+    express. Offline (impl/aitest.exe on the same save): Ming's top two picks are hangzhou->beijing
+    and xian->beijing, both reverse ends toward home.
+  - G2: **worst churn on any (country, node) = 0 target changes over 21 ticks**; 516 of 527
+    placements still hold their node; dispatch settles at ~3 per tick once the plan is satisfied.
+  - E1 636/636 countries agree (worst 0.0019 ducats), E4 CLEAN throughout.
+  Run: `touch dllbuild/pgt.AI; bash run.sh pgt_sil2.dll 4`; read `[G1]`, `[G2]`, `[envoy] ... still hold one`.
+
 ## H. Determinism, saves, performance
 
 - **H1. Tick determinism live.** Save, note the full orientation, reload, tick. PASS: identical

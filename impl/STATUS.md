@@ -167,3 +167,7 @@ with the extractor in the session log if the save changes.
 
 **In-game (f7c51dc):** choices match the offline test; the gap is that 1,005 merchants stand off
 their frontier because envoy travel is not driven. The send-merchant command is the next trace.
+
+**Two-year run (pgt_sil2, 24 ticks):** G1 26% reverse-end placements, G2 zero churn, 516/527 placements
+held, E1 636/636, E4 CLEAN. `4,598 refused: no free merchant` is the plan wanting more merchants than
+countries own -- the model saturating, not a defect. Vanilla's merchant AI is silenced at 0x1B831D.

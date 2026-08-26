@@ -26,11 +26,17 @@ collection is what the capital does with what arrives.
 **Measured.** `[nocollect]` lines: 37-38 save-start collectors converted on tick 1, 0 after;
 573 -> 8 capital merchants over 11 ticks; E1 ~660/660, E4 clean throughout (TESTING.md G block).
 
-**Residual.** At a Phi_w END node (genua, hangzhou) the engine has no outgoing entry to steer
-along, keeps `type = 0`, and pays a merchant there as a collector. Closed by D3 below (the model
-owns the collector division), not by giving the engine entries: appending reverse-end entries to
-the definition graph (relink's ALLOUT step) corrupts the heap through the engine's own consumers
-(measured: two deaths at tick 3, `ntdll` heap fault, with and without our AI acting).
+**Residual -- closed 2026-08-26.** At a Phi_w END node (genua, hangzhou) the engine has no
+outgoing entry, and four of OUR guards (relink demotion, syncrec skip, the no-collect hook and
+sweep) kept a merchant there at `type = 0` -- paid as a collector with the -50% non-capital
+penalty (user-reported). The guards dated from the 0xB5654D crash, since fixed by the slack-padded
+per-link buffer; the other engine check (0xB53C77) is a SIGNED compare that exits on index 0 at
+N = 0. All four relaxed: end-node merchants are written as transferring with index 0 like any
+reverse end. Measured: 10 monthly updates, no death, 0 merchants collect at end nodes, the AI
+plans genua, E1 664/664. Appending reverse-end entries to the definition graph (relink's ALLOUT)
+remains OFF: it corrupts the heap through the engine's own consumers (two deaths at tick 3,
+`ntdll` heap fault, with and without our AI acting). D3 additionally makes any merchant record's
+collector share 0, so the payment side never depends on the engine's type byte.
 
 ---
 

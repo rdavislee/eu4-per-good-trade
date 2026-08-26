@@ -198,6 +198,13 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   records where the model's division differs from the engine's, which the old order could not
   test.) The offline suite still routes with the aggregate power: a Phi_w-propagation control.
 
+  **End nodes (user-reported 2026-08-26, fixed pgt_h4v).** Merchants at genua were paid as
+  collectors with the -50% penalty because our own guards demoted every record at a zero-link node
+  to collect. Relaxed (see impl/DEPARTURES.md D1): 10 monthly updates, no death, 0 collectors at
+  end nodes, the AI plans genua, E1 664/664, E4 CLEAN, G1 33%. One engine-handled first-chance
+  AV at eu4.exe+0xB988D8 (a script-condition list with a -1 data pointer) was logged once; to be
+  counted across runs before it is attributed.
+
 ## F. Reorientation and responsiveness (console scenarios)
 
 - **F1. A flip is honoured end to end.** Pick a near-balanced link (§2.8), nudge development via

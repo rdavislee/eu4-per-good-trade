@@ -77,6 +77,16 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   in its direction gets no caravan power; the same merchant on a carrying link does (§1.7's added
   condition; fold §2.7 items 6 and 11 into this session — the recipient node question).
 
+  **Attempted 2026-08-26 (pgt_h3q, seated as Castile, paused 23 Dec 1444).** Clicking the steer
+  button on a Sevilla map panel produced the engine's own refusal tooltip -- "You can't steer where
+  you Collect from Trade" -- and the handler at 0x13FD5F0 never ran (`[click]` count stayed 0):
+  the button is disabled by the engine's collect rule before our prologue hook can see it. Both of
+  Castile's 1444 merchants collect (Sevilla = home, Bordeaux), so C2 through the panel needs a
+  TRANSFERRING merchant at a non-home node -- which is the player-side no-collect enforcement the
+  user deferred ("worry about making the game steer only later"). C1/C2 are blocked on that, not
+  on the hook. The AI path (G1) already exercises the same table + syncrec representation the
+  click writes.
+
 ## D. ★ Per-good view
 
 - **D1. ★ Click a province, get its good's network.** Click a cloves province. PASS: province

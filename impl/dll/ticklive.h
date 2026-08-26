@@ -475,7 +475,9 @@ inline int apply(uintptr_t mgr) {
         aiwire::g_flowmat = &flowmat;
         aiwire::g_shard = (int)(g_ticks.load() % 3);
         frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear();
-        { int pidx = aiwire::player_country_index(); la << "  [ai] player country index=" << pidx << (pidx < 0 ? " (observer: every country is AI)" : "") << (char)10;
+        { int pidx = aiwire::player_country_index();
+          bool live = false; for (auto& ns0 : st) for (auto& e0 : ns0.entries) if (e0.power > 0 && livetrade::country_index_of(e0.country) == pidx) live = true;
+          la << "  [ai] player country index=" << pidx << (pidx < 0 ? " (observer: every country is AI)" : (live ? " -- a LIVE trading country, excluded from the AI" : " -- holds no trade power anywhere (excluding it changes nothing)")) << (char)10;
           aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), pidx, la, &per_good); }
         PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes

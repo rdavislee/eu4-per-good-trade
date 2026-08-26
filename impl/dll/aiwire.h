@@ -243,91 +243,11 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             if (moved || due) changed.push_back({id, nd});
         }
         prev = cur;
-        // A TABLE ENTRY LIVES ONLY WHILE THE MERCHANT STANDS THERE. When vanilla moves it away
-        // the entry must go with it, or merge keeps converting the country's whole standing
-        // at that node from collecting to steering and syncrec keeps fabricating has_trader=1
-        // -- the country then earns nothing there, even at its own capital. assign::clear had
-        // no caller at all; this is it.
-        {
-            std::set<std::string> posted_at;
-            for (auto& [id, nd] : cur) { auto f = eng_to_field.find(nd); if (f != eng_to_field.end()) posted_at.insert(names[f->second]); }
-            std::vector<std::string> gone;
-            for (auto& [key, tgt] : assign::g_table)
-                if (key.first == c && !posted_at.count(key.second)) gone.push_back(key.second);
-            for (auto& n : gone) { assign::clear(c, n); g_vacated++; }
-        }
+        // (table entries for this country were vacated by the sweep above)
         if (changed.empty()) continue;
         triggers += (int)changed.size();
-        // build this country's live footprint
-        ai::Country ac;
-        ac.tag = std::to_string(c);
-        // collect_power is WHERE THE COUNTRY COLLECTS -- its home node and any collecting
-        // merchant -- not every node it holds power in. score_steer's `reach` sums survival
-        // from the far end to these nodes, so with every powered node in here a merchant was
-        // credited for pushing value toward places the country never collects at, and the
-        // assignments pointed away from home. power_at is kept separately for eligibility.
-        std::map<int, double> power_at;
-        for (int fn = 0; fn < (int)st.size(); fn++)
-            for (auto& e : st[fn].entries)
-                if (e.country == c) {
-                    if (e.power > 0) power_at[fn] = e.power;
-                    if (e.collects && e.power > 0) { ac.collect_power[fn] = e.power; ac.home_nodes.insert(fn); }
-                }
-        if (ac.collect_power.empty()) continue;     // collects nowhere: nothing to steer toward
-        // BFS FROM HOME over the undirected graph. An end n->m is worth evaluating only if it
-        // points homeward: dist(m) < dist(n), where dist is hops to the nearest collect node.
-        // Everything else is an edge away from home and can only ever score by accident.
-        std::vector<int> dist_home((int)names.size(), -1);
-        {
-            std::vector<int> q;
-            for (auto& [H, pw] : ac.collect_power) { dist_home[H] = 0; q.push_back(H); }
-            for (size_t qi = 0; qi < q.size(); qi++) {
-                int u = q[qi];
-                if (u < 0 || u >= (int)undirected_adj.size()) continue;
-                for (int v : undirected_adj[u])
-                    if (v >= 0 && v < (int)dist_home.size() && dist_home[v] < 0) { dist_home[v] = dist_home[u] + 1; q.push_back(v); }
-            }
-        }
-        // Homeward means "m is no further from a collect node than n is". Strict `<` rejected
-        // every end at a home node (dist 0 -- nothing is closer than 0), which is where most
-        // merchants stand: 15,683 ends rejected, 34 placed, measured. At home, steering toward
-        // another collect node (0 -> 0) is homeward; steering into the void (0 -> 1) is not.
-        // Away from home the strict form still holds, so a merchant a hop out never points
-        // further out.
-        auto homeward = [&](int n, int m) {
-            if (n < 0 || m < 0 || n >= (int)dist_home.size() || m >= (int)dist_home.size()) return false;
-            if (dist_home[m] < 0 || dist_home[n] < 0) return false;
-            return dist_home[n] == 0 ? dist_home[m] == 0 : dist_home[m] < dist_home[n];
-        };
-        // re-place every posted merchant: candidates are the link ends at the node it sits on
-        // ELIGIBLE NODES: every node where this country already holds power. That is the set the
-        // engine's own CanSteer (0xB5C010) accepts -- a record with power > 0 or a merchant present,
-        // else STEER_NO_POWER -- and it is where a merchant can actually be sent. Trade range is
-        // not read from the engine yet (spec 2.7 item 17 is an open probe), so this is the
-        // approximation; a country never holds power in a node it cannot reach.
-        std::vector<int> eligible;
-        for (auto& [fn, pw] : power_at) if (pw > 0) eligible.push_back(fn);
-        for (int fn = 0; fn < (int)st.size(); fn++)
-            for (auto& e : st[fn].entries)
-                if (e.country == c && e.power > 0 &&
-                    std::find(eligible.begin(), eligible.end(), fn) == eligible.end())
-                    eligible.push_back(fn);
-
-        // Who is ALREADY steering where, and this country's own power per node -- the
-        // competition the spec's steered split divides by. This country is excluded so its
-        // incumbent placement is not counted against it.
-        std::map<int, std::map<int, double>> steer_by_node;
-        std::map<int, double> my_power_by_node;
-        for (int fn = 0; fn < (int)st.size(); fn++)
-            for (auto& e : st[fn].entries) {
-                if (e.power <= 0) continue;
-                if (e.country == c) { my_power_by_node[fn] = e.power; continue; }
-                if (!e.collects && e.steer_to >= 0) steer_by_node[fn][e.steer_to] += e.power;
-            }
-        // ---- THE FRONTIER MODEL (src/frontier.h) ----------------------------------------
-        // Home is the trade capital. The network is home plus every node this country's placed
-        // merchants stand at. Candidates are the frontier edges, scored by flow x product of
-        // power shares along the network path home x share at home.
+        // (the old scorer's footprint / BFS / eligibility scaffolding stood here, computed and never
+        //  read once frontier::plan took over -- removed; reviewed as dead cost in the AI phase)
         int home = -1;
         for (int fn = 0; fn < (int)st.size() && home < 0; fn++)
             for (auto& e : st[fn].entries) if (e.country == c && e.is_capital) { home = fn; break; }

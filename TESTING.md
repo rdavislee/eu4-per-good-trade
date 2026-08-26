@@ -133,8 +133,11 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   the_moluccas (1.5 / 0.31 / 0.29 leaving it; 0.2 / 0.02 at malacca; 0.01 philippines) -- the
   single-source spot-check. RESIDUALS: (1) the player-facing province-click trigger and the
   trade-goods province colouring are not built -- the view is selected by marker only; (2) in the
-  per-good view each link still shows both panels, the reverse one reading 0.00, where D2 asks for
-  one direction only; (3) D3's sink list is not yet logged per view.
+  per-good view each link showed both panels, the reverse one reading 0.00, where D2 asks for
+  one direction only -- FIXED 2026-08-26 (pgt_h4a): the reverse-panel augmentation is gated on the
+  aggregate view; in the cloves view the layer rebuild adds no reverse panels (revpanel logs
+  nothing) and on return to the aggregate view it adds the 159 again; (3) D3 is logged per view
+  (`[D3] view=cloves sinks=3 with collected_share==1: 3`).
 
 ## E. ★ Monthly ticks — the money is right
 

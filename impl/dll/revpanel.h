@@ -38,6 +38,7 @@
 #include <vector>
 #include "detour.h"
 #include "livetrade.h"
+#include "viewmode.h"
 #include "console.h"
 
 namespace revpanel {
@@ -312,6 +313,12 @@ inline int add_reverse(std::ofstream* lg) {
     size_t n = (size_t)((e - b) / 8);
     if (n == 0 || n > 4096) return 0;
     if (n == g_last_forward * 2) return 0;              // already augmented this rebuild
+    // D2 (spec 1.12): a per-good graph orients every edge one way, so a per-good view shows ONE
+    // panel per link -- the forward one, which relink has already turned to that good's direction.
+    // The engine rebuilds this vector on every view change (install_active_orientation ->
+    // arrows::rebuild), so skipping the augmentation here is the whole switch: reverse panels
+    // vanish on entering a per-good view and come back on the next rebuild in the aggregate one.
+    if (viewmode::per_good()) { g_last_forward = 0; return 0; }
 
     uintptr_t type = linkview_type(ctl);
     if (!type || !livetrade::validate_region(type, 8)) return -1;

@@ -213,6 +213,13 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   ragusa .150; Tunis (#306) receives 2.61 power at genua from 0; 1,396 such new standings
   world-wide. Genoa's window shows Aragon and Provence steering from Genoa (the user's test).
 
+  **Review fixes 2026-08-26 (pgt_h4z).** The vanilla fifths are subtracted along the engine's LIVE
+  outgoing lists (refreshed every tick), the written val excludes subject transfers, and the node
+  totals (+0xC8/+0xD0/+0xD4) are written from the model. Ratchet instrument `[d3/sum]`: world
+  Sval(engine) 21427 -> 22043 -> 22113 with Srecv ~1695 flat and Spp ~8750 flat -- no feedback.
+  E1 663/663 x2, E4 CLEAN, G1 40%. E1 blind spot counted: 6 node-months with a pool and no paid
+  collector over 5 ticks.
+
 ## F. Reorientation and responsiveness (console scenarios)
 
 - **F1. A flip is honoured end to end.** Pick a near-balanced link (§2.8), nudge development via
@@ -322,6 +329,10 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   routed 30, orient 46, flowmat 50, AI 61, dispatch 74, incoming 96, linkvalue 100, aggregate 117.
   Perceptible at speed 5; the remaining cost is routing 29 goods (~25 ms), relink (~16 ms) and the
   aggregate write (~20 ms). NOT PASSED yet by the "imperceptible" wording.
+  **Re-measured 2026-08-26 (pgt_h4z, D3 v2 with the record writes on the heap path):** tick 86 ms
+  (routed 19, orient 4, AI 29, dispatch 5, incoming 6, aggregate+shares 11), worst frame gap
+  170-195 ms against vanilla's ~90. The added ~85 ms is one hitch of ~5 frames at 60 fps once a
+  month. Still not "imperceptible"; the remaining term is the AI phase.
 - **H4. Long-run soak.** Hands-off observer run, 1444 → 1600, autosaves on. PASS: no crash, no
   save corruption, no monotonic drift in world trade value beyond what development growth
   explains.

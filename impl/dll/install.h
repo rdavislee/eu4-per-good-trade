@@ -331,6 +331,7 @@ inline int install_links(const std::vector<livetrade::SimNode>& sim,
 // engine's own scorers and the daily AI all see it: +0x48 val, and +0x4C max_pow so the engine's
 // min(val, max_pow*max_demand) does not clip it. The engine recomputes both from scratch at the
 // start of every month (0xB51290/0xB51360), so this is a per-month overlay, not a drift.
+inline long long g_power_write_skipped = 0, g_unpaid_pools = 0;
 inline int write_power_to_records(const std::vector<livetrade::SimNode>& sim,
                                   const std::vector<std::string>& field_names,
                                   const std::vector<econ::NodeStandings>& st) {
@@ -343,17 +344,33 @@ inline int write_power_to_records(const std::vector<livetrade::SimNode>& sim,
         if (!node || !livetrade::validate_region(node + 0x18, 16)) continue;
         uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
         if (!rb || rc <= 0 || rc > 4096 || !livetrade::validate_region(rb, (size_t)rc * 0xC0)) continue;
+        double node_total = 0, coll_total = 0;
         for (auto& e : st[fn].entries) {
             int idx = livetrade::country_index_of(e.country);
-            if (idx < 0 || idx >= rc) continue;
+            if (idx < 0 || idx >= rc) { g_power_write_skipped++; continue; }
             uintptr_t rec = rb + (uintptr_t)idx * 0xC0;
-            int32_t v = (int32_t)(e.power * 1000.0 + 0.5); if (v < 0) v = 0;
+            if ((livetrade::fi(rec + 0x14) & 0xFFFF) != idx) { g_power_write_skipped++; continue; }   // slot identity
+            // val EXCLUDES the subject transfers: every engine reader adds (t_in - t_out) after the
+            // min(val, cap) (0xB573FA.., 0xB52107..; reviewed) and s.power already holds them, so the
+            // written val is P minus the transfers or they would count twice
+            double tr = (livetrade::fi(rec + 0x54) - livetrade::fi(rec + 0x50)) / 1000.0;
+            double vp = e.power - tr; if (vp < 0) vp = 0;
+            int32_t v = (int32_t)(vp * 1000.0 + 0.5);
             double md = livetrade::fi(rec + 0x44) / 1000.0;
-            int32_t mp = md > 0 ? (int32_t)(e.power / md * 1000.0 + 0.5) : v;
+            int32_t mp = md > 0 ? (int32_t)(vp / md * 1000.0 + 0.5) : v;
+            node_total += e.power; if (e.collects) coll_total += e.power;
             int32_t* pv = (int32_t*)(rec + 0x48); int32_t* pm = (int32_t*)(rec + 0x4C);   // heap, RW; write on change
             if (*pv != v) *pv = v;
             if (*pm != mp) *pm = mp;
             wrote++;
+        }
+        // the node totals every share reader divides by (0xB573A0 divides by +0xC8; 22 call sites
+        // incl. the AI and the UI): ours, or every displayed share is deflated. Zeroed by pass 4, so
+        // safe to own here.
+        if (livetrade::validate_region(node + 0xC8, 16)) {
+            int32_t* pc = (int32_t*)(node + 0xC8); int32_t tv = (int32_t)(node_total * 1000.0 + 0.5); if (*pc != tv) *pc = tv;
+            int32_t* pd = (int32_t*)(node + 0xD0); int32_t cv = (int32_t)(coll_total * 1000.0 + 0.5); if (*pd != cv) *pd = cv;
+            int32_t* pe = (int32_t*)(node + 0xD4); if (*pe != cv) *pe = cv;
         }
     }
     return wrote;
@@ -363,9 +380,7 @@ inline std::map<std::pair<int, std::string>, double> g_written_share;   // (coun
 inline std::vector<std::map<int, double>> g_share_by_node;   // [field node] country index -> share the MODEL computed this tick (E1 predicts from this)
 inline int install_power_shares(const std::vector<livetrade::SimNode>& sim,
                                 const std::vector<std::string>& field_names,
-                                const std::vector<econ::NodeStandings>& st,
-                                const std::vector<econ::GoodFlow>* per_good = nullptr,
-                                const std::vector<std::vector<std::vector<double>>>* power_g_all = nullptr) {
+                                const std::vector<econ::NodeStandings>& st) {
     // DEPARTURE D3: the country's share of the node's pool is the flow-weighted per-good collector
     // share, sum_g collected_g * P_c(n,g)/P_collect(n,g) / sum_g collected_g; a non-collector (a
     // merchant the table says steers, at an END node included) gets 0 whatever the engine thinks.
@@ -383,6 +398,12 @@ inline int install_power_shares(const std::vector<livetrade::SimNode>& sim,
         for (auto& e : E) if (e.collects && e.power > 0) collector_power += e.power;
         for (size_t i = 0; i < E.size(); i++) share[i] = (collector_power > 0 && E[i].collects && E[i].power > 0) ? E[i].power / collector_power : 0.0;
         for (size_t i = 0; i < E.size(); i++) if (share[i] > 0) g_share_by_node[fn][livetrade::country_index_of(E[i].country)] = share[i];
+        {   // E1 cannot see a pool nobody is paid from (it predicts 0 and the engine pays 0): count those
+            uintptr_t nobj = sim[it->second].obj;
+            double pool = (nobj && livetrade::validate_region(nobj + 0xB0, 4)) ? livetrade::fi(nobj + 0xB0) / 1000.0 : 0.0;
+            double ssum = 0; for (double x : share) ssum += x;
+            if (pool > 0.0005 && ssum <= 0) g_unpaid_pools++;
+        }
         // write EVERY raw slot: a record read_standings filters out (nothing there) could still carry
         // the engine's -1 (0xB52B93) and yield negative income in pass 10 (reviewed)
         uintptr_t node = sim[it->second].obj;

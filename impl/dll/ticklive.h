@@ -315,6 +315,12 @@ inline int apply(uintptr_t mgr) {
         std::ofstream lh(g_log, std::ios::app);
         lh << "[H1] tick fingerprint gen " << g_plan.generation << ": Phi_w edges=" << es.size() << " hash=" << std::hex << h << std::dec << (char)10;
     }
+    {   // the ENGINE's live outgoing lists, this tick -- the graph it propagated along and the array
+        // its steer ordinals index (reviewed: the attach-time list was stale after every relink)
+        int links_seen = 0;
+        auto lt = install::live_link_targets(g_plan.names, install::g_id_to_name, links_seen);
+        if (links_seen > 0) g_plan.link_targets = lt;
+    }
     auto st = install::read_standings_field(sim, g_plan.names, g_plan.link_targets, collect_nodes);
     // spec 1.7: merchants assigned to a link END the engine has no index for (a link drawn INTO
     // this node) live in our own table and are merged on top of the engine's own assignments.
@@ -350,20 +356,22 @@ inline int apply(uintptr_t mgr) {
         // orientation (Phi_w, or the selected good's graph in a per-good view), NOT the attach-time link
         // list (reviewed: relink moves entries between definitions on every flip). Signed: a deficit
         // (subject transfers) is carried into the per-good power and clamped there.
-        const std::vector<std::pair<int, int>>& installed =
-            (viewmode::per_good() && viewmode::g_selected < (int)g_plan.graphs.size()) ? g_plan.graphs[viewmode::g_selected] : g_plan.phi_w;
-        std::vector<std::vector<int>> downs(g_plan.N);
-        for (auto& [u, v] : installed) if (u >= 0 && u < g_plan.N) downs[u].push_back(v);
-        for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++)
+        // the engine propagated along ITS outgoing lists (refreshed above); subtract along the same
+    const std::vector<std::vector<int>>& downs = g_plan.link_targets;
+    for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++)
             for (auto& e : st[fn].entries) { e.own = e.power - econ::prop_from(pp_at, downs[fn], e.country); e.has_own = true; }
 }
 {   // D3 v2: the fifth split among each node's neighbours by price-weighted goods, along each good's graph
     auto split = econ::propagation_split(g_plan.N, g_plan.graphs, g_plan.prices);
     auto recv  = econ::propagation_received(g_plan.N, pp_at, split);
+    double s_val = 0, s_own = 0, s_pp = 0, s_recv = 0;
+    for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++) { for (auto& e : st[fn].entries) { s_val += e.power; s_own += e.own; s_pp += e.pp; } if (fn < (int)recv.size()) for (auto& [c, r] : recv[fn]) s_recv += r; }
     int added  = econ::apply_split_propagation(g_plan.N, st, recv);
+    double s_after = 0; for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++) for (auto& e : st[fn].entries) s_after += e.power;
     int wrote_p = livetrade::marker_present("NOWRITE") ? 0 : install::write_power_to_records(sim, g_plan.names, st);
     std::ofstream lp(g_log, std::ios::app);
     lp << "  [d3] split propagation: " << added << " standings added where a country receives power it had none of; " << wrote_p << " record powers written" << (char)10;
+    lp << "  [d3/sum] Sval(engine)=" << s_val << " Sown=" << s_own << " Srecv=" << s_recv << " Spp=" << s_pp << " Sval(model)=" << s_after << "   (a ratchet would show Sval(engine) rising by ~Srecv tick over tick with Spp flat)" << (char)10;
     // PROBE (pgt.D3PROBE = node name): who receives what there
     if (livetrade::marker_present("D3PROBE")) {
         std::string want; { std::ifstream f(livetrade::self_dir() + std::string(1, (char)92) + "pgt.D3PROBE"); std::getline(f, want); }
@@ -388,8 +396,7 @@ inline int apply(uintptr_t mgr) {
     }
     }
 
-    std::vector<std::vector<std::vector<double>>> power_g_all;    // D3: per-good power, parallel to per_good
-    power_g_all.reserve(g_plan.graphs.size());
+    
     std::vector<std::vector<double>> inj_field;
     per_good.reserve(g_plan.graphs.size());
     for (size_t k = 0; k < g_plan.graphs.size(); k++) {
@@ -660,7 +667,7 @@ inline int apply(uintptr_t mgr) {
         // is made from the model's own shares (not a read-back), so E1 tests write + pass 10 + pool.
         if (!livetrade::marker_present("NOSHARE")) {
             int wrote_sh = install::install_power_shares(sim, g_plan.names, st);
-            std::ofstream lsh(g_log, std::ios::app); lsh << "  [share] wrote " << wrote_sh << " power fractions from the per-good collector shares" << (char)10;
+            std::ofstream lsh(g_log, std::ios::app); lsh << "  [share] wrote " << wrote_sh << " power fractions; pools with no paid collector so far=" << install::g_unpaid_pools << "; power writes skipped (slot)=" << install::g_power_write_skipped << (char)10;
             predict_income_from_model(pool_monthly);
         } else predict_income(sim, g_plan.names, pool_monthly);
         // E2's 'before' is now sampled inside pass 10 itself (money.h pass10_wrapper)

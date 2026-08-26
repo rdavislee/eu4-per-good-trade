@@ -22,6 +22,7 @@
 #include <cmath>
 #include <deque>
 #include <map>
+#include <set>
 #include <vector>
 
 namespace econ {
@@ -50,9 +51,12 @@ struct NodeStandings { std::vector<Standing> entries; };
 // pp_at[m] maps country -> provincial power at m (built once per tick by pp_index).
 constexpr double PROP_THRESHOLD = 2.0;
 constexpr double PROP_DIVIDER   = 5.0;
+inline int g_country_key_variants = 0;   // country indices seen under more than one raw tag dword (would split a country)
 inline std::vector<std::map<int, double>> pp_index(int N, const std::vector<NodeStandings>& st) {
     std::vector<std::map<int, double>> pp_at(N);
-    for (int n = 0; n < N && n < (int)st.size(); n++) for (auto& e : st[n].entries) if (e.pp > 0) pp_at[n][e.country] = e.pp;
+    std::map<int, std::set<int>> by_idx;
+    for (int n = 0; n < N && n < (int)st.size(); n++) for (auto& e : st[n].entries) { if (e.pp > 0) pp_at[n][e.country] = e.pp; by_idx[e.country & 0xFFFF].insert(e.country); }
+    g_country_key_variants = 0; for (auto& [i, ks] : by_idx) if (ks.size() > 1) g_country_key_variants++;
     return pp_at;
 }
 inline double prop_from(const std::vector<std::map<int, double>>& pp_at, const std::vector<int>& downs, int country) {
@@ -124,25 +128,7 @@ inline int apply_split_propagation(int N, std::vector<NodeStandings>& st, const 
     return added;
 }
 
-inline std::vector<std::vector<double>> per_good_power(int N, const std::vector<std::pair<int, int>>& directed,
-                                                       const std::vector<NodeStandings>& st,
-                                                       const std::vector<std::map<int, double>>& pp_at) {
-    std::vector<std::vector<int>> outs(N);
-    for (auto& [u, v] : directed) if (u >= 0 && u < N) outs[u].push_back(v);
-    std::vector<std::vector<double>> P(N);
-    for (int n = 0; n < N && n < (int)st.size(); n++) {
-        P[n].resize(st[n].entries.size());
-        for (size_t i = 0; i < st[n].entries.size(); i++) {
-            const Standing& e = st[n].entries[i];
-            double base = e.has_own ? e.own : e.power;
-            double v = base + prop_from(pp_at, outs[n], e.country);
-            if (v < 0) v = 0;                                   // clamp the FINAL power, never the deficit (reviewed)
-            if (e.merchant_floor && v < 2.0) v = 2.0;           // the merchant-present bonus, on the final power
-            P[n][i] = v;
-        }
-    }
-    return P;
-}
+// (per_good_power -- D3 v1, per-good power -- removed; power is per node, see propagation_split)
 
 // Result of routing one good.
 struct GoodFlow {

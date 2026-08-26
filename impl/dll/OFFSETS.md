@@ -362,3 +362,21 @@ call from pass 10: category 2 (trade) fires once PER RECORD (52,614 calls/month 
 and the sum booked to a country equals `SUM rec.money` to the cent (Ming: 8.689 vs 8.69). Yet
 `+0x68` moved only 0.253 for Ming -- it is drained or reset by something else within the month.
 Use the ledger, or the booking sum, never `+0x68`, for any treasury reconciliation.
+
+## Corrections from the D3 v2 review (2026-08-26, disassembly)
+
+- The monthly driver `0xB4BA90` calls `0xB51360` only (at `0xB4BD44`); `0xB51290` is NOT on the
+  monthly path (its callers are `0xB4B6A7` and `0xB510DF`). The per-record reset `0xB5DAB0` zeroes
+  +0x1C/+0x20, +0x28/+0x2C, +0x30, +0x34/+0x38, +0x3C/+0x40, +0x4C/+0x50, +0x54, +0x58/+0x5C -- not
+  +0x44 or +0x48. What stops a written `val` from surviving a month is pass 5's tail: the loop at
+  `0xB52090` writes `+0x44 = max(10, 1000+mod)` (`0xB520CE`) and `+0x48 = max(0, max_pow*max_demand/1000)`
+  (`0xB52114`) for every country at every node, repeated at pass 9's head (`0xB52209`/`0xB52220`).
+- `val` (+0x48) EXCLUDES the subject transfers: pass 5 stores the bare cap and every reader adds
+  `t_in - t_out` afterwards (`0xB573FA..0xB57411`, `0xB52107..0xB5210D`, `0xB52212..0xB5221A`).
+  install.h's reading was right; propprobe's decomposition was wrong on that point.
+- `0xB573A0` divides a country's power by `node+0xC8` (the node total); 22 call sites (the AI at
+  `0x1B967B`, the trade-conflict CB `0x38D97E..0x38DA44`, pass 10 `0xB5884C`, SetTrader scoring
+  `0xB5987F`, UI `0x13D2B9A`, `0x13D2F42`, `0x13D914C`, `0x13D9913`). +0xC8/+0xD0/+0xD4 are zeroed
+  in pass 4 (`0xB513CF`/`0xB513D6`); the DLL now writes them from the model.
+- Pass 5 clamps `max_demand` to >= 10 permille (`0xB520C9-0xB520CE`), so a zero max_demand never
+  reaches the hook.

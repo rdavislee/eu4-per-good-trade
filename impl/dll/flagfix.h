@@ -116,11 +116,68 @@ inline bool steers_reverse_here(int country_index, const std::string& node_key, 
 // forward link #0 after all -- so there is nothing to remove, and this hook is a guard that
 // costs one list-head read per panel per frame. Kept so a future engine path that does draw
 // them is corrected rather than silently shown.
+// THE STEER BUTTON'S STATE (user-reported 2026-08-26). The panel Update (0x13FCD80) derives its own
+// link ordinal with the same outgoing-list search the click handler uses (0x13FCE2A..0x13FCE56,
+// zero-initialised at 0x13FCDF6, written only on a hit) and lights the button iff rec+0xA8 equals
+// it (0x13FD0F5). Our reverse views carry a synthetic entry that is in no outgoing vector, so the
+// search misses and the ordinal is 0 -- and a reverse-end assignment IS +0xA8 = 0 (syncrec). Hence
+// every reverse panel of the node, plus forward link #0, lit up together. The frame is an int32
+// at steer_button+0x64 written through vt[0xA8] SetFrame (0x13A8D80): 1 = steering, 2 = not; the
+// tooltip (0x13FBD30) re-reads that field, so correcting it corrects both. The truth is the table.
+constexpr int WIN_FIND_BUTTON = 0x68;    // window vtbl: FindButton(const char*)
+constexpr int BTN_SETFRAME    = 0xA8;    // button vtbl: SetFrame(int)
+constexpr int BTN_FRAME       = 0x64;    // int32 frame: 1 steering here, 2 not
+inline std::string g_log;   // set by install(); empty = self_dir()/per-good-trade.log
+inline uint64_t g_frames_forced = 0, g_sb_entered = 0, g_sb_nokey = 0, g_sb_want0 = 0, g_sb_nowin = 0, g_sb_nobtn = 0, g_sb_curbad = 0, g_sb_same = 0;
+inline int player_index() {
+    uintptr_t g = livetrade::game_singleton();
+    if (!g || !livetrade::validate_region(g + 0x1E60, 16)) return -1;
+    uint8_t mode = livetrade::fb(g + 0x1E66), obs = livetrade::fb(g + 0x1E6F);
+    uint64_t h = (mode == 7 && obs != 0) ? livetrade::fq(g + 0x1E68) : livetrade::fq(g + 0x1E60);
+    return h ? (int)(int16_t)(h >> 32) : -1;
+}
+inline void fix_steer_button(uintptr_t panel, uintptr_t lv, const revpanel::RevInfo* ri) {
+    std::string node_key, far_key;
+    if (ri) { node_key = livetrade::def_key(ri->owner_def); far_key = livetrade::def_key(ri->other_def); }
+    else {
+        if (!livetrade::validate_region(lv + revpanel::LV_SRCDEF, 16)) return;
+        uintptr_t src = livetrade::fq(lv + revpanel::LV_SRCDEF), entry = livetrade::fq(lv + revpanel::LV_ENTRY);
+        if (!src || !entry || !livetrade::validate_region(entry + 0x30, 8)) return;
+        node_key = livetrade::def_key(src); far_key = livetrade::def_key(livetrade::fq(entry + 0x30));
+    }
+    g_sb_entered++;
+    if (node_key.empty() || far_key.empty()) { g_sb_nokey++; return; }
+    int pidx = player_index();
+    int want = 0;                                   // 0: leave the engine's answer alone
+    if (pidx >= 0)
+        for (auto& [k, tgt] : assign::g_table)
+            if (k.second == node_key && livetrade::country_index_of(k.first) == pidx) { want = (tgt == far_key) ? 1 : 2; break; }
+    if (!want && ri) want = 2;                      // no table entry: the 0 == 0 match on a reverse panel means nothing
+    if (!want) { g_sb_want0++; return; }
+    uintptr_t win = livetrade::validate_region(panel + PANEL_WINDOW, 8) ? livetrade::fq(panel + PANEL_WINDOW) : 0;
+    uintptr_t wvt = (win && livetrade::validate_region(win, 8)) ? livetrade::fq(win) : 0;
+    if (!wvt || !livetrade::validate_region(wvt + WIN_FIND_BUTTON, 8)) { g_sb_nowin++; return; }
+    auto fb = (FnFindBox)livetrade::fq(wvt + WIN_FIND_BUTTON);
+    uintptr_t btn = fb ? fb(win, "steer_button") : 0;
+    if (!btn || !livetrade::validate_region(btn, 0x70)) { g_sb_nobtn++; return; }
+    int32_t cur = livetrade::fi(btn + BTN_FRAME);
+    // MEASURED: on our reverse panels the engine never writes the frame at all (its Update sets 1/2
+    // only on the path it takes for links it can index), so the field reads 0 -- and the tooltip
+    // treats anything but 2 as "steering". 0 is therefore a legitimate starting state to overwrite.
+    if (cur != 0 && cur != 1 && cur != 2) { g_sb_curbad++; if (g_sb_curbad < 4) { std::ofstream lg(g_log.empty() ? livetrade::self_dir() + std::string(1, (char)92) + "per-good-trade.log" : g_log, std::ios::app); lg << "  [steerbtn] button frame field reads " << cur << " at 0x" << std::hex << btn << std::dec << " (not 1/2)" << (char)10; } return; }
+    if (cur == want) { g_sb_same++; return; }
+    uintptr_t bvt = livetrade::fq(btn);
+    if (!bvt || !livetrade::validate_region(bvt + BTN_SETFRAME, 8)) return;
+    ((void (__fastcall*)(uintptr_t, int))livetrade::fq(bvt + BTN_SETFRAME))(btn, want);
+    g_frames_forced++;
+}
+
 inline void __fastcall update_hook(uintptr_t panel) {
     if (g_orig) g_orig(panel);                  // the engine builds the row exactly as it wants
     if (!panel || !livetrade::validate_region(panel + PANEL_LINKVIEW, 8)) return;
     uintptr_t lv = livetrade::fq(panel + PANEL_LINKVIEW);
     if (!lv) return;
+    fix_steer_button(panel, lv, revpanel::reverse_info(lv));   // before any early return below
     if (const revpanel::RevInfo* ri = revpanel::reverse_info(lv)) {
         // A REVERSE PANEL'S ROW IS BUILT BY US, FROM THE TABLE. The engine cannot build it: every
         // reverse end at a node is +0xA8 = 0 and the engine's ordinal search collapses every

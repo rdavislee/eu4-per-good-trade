@@ -439,6 +439,13 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
                 *(uintptr_t*)(e + E_TARGET) = fd->second.obj;
                 write_str(e + E_NAME, fd->second.name);
                 *(int32_t*)(e + 0x38) = (int32_t)k;     // its own index -- steer_command uses it
+                // NO RIBBON on an appended entry: the arrow layer (0x10AFC05) and the panel builder
+                // skip entries whose polyline is empty, so the drawn map stays exactly Phi_w and the
+                // reverse panels stay revpanel's. What the entry adds is a STEER ORDINAL for this
+                // reverse end (syncrec can write it, the record can hold it, the node window lists
+                // it with a button) -- which is what an end node like genua never had.
+                *(uintptr_t*)(e + E_POLY_B) = 0;
+                *(uintptr_t*)(e + E_POLY_E) = 0;
                 k++; extra++;
             }
             if (k > mine.size())
@@ -451,7 +458,7 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
     // test's own statement ("the arrows are the installed Phi_w") checked on the engine's data,
     // not on ours. Named spot-checks are the ones the test quotes.
     {
-        std::set<NamePair> engine;
+        std::set<NamePair> engine; int appended = 0;
         std::map<std::string, std::string> outs, ins;
         for (auto& [idx, di] : g_defs) {
             if (idx == 0) continue;
@@ -459,6 +466,7 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
             for (uintptr_t e = ob; ob && oe > ob && e + E_STRIDE <= oe; e += E_STRIDE) {
                 uintptr_t t = livetrade::fq(e + E_TARGET);
                 if (!t || !livetrade::validate_region(t + D_INDEX, 4)) continue;
+                if (livetrade::fq(e + E_POLY_B) == 0) { appended++; continue; }   // an ALLOUT reverse-end entry (no ribbon) is not a drawn edge
                 int ti = livetrade::fi(t + D_INDEX);
                 if (!g_defs.count(ti)) continue;
                 engine.insert({di.name, g_defs[ti].name});
@@ -466,12 +474,12 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
                 ins[g_defs[ti].name] += di.name + " ";
             }
         }
-        int missing = 0, extra_e = 0;
+        int missing = 0, extra_e = 0;   // appended counted above
         for (auto& d : desired) if (!engine.count(d)) missing++;
         for (auto& e : engine) if (!desired.count(e)) extra_e++;
         log << "[B1] engine outgoing edges=" << engine.size() << " installed graph edges=" << desired.size()
             << " missing=" << missing << " extra=" << extra_e
-            << (missing == 0 && extra_e == 0 ? "  EQUAL" : "  MISMATCH") << (char)10;
+            << " appended reverse-end entries=" << appended << (missing == 0 && extra_e == 0 ? "  EQUAL" : "  MISMATCH") << (char)10;
         log << "[B1] genua: OUT [ " << outs["genua"] << "] IN [ " << ins["genua"] << "]  hangzhou: OUT [ "
             << outs["hangzhou"] << "]  english_channel: OUT [ " << outs["english_channel"] << "]  champagne: OUT [ "
             << outs["champagne"] << "]" << (char)10;

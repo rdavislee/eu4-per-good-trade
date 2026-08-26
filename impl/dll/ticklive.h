@@ -616,6 +616,7 @@ inline int apply(uintptr_t mgr) {
         install::install_power_shares(sim, g_plan.names, st);
     PH("aggregate+shares");
     { std::ofstream lgp(g_log, std::ios::app); lgp << "[tick/phases]" << ph_line << (char)10; }
+    { std::ofstream ls(g_log, std::ios::app); ls << "  [steerbtn] entered=" << flagfix::g_sb_entered << " nokey=" << flagfix::g_sb_nokey << " want0=" << flagfix::g_sb_want0 << " nowin=" << flagfix::g_sb_nowin << " nobtn=" << flagfix::g_sb_nobtn << " curbad=" << flagfix::g_sb_curbad << " same=" << flagfix::g_sb_same << " forced=" << flagfix::g_frames_forced << (char)10; }
     return wrote;
 }
 

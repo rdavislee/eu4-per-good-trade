@@ -93,6 +93,13 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   over -- not the def pointer (LISTDUMP resolves those) and not the def key. Next probe: dump the
   raw 0x78-byte outgoing entries and the def incoming vectors of sevilla before and after
   relink::apply and diff them field by field.
+  RESOLVED 2026-08-26 (disassembly, 0x13D5560 / 0x13CC740): the tab label is the neighbour
+  definition's localised name (def+0x30) gated by CCountry::HasDiscoveredTradeNode (0x3755E0):
+  "?????" is VANILLA's rendering of an undiscovered node. Sevilla's Phi_w-incoming neighbours are
+  ivory_coast and carribean_trade, none of whose provinces Castile has discovered in 1444; relink
+  only moved the discovered neighbours (Tunis, Safi) to the outgoing side. The RELINK-off run that
+  named them was in OBSERVER mode, whose type-7 handle passes the gate. Not a defect. (If tabs
+  should ignore fog of war: one byte at 0x13CC916, 75 7E -> EB 7E.)
 
   **C2 MEASURED 2026-08-26 (pgt_h3v, seated as Castile, no-collect enforced).** With the sweep
   having flipped the Bordeaux merchant to transfer, clicking the steer button of the reverse panel
@@ -107,6 +114,19 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   grain, livestock send nothing to ivory_coast). `[flow] bordeaux -> ivory_coast 0.0064`
   ducats/month. PASS. (C1: the button that works on both groups is the MAP PANEL steer button;
   the node window's incoming tabs remain vanilla -- unnamed here, see above, and buttonless.)
+
+  **Steer-button state (user-reported 2026-08-26, fixed pgt_h4k/h4l).** With the player's merchant on
+  a reverse end, every panel of the node (and forward link #0) showed "We are currently steering";
+  with it on forward link #0, every reverse panel did. Traced (0x13FCD80): the panel derives its
+  ordinal by the same outgoing-list search as the click handler, which misses on our reverse views
+  and collapses to 0 -- and a reverse-end record IS +0xA8 = 0; on reverse panels the engine never
+  writes the button frame at all (reads 0) and the tooltip treats anything but 2 as steering. Fix:
+  after the engine's Update, flagfix sets steer_button+0x64 via vt[0xA8] from the assignment table
+  (1 iff the table target is this panel's far node; 2 on any reverse panel without one). Measured:
+  ~17,800 frames corrected per tick, the user confirmed only the clicked edge shows the merchant.
+  Follow-up (same session): a FORWARD click only posted the engine command and left the reverse
+  table entry in place, so the merchant could not be moved back to Champagne -- clickfix now writes
+  the table for forward clicks too (pgt_h4l).
 
 ## D. ★ Per-good view
 

@@ -389,7 +389,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                     uintptr_t b2 = livetrade::fq(def + 0x98), e2 = livetrade::fq(def + 0xA0);
                     for (uintptr_t p2 = b2; b2 && e2 > b2 && p2 + 0x78 <= e2; p2 += 0x78) {
                         uintptr_t t = livetrade::validate_region(p2 + 0x30, 8) ? livetrade::fq(p2 + 0x30) : 0;
-                        if (t && livetrade::def_key(t) == names[pl.target]) { outgoing = true; break; }
+                        if (t && livetrade::def_key(t) == names[pl.target] && livetrade::fq(p2 + 0x58) != 0) { outgoing = true; break; }   // a ribbon-less (appended) entry is a reverse end
                     }
                 }
             }

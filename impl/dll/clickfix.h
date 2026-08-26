@@ -67,20 +67,33 @@ inline void on_click(detour::Regs* r) {
     uintptr_t lv = livetrade::fq(panel + PANEL_LINKVIEW);
     if (!lv) return;
     const revpanel::RevInfo* ri = revpanel::reverse_info(lv);
-    if (!ri) return;                                   // a forward panel: the engine is right
     uint64_t h = player_handle();
     if (!h) return;
     int cidx = (int)(int16_t)(h >> 32);
     if (cidx < 0) return;
-    std::string node  = livetrade::def_key(ri->owner_def);
-    std::string other = livetrade::def_key(ri->other_def);
+    // BOTH kinds of panel write the table. The table is the source of truth for the model, for
+    // syncrec and for the steer button, so a FORWARD click that only posted the engine command left
+    // a stale reverse entry behind: the player could move a merchant onto a reverse end but never
+    // back onto Champagne (user-reported 2026-08-26). A forward click writes (node -> far node);
+    // syncrec then writes the matching real ordinal, agreeing with what the engine just posted.
+    uintptr_t owner_def = 0, other_def = 0;
+    if (ri) { owner_def = ri->owner_def; other_def = ri->other_def; }
+    else {
+        if (!livetrade::validate_region(lv + revpanel::LV_SRCDEF, 16)) return;
+        owner_def = livetrade::fq(lv + revpanel::LV_SRCDEF);
+        uintptr_t entry = livetrade::fq(lv + revpanel::LV_ENTRY);
+        if (!entry || !livetrade::validate_region(entry + 0x30, 8)) return;
+        other_def = livetrade::fq(entry + 0x30);
+    }
+    std::string node  = livetrade::def_key(owner_def);
+    std::string other = livetrade::def_key(other_def);
     if (node.empty() || other.empty()) return;
     // the table key is the raw tag dword; its low 16 bits are the index, which is all the
     // routing and syncrec ever extract from it
     {   // no merchant assignment at the player's OWN trade capital (user rule); the engine record
         // of this country at this node carries has_capital at +0xAD
         uintptr_t nobj = 0;
-        for (auto& s0 : livetrade::read_sim_nodes()) if (s0.obj && livetrade::validate_region(s0.obj + 0xA8, 8) && livetrade::fq(s0.obj + 0xA8) == ri->owner_def) { nobj = s0.obj; break; }
+        for (auto& s0 : livetrade::read_sim_nodes()) if (s0.obj && livetrade::validate_region(s0.obj + 0xA8, 8) && livetrade::fq(s0.obj + 0xA8) == owner_def) { nobj = s0.obj; break; }
         if (nobj && livetrade::validate_region(nobj + 0x18, 16)) {
             uintptr_t rb = livetrade::fq(nobj + 0x18); int rc = livetrade::fi(nobj + 0x24);
             int idx = cidx & 0xFFFF;
@@ -95,7 +108,7 @@ inline void on_click(detour::Regs* r) {
     g_reverse_clicks++;
     if (!g_log.empty()) {
         std::ofstream lg(g_log, std::ios::app);
-        lg << "  [click] player country#" << cidx << " assigned a merchant at " << node
+        lg << "  [click] player country#" << cidx << " assigned a merchant at " << node << (ri ? "" : " (FORWARD panel)")
            << " to steer the REVERSE end toward " << other << " (table entry written; the engine's"
            << " own command posts +0xA8=0, which is this end's representation)" << (char)10;
     }

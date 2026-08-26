@@ -36,6 +36,7 @@
 #include "flagfix.h"
 #include "clickfix.h"
 #include "nocollect.h"
+#include "crashlog.h"
 #include "envoy.h"
 #include "aisilence.h"
 #include "ticklive.h"
@@ -422,6 +423,11 @@ static void run_install(const std::string& logpath) {
                     // ...and vanilla's own merchant AI is silenced so it cannot undo ours.
                     // ...and no merchant may collect, for the player too: every SetTrader with
                     // hasTrader is forced to transfer unless the record is a capital (nocollect.h).
+                    {   std::string crerr;
+                        if (crashlog::install(livetrade::self_dir() + std::string(1, (char)92) + "pgt_crash.log", livetrade::module_base(), &crerr)) {
+                            log << "  crash log armed (vectored handler -> pgt_crash.log; survives stack overflow)" << (char)10;
+                            crashlog::selftest();   // must produce a SELFTEST line in pgt_crash.log, or the logger is decoration
+                        } else log << "  crash log NOT armed: " << crerr << (char)10; }
                     std::string ncerr;
                     if (nocollect::install(&ncerr))
                         log << "  no-collect enforced at SetTrader (prologue hook on the OUTER function 0xB596E0)" << (char)10;

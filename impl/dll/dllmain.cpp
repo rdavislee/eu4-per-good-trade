@@ -37,6 +37,7 @@
 #include "clickfix.h"
 #include "nocollect.h"
 #include "crashlog.h"
+#include "aiguard.h"
 #include "envoy.h"
 #include "aisilence.h"
 #include "ticklive.h"
@@ -433,6 +434,10 @@ static void run_install(const std::string& logpath) {
                         log << "  no-collect enforced at SetTrader (prologue hook on the OUTER function 0xB596E0)" << (char)10;
                     else
                         log << "  no-collect NOT installed: " << ncerr << (char)10;
+                    if (livetrade::marker_present("ALLOUT")) {   // the light-ship AI reads a null record array once reverse ends exist
+                        std::string agerr;
+                        if (!aiguard::install(&agerr, &log)) log << "  light-ship AI guard NOT installed: " << agerr << (char)10;
+                    }
                     std::string serr;
                     if (aisilence::install(&serr))
                         log << "  vanilla merchant AI silenced (call at 0x1B831D -> NOPs)" << (char)10;

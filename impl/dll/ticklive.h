@@ -44,6 +44,8 @@
 #include "envoy.h"
 #include "nocollect.h"
 #include "igiprobe.h"
+#include "aiguard.h"
+#include "propprobe.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -524,6 +526,8 @@ inline int apply(uintptr_t mgr) {
     // NO-COLLECT ENFORCEMENT runs every tick, AI marker or not: a save loaded mid-session brings
     // its collecting merchants back through the deserializer, which the hook never sees.
     { std::ofstream lnc(g_log, std::ios::app); nocollect::sweep(sim, &lnc); nocollect::report(lnc); }
+    if (livetrade::marker_present("ALLOUT")) { std::ofstream lag(g_log, std::ios::app); aiguard::null_record_nodes(sim, &lag); }
+    if (livetrade::marker_present("PROPPROBE")) { std::ofstream lpp(g_log, std::ios::app); propprobe::run(sim, lpp); }
     PH("ai+dispatch");
     if (livetrade::marker_present("NOWRITE")) { PH("nowrite"); std::ofstream lg0(g_log, std::ios::app); lg0 << "[tick/phases]" << ph_line << " (NOWRITE: engine writes skipped)" << (char)10; return 0; }
     outlinks::install_incoming(sim, g_plan.names, gross, install::g_id_to_name);

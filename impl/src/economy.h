@@ -30,12 +30,55 @@ namespace econ {
 struct Standing {
     int country;        // engine country index
     double power;       // modified trade power at this node (merchant bonuses etc. included)
+    // DEPARTURE D3 (impl/DEPARTURES.md): power split into what is local to this node and what
+    // vanilla propagated here along Phi_w, so the propagation can be redone per good.
+    double own = 0;     // power minus the vanilla fifths received along the INSTALLED graph (signed: a deficit is carried, not clamped)
+    bool has_own = false;      // own computed (else per-good power falls back to power)
+    bool merchant_floor = false;   // a table-owned merchant stands here: final per-good power >= 2
+    double pp = 0;      // provincial power here (rec+0x28), the source of propagation
     bool collects;      // collecting here: home node, or a merchant collecting
     int steer_to;       // link end this country's merchant steers toward (node index), or -1
     bool is_capital = false;   // this node is the country's trade capital (home)
 };
 
 struct NodeStandings { std::vector<Standing> entries; };
+
+// DEPARTURE D3: per-good trade power. The vanilla rule (spec 1.9, measured on the engine's records
+// 2026-08-26: FULL fifth, threshold 2) sends a fifth of a country's PROVINCIAL power at m to every
+// node immediately upstream of m along Phi_w. Here the same fifth travels along GOOD g's graph:
+//     P_c(n, g) = own_c(n) + sum over m with n -> m in g's graph of [pp_c(m) >= 2] * pp_c(m) / 5
+// pp_at[m] maps country -> provincial power at m (built once per tick by pp_index).
+constexpr double PROP_THRESHOLD = 2.0;
+constexpr double PROP_DIVIDER   = 5.0;
+inline std::vector<std::map<int, double>> pp_index(int N, const std::vector<NodeStandings>& st) {
+    std::vector<std::map<int, double>> pp_at(N);
+    for (int n = 0; n < N && n < (int)st.size(); n++) for (auto& e : st[n].entries) if (e.pp > 0) pp_at[n][e.country] = e.pp;
+    return pp_at;
+}
+inline double prop_from(const std::vector<std::map<int, double>>& pp_at, const std::vector<int>& downs, int country) {
+    double p = 0;
+    for (int m : downs) { if (m < 0 || m >= (int)pp_at.size()) continue; auto it = pp_at[m].find(country); if (it != pp_at[m].end() && it->second >= PROP_THRESHOLD) p += it->second / PROP_DIVIDER; }
+    return p;
+}
+inline std::vector<std::vector<double>> per_good_power(int N, const std::vector<std::pair<int, int>>& directed,
+                                                       const std::vector<NodeStandings>& st,
+                                                       const std::vector<std::map<int, double>>& pp_at) {
+    std::vector<std::vector<int>> outs(N);
+    for (auto& [u, v] : directed) if (u >= 0 && u < N) outs[u].push_back(v);
+    std::vector<std::vector<double>> P(N);
+    for (int n = 0; n < N && n < (int)st.size(); n++) {
+        P[n].resize(st[n].entries.size());
+        for (size_t i = 0; i < st[n].entries.size(); i++) {
+            const Standing& e = st[n].entries[i];
+            double base = e.has_own ? e.own : e.power;
+            double v = base + prop_from(pp_at, outs[n], e.country);
+            if (v < 0) v = 0;                                   // clamp the FINAL power, never the deficit (reviewed)
+            if (e.merchant_floor && v < 2.0) v = 2.0;           // the merchant-present bonus, on the final power
+            P[n][i] = v;
+        }
+    }
+    return P;
+}
 
 // Result of routing one good.
 struct GoodFlow {
@@ -102,7 +145,8 @@ inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
                       const std::vector<NodeStandings>& standings,
                       const std::map<int, std::vector<int>>& collect_nodes,
                       double added_value_modifier,
-                      const std::vector<std::vector<char>>* precomputed_reach = nullptr) {
+                      const std::vector<std::vector<char>>* precomputed_reach = nullptr,
+                      const std::vector<std::vector<double>>* power_g = nullptr) {   // D3: per-good power, else s.power
     std::vector<std::vector<int>> outs(N);
     for (auto& [u, v] : directed) outs[u].push_back(v);
     for (auto& o : outs) std::sort(o.begin(), o.end());
@@ -122,25 +166,28 @@ inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
     for (int n : F.topo) {
         F.value[n] = carried[n];
         const auto& S = standings[n].entries;
+        auto PW = [&](size_t i) -> double { return (power_g && n < (int)power_g->size() && i < (*power_g)[n].size()) ? (*power_g)[n][i] : S[i].power; };
         if (outs[n].empty()) {                       // sink for g: no remainder
             F.is_sink[n] = true;
             F.collected_share[n] = 1.0;
             F.collected[n] = F.value[n];
-            for (auto& s : S) if (s.collects) F.p_collect[n] += s.power;
+            for (size_t i = 0; i < S.size(); i++) if (S[i].collects) F.p_collect[n] += PW(i);
             continue;
         }
         // power sums, per-good eligibility
         double pc = 0, pt = 0;
         std::map<int, double> steer_power;       // link end -> power steering toward it
         std::map<int, int> steer_count;
-        for (auto& s : S) {
-            if (s.power <= 0) continue;
-            if (s.collects) { pc += s.power; continue; }
+        for (size_t si = 0; si < S.size(); si++) {
+            const Standing& s = S[si];
+            const double spower = PW(si);
+            if (spower <= 0) continue;
+            if (s.collects) { pc += spower; continue; }
             bool steers_g = false;
             if (s.steer_to >= 0 &&
                 std::find(outs[n].begin(), outs[n].end(), s.steer_to) != outs[n].end()) {
                 steers_g = true;
-                steer_power[s.steer_to] += s.power;
+                steer_power[s.steer_to] += spower;
                 steer_count[s.steer_to] += 1;
             }
             bool reaches_collector = false;
@@ -164,7 +211,7 @@ inline GoodFlow route(int N, const std::vector<std::pair<int, int>>& directed,
                         if (H >= 0 && H < N && R[n][H]) { reaches_collector = true; break; }
                     }
             }
-            if (steers_g || reaches_collector) pt += s.power;   // else inert for g
+            if (steers_g || reaches_collector) pt += spower;   // else inert for g
         }
         F.p_collect[n] = pc; F.p_transfer[n] = pt;
         // The engine's own branch, at the tail of 0xB593F0:

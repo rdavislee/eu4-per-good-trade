@@ -234,8 +234,17 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             // merchants never collect. The only place a country collects is its trade capital,
             // without a merchant, and a merchant cannot be placed there. So collecting is
             // has_capital alone; a merchant record is always a steerer.
-            s.collects = c.has_capital || (c.has_trader && c.type == 0);   // the ENGINE's collector set (has_trader ? type==0 : has_capital); merchants at end nodes collect in the engine and must in the model
+            // the ENGINE's collector set, exactly: has_trader ? type==0 : has_capital. The earlier
+            // has_capital || (...) counted a TRANSFERRING merchant standing at its own capital as a
+            // collector; the engine pays such a record nothing (measured: E1 country#2 predicted 0.57,
+            // paid 0, with the renormalisation showing up on its neighbours).
+            // DEPARTURE D1 in the division itself: only the trade capital collects. A merchant record
+            // that the engine still marks type 0 (an END node, a first tick after a load, a merchant
+            // in transit) gets collector share 0 from install_power_shares, so the engine pays it
+            // nothing -- the rule holds without the engine having to represent it.
+            s.collects = c.has_capital;
             s.is_capital = c.has_capital;
+            s.pp = c.province_power;
             s.steer_to = -1;
             // A TABLE-OWNED PLACEMENT IS READ FROM THE TABLE, NOT THE RECORD. syncrec writes a
             // reverse end as +0xA8 = 0, so deriving steer_to from the record here yielded the
@@ -254,6 +263,7 @@ inline std::vector<econ::NodeStandings> read_standings_field(
                     // the model while the engine keeps collecting there (nocollect keeps type 0 on
                     // capital records; syncrec skips them): collects stays as the engine has it
                     if (!c.has_capital) s.collects = false;
+                    s.merchant_floor = true;                    // the +2 lands on the final per-good power
                     if (s.power < 2.0) s.power = 2.0;
                 }
             } else if (c.has_trader && c.type == 1 && c.steer_link >= 0 &&
@@ -263,7 +273,7 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             if (s.collects) collect_nodes_out[s.country].push_back(fn);
             st[fn].entries.push_back(s);
         }
-    }
+    }
     return st;
 }
 
@@ -317,27 +327,61 @@ inline int install_links(const std::vector<livetrade::SimNode>& sim,
 // good dependence, so a good-independent share multiplies a per-good sum and the sum collapses
 // to one scalar. The share is therefore over COLLECTORS only: a country that steers takes none
 // of the pool (its value was already forwarded).
+inline std::map<std::pair<int, std::string>, double> g_written_share;   // (country index, node) -> share written this tick (E1 diagnostics)
+inline std::vector<std::map<int, double>> g_share_by_node;   // [field node] country index -> share the MODEL computed this tick (E1 predicts from this)
 inline int install_power_shares(const std::vector<livetrade::SimNode>& sim,
                                 const std::vector<std::string>& field_names,
-                                const std::vector<econ::NodeStandings>& st) {
+                                const std::vector<econ::NodeStandings>& st,
+                                const std::vector<econ::GoodFlow>* per_good = nullptr,
+                                const std::vector<std::vector<std::vector<double>>>* power_g_all = nullptr) {
+    // DEPARTURE D3: the country's share of the node's pool is the flow-weighted per-good collector
+    // share, sum_g collected_g * P_c(n,g)/P_collect(n,g) / sum_g collected_g; a non-collector (a
+    // merchant the table says steers, at an END node included) gets 0 whatever the engine thinks.
     auto byname = live_by_name(sim);
     int wrote = 0;
+    g_share_by_node.assign(field_names.size(), {});
+    g_written_share.clear();
     for (int fn = 0; fn < (int)field_names.size() && fn < (int)st.size(); fn++) {
         auto it = byname.find(field_names[fn]);
         if (it == byname.end()) continue;
-        double collector_power = 0;
-        for (auto& e : st[fn].entries) if (e.collects && e.power > 0) collector_power += e.power;
-        auto recs = livetrade::read_standings(sim[it->second].obj);
-        for (auto& r : recs) {
-            // find this country's modelled standing
-            double share = 0;
-            if (collector_power > 0)
-                for (auto& e : st[fn].entries)
-                    if (e.country == r.tag_index && e.collects && e.power > 0) {
-                        share = e.power / collector_power;
-                        break;
-                    }
-            if (livetrade::write_power_fraction(r.rec, share)) wrote++;
+        const auto& E = st[fn].entries;
+        // per-entry share
+        std::vector<double> share(E.size(), 0.0);
+        double tot_collected = 0;
+        if (per_good && power_g_all && per_good->size() == power_g_all->size()) {
+            for (size_t g = 0; g < per_good->size(); g++) {
+                const econ::GoodFlow& F = (*per_good)[g];
+                if (fn >= (int)F.collected.size()) continue;
+                double cg = F.collected[fn]; if (cg <= 0) continue;
+                const auto& P = (*power_g_all)[g];
+                double pcol = 0;
+                for (size_t i = 0; i < E.size(); i++) if (E[i].collects && fn < (int)P.size() && i < P[fn].size() && P[fn][i] > 0) pcol += P[fn][i];
+                if (pcol <= 0) continue;
+                tot_collected += cg;
+                for (size_t i = 0; i < E.size(); i++) if (E[i].collects && fn < (int)P.size() && i < P[fn].size() && P[fn][i] > 0) share[i] += cg * P[fn][i] / pcol;
+            }
+        }
+        if (tot_collected > 0) { for (auto& x : share) x /= tot_collected; }
+        else {   // nothing collected here this month: fall back to the aggregate collector share
+            double collector_power = 0;
+            auto base = [&](const econ::Standing& e) { double v = e.has_own ? e.own : e.power; return v > 0 ? v : 0.0; };
+            for (auto& e : E) if (e.collects) collector_power += base(e);
+            for (size_t i = 0; i < E.size(); i++) share[i] = (collector_power > 0 && E[i].collects) ? base(E[i]) / collector_power : 0.0;
+        }
+        for (size_t i = 0; i < E.size(); i++) if (share[i] > 0) g_share_by_node[fn][livetrade::country_index_of(E[i].country)] = share[i];
+        // write EVERY raw slot: a record read_standings filters out (nothing there) could still carry
+        // the engine's -1 (0xB52B93) and yield negative income in pass 10 (reviewed)
+        uintptr_t node = sim[it->second].obj;
+        if (!node || !livetrade::validate_region(node + 0x18, 16)) continue;
+        uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
+        if (!rb || rc <= 0 || rc > 4096 || !livetrade::validate_region(rb, (size_t)rc * 0xC0)) continue;
+        for (int i = 0; i < rc; i++) {
+            uintptr_t rec = rb + (uintptr_t)i * 0xC0;
+            if ((livetrade::fi(rec + 0x14) & 0xFFFF) != i) continue;
+            double sh = 0;
+            auto sit = g_share_by_node[fn].find(i);
+            if (sit != g_share_by_node[fn].end()) sh = sit->second;
+            if (livetrade::write_power_fraction(rec, sh)) { wrote++; if (sh > 0) g_written_share[{i, field_names[fn]}] = sh; }
         }
     }
     return wrote;

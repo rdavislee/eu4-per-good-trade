@@ -190,6 +190,14 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   - E4: CLEAN every tick.
   Run: `touch dllbuild/pgt.AI dllbuild/pgt.BOOKLOG; bash run.sh <dll> 3`; read `[E1]`, `[E2]`, `[E4]`.
 
+  **Measured 2026-08-26 (pgt_h4u, D3 per-good propagation, impl/DEPARTURES.md).** The model now
+  writes every record's power_fraction from the flow-weighted per-good collector share before the
+  engine divides the pool, and predicts income from the shares it wrote (not a read-back):
+  E1 664/664 countries agree, worst |diff| 0.0077 ducats; E4 CLEAN; G1 30% reverse ends. (Before the
+  write/predict order was fixed, E1 read 653-657/662 with 0.3-0.6 ducat misses -- those were the
+  records where the model's division differs from the engine's, which the old order could not
+  test.) The offline suite still routes with the aggregate power: a Phi_w-propagation control.
+
 ## F. Reorientation and responsiveness (console scenarios)
 
 - **F1. A flip is honoured end to end.** Pick a near-balanced link (§2.8), nudge development via

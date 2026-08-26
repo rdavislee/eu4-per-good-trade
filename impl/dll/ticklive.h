@@ -114,6 +114,12 @@ inline void predict_income(const std::vector<livetrade::SimNode>& sim,
 }
 
 // read back what pass 10 actually stored, and report the reconciliation
+inline void predict_income_from_model(const std::vector<double>& pool_written_monthly) {
+    g_predicted.clear();
+    for (int fn = 0; fn < (int)install::g_share_by_node.size() && fn < (int)pool_written_monthly.size(); fn++)
+        for (auto& [cidx, sh] : install::g_share_by_node[fn]) g_predicted[cidx] += pool_written_monthly[fn] * sh;
+}
+
 inline void verify_income(const std::vector<livetrade::SimNode>& sim, std::ofstream& lg) {
     if (g_predicted.empty()) return;
     std::map<int, double> actual;
@@ -338,6 +344,22 @@ inline int apply(uintptr_t mgr) {
     }
 
     std::vector<econ::GoodFlow> per_good;
+
+    auto pp_at = econ::pp_index(g_plan.N, st);                     // D3: provincial power by node and country
+    {   // DEPARTURE D3: remove what the ENGINE propagated along the graph it is running -- the installed
+        // orientation (Phi_w, or the selected good's graph in a per-good view), NOT the attach-time link
+        // list (reviewed: relink moves entries between definitions on every flip). Signed: a deficit
+        // (subject transfers) is carried into the per-good power and clamped there.
+        const std::vector<std::pair<int, int>>& installed =
+            (viewmode::per_good() && viewmode::g_selected < (int)g_plan.graphs.size()) ? g_plan.graphs[viewmode::g_selected] : g_plan.phi_w;
+        std::vector<std::vector<int>> downs(g_plan.N);
+        for (auto& [u, v] : installed) if (u >= 0 && u < g_plan.N) downs[u].push_back(v);
+        for (int fn = 0; fn < g_plan.N && fn < (int)st.size(); fn++)
+            for (auto& e : st[fn].entries) { e.own = e.power - econ::prop_from(pp_at, downs[fn], e.country); e.has_own = true; }
+    }
+
+    std::vector<std::vector<std::vector<double>>> power_g_all;    // D3: per-good power, parallel to per_good
+    power_g_all.reserve(g_plan.graphs.size());
     std::vector<std::vector<double>> inj_field;
     per_good.reserve(g_plan.graphs.size());
     for (size_t k = 0; k < g_plan.graphs.size(); k++) {
@@ -347,8 +369,9 @@ inline int apply(uintptr_t mgr) {
             for (int n = 0; n < g_plan.N; n++) inj[n] = inject[slot][n] * g_plan.prices[k];
         const std::vector<std::vector<char>>* R =
             k < g_plan.reach.size() ? &g_plan.reach[k] : nullptr;
+        power_g_all.push_back(econ::per_good_power(g_plan.N, g_plan.graphs[k], st, pp_at));   // D3: this good's power
         per_good.push_back(
-            econ::route(g_plan.N, g_plan.graphs[k], inj, st, collect_nodes, 0.05, R));
+            econ::route(g_plan.N, g_plan.graphs[k], inj, st, collect_nodes, 0.05, R, &power_g_all.back()));
         inj_field.push_back(std::move(inj));
     }
 
@@ -603,7 +626,13 @@ inline int apply(uintptr_t mgr) {
             if (it == byname.end()) continue;
             pool_monthly[fn] = livetrade::fi(sim[it->second].obj + 0xB0) / 1000.0;
         }
-        predict_income(sim, g_plan.names, pool_monthly);
+        // DEPARTURE D3: the model owns the division. Shares are written FIRST, then the prediction
+        // is made from the model's own shares (not a read-back), so E1 tests write + pass 10 + pool.
+        if (!livetrade::marker_present("NOSHARE")) {
+            int wrote_sh = install::install_power_shares(sim, g_plan.names, st, &per_good, &power_g_all);
+            std::ofstream lsh(g_log, std::ios::app); lsh << "  [share] wrote " << wrote_sh << " power fractions from the per-good collector shares" << (char)10;
+            predict_income_from_model(pool_monthly);
+        } else predict_income(sim, g_plan.names, pool_monthly);
         // E2's 'before' is now sampled inside pass 10 itself (money.h pass10_wrapper)
         // Pass 10 runs once per node with a VALID definition (0xB4BF3A tests def->vtbl[0x40]), so
         // the Null sentinel at slot 0 is skipped: 80 calls, not sim.size() == 81. Counting 81
@@ -616,8 +645,9 @@ inline int apply(uintptr_t mgr) {
     // per-country shares of the pool, so the engine's own pass 10 pays out the model's income.
     // Behind a marker until the engine's own power_fraction semantics are observed (see the
     // standings dump): overwriting it blind could disturb displays that read the same field.
-    if (livetrade::marker_present("INCOME"))
-        install::install_power_shares(sim, g_plan.names, st);
+    // DEPARTURE D3: the model owns the collector division. power_fraction is written for every
+    // record before the engine divides the pool; E1 then tests that the engine pays what was written.
+
     PH("aggregate+shares");
     { std::ofstream lgp(g_log, std::ios::app); lgp << "[tick/phases]" << ph_line << (char)10; }
     { std::ofstream ls(g_log, std::ios::app); ls << "  [steerbtn] entered=" << flagfix::g_sb_entered << " nokey=" << flagfix::g_sb_nokey << " want0=" << flagfix::g_sb_want0 << " nowin=" << flagfix::g_sb_nowin << " nobtn=" << flagfix::g_sb_nobtn << " curbad=" << flagfix::g_sb_curbad << " same=" << flagfix::g_sb_same << " forced=" << flagfix::g_frames_forced << (char)10; }

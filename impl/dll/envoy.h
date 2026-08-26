@@ -298,7 +298,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
             // an END node (no outgoing entry in the engine) cannot hold a steering merchant: the engine
             // would keep it collecting, the model would call it a steerer, and the two would disagree
             // about who is paid. Until relink gives such nodes entries (ALLOUT), the plan skips them.
-            if (!nocollect::node_has_outgoing(nd)) { g_plan_at_end++; continue; }
+            if (!nocollect::node_has_outgoing(nd)) g_plan_at_end++;   // D3: an END node is plannable -- the model owns who is paid there (counted only)
             if (!standing.count(pl.node) && !aiwire::can_send_to(cidx, nd)) { g_unreachable++; continue; }   // never force a placement the engine would refuse
             double ts0 = nowms();
             bool placed_here = false;
@@ -387,9 +387,9 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
     if (lg) *lg << "  [envoy/cost] merchants_of=" << (int)t_merch << "ms plan=" << (int)t_plan << "ms victims=" << (int)t_victim << "ms send=" << (int)t_send << "ms recall=" << (int)t_recall << "ms" << (char)10;
     if (lg && planned_countries) *lg << "  [plan/drift] " << drift_countries << " of " << planned_countries << " planned countries changed their planned node set since last planned; " << drift_nodes << " node changes in total" << (char)10;
     if (lg && recalls_this_tick) *lg << "  [envoy] recalled " << recalls_this_tick << " (" << recall_own_tick << " of them our own placements; " << g_recall_own << " ever)" << " off-plan merchants this tick (" << g_recalled << " landed in total; " << g_recall_stale << " old records the engine left set; " << g_recall_refused << " refused by the x1.5 test)" << (char)10;
-    if (lg && g_plan_at_end) *lg << "  [envoy] plan entries at engine END nodes skipped so far: " << g_plan_at_end << (char)10;
+    if (lg && g_plan_at_end) *lg << "  [envoy] plan entries at engine END nodes so far (allowed under D3): " << g_plan_at_end << (char)10;
     if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
-                        << g_sent << " total; " << g_plan_at_end << " plan entries at END nodes skipped; " << g_unreachable << " refused by CanSendMerchantTo; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
+                        << g_sent << " total; " << g_plan_at_end << " plan entries at END nodes (counted, not skipped); " << g_unreachable << " refused by CanSendMerchantTo; " << g_no_free << " send() calls with no free merchant; " << g_no_free_country << " country-ticks with none free; " << g_stale_record << " skipped: record already has_trader)" << (char)10;
     return sent;
 }
 

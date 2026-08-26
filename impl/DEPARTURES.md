@@ -103,6 +103,22 @@ a reverse-end merchant no upstream power for the goods it actually steers and cr
 links a good never uses. Per-good propagation is what makes steering against Phi_w self-consistent
 -- the "vibrant map" the user asked for.
 
+**Implementation notes (review 2026-08-26).** The subtraction of the vanilla fifths follows the
+INSTALLED graph (Phi_w, or the selected good's graph in a per-good view), never the attach-time link
+list; `own` is signed (a subject's transfer deficit is carried, not clamped) and only the final
+per-good power is clamped at 0, with the +2 merchant floor applied to that final power for
+table-owned standings only. The written shares round to nearest permille and sum to 1.000 per
+node where the engine's own summed to 0.995-0.998, so world collected income runs ~0.2-0.5%
+above the engine's -- inside E3's null spread; not a regression. The normalisation divides by the
+collected value of the goods that HAVE a collector at the node (a collector-less good's value is
+redistributed onto the other goods' collectors: one engine pool must go somewhere). The optional
+flow scaling is NOT implemented (documented only). The engine's amount runs ~0.7% above the exact
+fifth (fixed-point rounding); it leaves `own` high by 0.007 x prop and cancels in the shares.
+Open: whether `t_in - t_out` (subject transfers) is inside `val` or added after it -- install.h's
+instruction reading and the probe disagree; a probe restricted to records with t_out > 0 settles
+it. The offline suite (`aitest`, `econtest`, the 30/30 cross-check) still routes with the aggregate
+power: it is a Phi_w-propagation CONTROL, not a model of the live tick.
+
 **Measurement plan.** (a) offline: per-good powers reproduce vanilla's aggregate exactly when all
 graphs equal Phi_w (identity test on the 1444 standings); (b) in game: E1 (engine-divided income ==
 model prediction with the written shares) stays at all countries, E4 clean, world collected

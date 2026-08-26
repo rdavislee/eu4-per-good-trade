@@ -258,8 +258,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                 if (!posted_at.count(key.second)) { gone.push_back(key.second); continue; }
                 // an entry at a node relink has since turned into an END node keeps the model steering
                 // where the engine collects (reviewed): vacate it too
-                auto eo = end_by_name.find(key.second);
-                if (eo != end_by_name.end() && eo->second) { gone.push_back(key.second); g_vacated_end++; }
+                // (D3: entries at END nodes are kept -- the model, not the engine, decides who is paid there)
             }
             for (auto& n : gone) { assign::clear(c, n); g_vacated++; }
         }
@@ -361,7 +360,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& pl : plan) {
             g_evals++;
             if (!standing_at.count(pl.node)) { g_wants_move++; continue; }   // no merchant there yet
-            if (end_by_name[names[pl.node]]) { g_table_at_end++; continue; }   // an engine END node keeps its merchant collecting; no table entry there
+            if (end_by_name[names[pl.node]]) g_table_at_end++;   // D3: table entries at END nodes are allowed (the model owns the division; counted only)
             auto key = std::make_pair(c, names[pl.node]);
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
@@ -405,7 +404,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     log << "  [ai] scan: " << live_countries.size() << " countries with power, "
         << g_wants_move << " merchants standing off their frontier; " << g_vacated << " entries vacated; "
         << g_frontier_cands << " frontier edges scored; " << triggers << " merchants moved by vanilla, "
-        << placed << " re-placed by us; table now " << assign::g_table.size() << " entries; plan entries at engine END nodes (no table entry): " << g_table_at_end << "; entries vacated at END nodes: " << g_vacated_end << (char)10;
+        << placed << " re-placed by us; table now " << assign::g_table.size() << " entries; plan entries at engine END nodes (no table entry): " << g_table_at_end  << (char)10;
     log << "  [G1] placements by tab group: " << g_phi_out << " on Phi_w-outgoing ends, "
         << g_phi_in << " on Phi_w-INCOMING ends"
         << (tot ? " (" : "") << (tot ? (int)(100.0 * g_phi_in / tot) : 0) << (tot ? "%)" : "")

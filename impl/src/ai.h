@@ -54,9 +54,25 @@ struct Country {
 // value a country captures by STEERING good-set at node n down link n->m: the goods oriented
 // n->m, each worth its injected value times the fraction that survives to one of C's collect
 // nodes (survival table). Single steerer -> winner-take-all share 1.0 (spec 1.8).
+// `my_power` is the country's modified power at n; `steer_at_m` the power OTHER countries already
+// steer toward end m; `steer_total` the power they steer toward any end at n. All zero recovers
+// the lone-steerer form exactly.
 inline double score_steer(const Orient& o, const Country& c, int n, int m,
-                          std::vector<int>* active_goods = nullptr) {
+                          std::vector<int>* active_goods = nullptr,
+                          double my_power = 0.0, double steer_at_m = 0.0,
+                          double steer_total = 0.0) {
     double v = 0.0;
+    // SPEC 1.8, the steered split: a good's outgoing value is divided across links in proportion
+    // to the power steering TOWARD each link. "A single steerer takes all" is the special case
+    // where nobody else steers. The old score credited the merchant with the whole value
+    // regardless, so at champagne it sent seven 2-power merchants toward rheinland against 155
+    // power steering to bordeaux -- each earning 2/157 of a pool it had been scored as owning
+    // outright. This is the share it actually gets: the link's cut of the pool, then the
+    // country's cut within the link.
+    double share = 1.0;
+    if (my_power > 0 && steer_total + my_power > 0)
+        share = ((steer_at_m + my_power) / (steer_total + my_power))
+              * (my_power / (steer_at_m + my_power));
     for (int g = 0; g < o.G; g++) {
         // is n->m oriented for g?
         const auto& aw = o.away[g][n];
@@ -65,7 +81,7 @@ inline double score_steer(const Orient& o, const Country& c, int n, int m,
         double reach = 0.0;
         for (auto& [H, pw] : c.collect_power) if (pw > 0) reach += o.S[g][m][H];
         if (reach > 1.0) reach = 1.0;
-        v += o.value_g[g][n] * reach;   // lone steerer takes all of g's outgoing value
+        v += o.value_g[g][n] * reach * share;
     }
     return v;
 }
@@ -91,12 +107,20 @@ struct Candidate {
 
 // enumerate (node, incident-link-end) candidates for a country at one node -- BOTH tab groups:
 // every physical link incident to `node`, scored by what steering toward the far end delivers.
+// `steer_by_end` maps link end -> power OTHER countries already steer toward it at `node`;
+// null means score without competition (the lone-steerer form).
 inline std::vector<Candidate> candidates_at(const Orient& o, const Country& c, int node,
-                                            const std::vector<std::vector<int>>& undirected_adj) {
+                                            const std::vector<std::vector<int>>& undirected_adj,
+                                            const std::map<int, double>* steer_by_end = nullptr,
+                                            double my_power = 0.0) {
     std::vector<Candidate> out;
+    double steer_total = 0.0;
+    if (steer_by_end) for (auto& [e, p] : *steer_by_end) steer_total += p;
     for (int m : undirected_adj[node]) {
         Candidate cand{node, m, {}, 0.0};
-        cand.score = score_steer(o, c, node, m, &cand.active);
+        double at_m = 0.0;
+        if (steer_by_end) { auto it = steer_by_end->find(m); if (it != steer_by_end->end()) at_m = it->second; }
+        cand.score = score_steer(o, c, node, m, &cand.active, my_power, at_m, steer_total);
         if (cand.active.empty()) continue;      // steers nothing -> never chosen (spec 3.14)
         out.push_back(std::move(cand));
     }
@@ -124,10 +148,16 @@ inline std::vector<std::string> shadow_trigger(const Assignments& prev, const As
 // determinism. Returns {-1,-1} if nothing scores > 0 (leave vanilla's placement).
 inline std::pair<int, int> best_placement(const Orient& o, const Country& c,
                                           const std::vector<int>& eligible_nodes,
-                                          const std::vector<std::vector<int>>& undirected_adj) {
+                                          const std::vector<std::vector<int>>& undirected_adj,
+                                          const std::map<int, std::map<int, double>>* steer_by_node = nullptr,
+                                          const std::map<int, double>* my_power_by_node = nullptr) {
     Candidate best{-1, -1, {}, 0.0};
     for (int n : eligible_nodes) {
-        for (auto& cand : candidates_at(o, c, n, undirected_adj)) {
+        const std::map<int, double>* sbe = nullptr;
+        if (steer_by_node) { auto it = steer_by_node->find(n); if (it != steer_by_node->end()) sbe = &it->second; }
+        double mp = 0.0;
+        if (my_power_by_node) { auto it = my_power_by_node->find(n); if (it != my_power_by_node->end()) mp = it->second; }
+        for (auto& cand : candidates_at(o, c, n, undirected_adj, sbe, mp)) {
             if (cand.score > best.score ||
                 (cand.score == best.score && best.node >= 0 &&
                  (cand.node < best.node || (cand.node == best.node && cand.target < best.target)))) {

@@ -211,6 +211,17 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                     std::find(eligible.begin(), eligible.end(), fn) == eligible.end())
                     eligible.push_back(fn);
 
+        // Who is ALREADY steering where, and this country's own power per node -- the
+        // competition the spec's steered split divides by. This country is excluded so its
+        // incumbent placement is not counted against it.
+        std::map<int, std::map<int, double>> steer_by_node;
+        std::map<int, double> my_power_by_node;
+        for (int fn = 0; fn < (int)st.size(); fn++)
+            for (auto& e : st[fn].entries) {
+                if (e.power <= 0) continue;
+                if (e.country == c) { my_power_by_node[fn] = e.power; continue; }
+                if (!e.collects && e.steer_to >= 0) steer_by_node[fn][e.steer_to] += e.power;
+            }
         for (auto& [id, eng_node] : changed) {
             auto f = eng_to_field.find(eng_node);
             if (f == eng_to_field.end()) continue;
@@ -220,9 +231,14 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             // rheinland TOWARD saxony pays more -- the exact case spec 3.14 is about, and why no
             // reverse end was ever exercised. best_placement scores every (node, link-end) pair
             // the country can reach; the current node is always among them.
-            auto best_pair = ai::best_placement(orient, ac, eligible, undirected_adj);
+            auto best_pair = ai::best_placement(orient, ac, eligible, undirected_adj,
+                                                &steer_by_node, &my_power_by_node);
             if (best_pair.first < 0) continue;              // steers nothing anywhere -> stays
-            auto cands = ai::candidates_at(orient, ac, best_pair.first, undirected_adj);
+            const std::map<int, double>* sbe = nullptr;
+            { auto it = steer_by_node.find(best_pair.first); if (it != steer_by_node.end()) sbe = &it->second; }
+            double mp = 0.0;
+            { auto it = my_power_by_node.find(best_pair.first); if (it != my_power_by_node.end()) mp = it->second; }
+            auto cands = ai::candidates_at(orient, ac, best_pair.first, undirected_adj, sbe, mp);
             const ai::Candidate* bestp = nullptr;
             for (auto& cd : cands) if (cd.target == best_pair.second) { bestp = &cd; break; }
             if (!bestp || bestp->score <= 0) continue;

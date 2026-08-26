@@ -337,15 +337,26 @@ inline int apply(uintptr_t mgr) {
     // of it and nothing crosses the Atlantic. Print the actual numbers instead of reasoning about
     // them, including which countries land in which bucket.
     static int g_split_ticks = 0;
-    if (g_split_ticks < 6) {
+    if (g_split_ticks < 40) {
         g_split_ticks++;
         std::ofstream lgs(g_log, std::ios::app);
+        // Which node to dissect comes from a marker (pgt.SPLIT holding a node key), re-read
+        // every tick so a new suspect needs no rebuild. Defaults to north_sea.
+        std::string want_node = "north_sea";
+        if (livetrade::marker_present("SPLIT")) {
+            std::ifstream mf(livetrade::self_dir() + "\\pgt.SPLIT");
+            std::string ln;
+            if (std::getline(mf, ln)) {
+                while (!ln.empty() && (ln.back() == '\r' || ln.back() == '\n' || ln.back() == ' ')) ln.pop_back();
+                if (!ln.empty()) want_node = ln;
+            }
+        }
         int ns = -1;
         for (int i = 0; i < (int)g_plan.names.size(); i++)
-            if (g_plan.names[i] == "north_sea") { ns = i; break; }
+            if (g_plan.names[i] == want_node) { ns = i; break; }
         if (ns >= 0 && ns < (int)st.size()) {
             lgs << "  [split] tick " << g_split_ticks
-                << " north_sea standings (power, collects, steer_to):" << (char)10;
+                << " " << want_node << " standings (power, collects, steer_to):" << (char)10;
             for (auto& e : st[ns].entries) {
                 if (e.power <= 0) continue;
                 std::string tgt = "-";

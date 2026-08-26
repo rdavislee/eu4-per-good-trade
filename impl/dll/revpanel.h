@@ -433,8 +433,43 @@ inline int add_reverse(std::ofstream* lg) {
                         int si = (d2(0, fa[0], fa[2]) <= d2(np - 1, fa[0], fa[2])) ? 0 : np - 1;
                         int ti = (si == 0) ? np - 1 : 0;
                         double total = ribbon_length(p3, np);
+                        // Three tests, all measured at wien where panels went missing:
+                        //  (a) finite -- the engine leaves the anchor unwritten when it rejects a
+                        //      candidate, and two of wien's came back as (0,0). A zero is finite
+                        //      and, on wien's side of the map, can even be CLOSER to our end than
+                        //      to the far one, so "in our half" alone let it through;
+                        //  (b) near the ribbon -- the anchor is an offset from a ribbon vertex, so
+                        //      a real one sits within a bounded distance of the polyline. (0,0)
+                        //      does not;
+                        //  (c) clear of everything already placed -- the engine de-duplicated only
+                        //      against the scratch WE gave it, never against the forward panels
+                        //      already on the map, so two of wien's sat 9 units apart and one hid
+                        //      the other. Vanilla keeps MIN_SEP (25.0, measured) between anchors.
+                        double off_ribbon = 1e30;
+                        if (std::isfinite(ta[0]) && std::isfinite(ta[2])) {
+                            int cur = 0;
+                            for (int i = 1; i < np; i++) {
+                                double axp = p3[(i-1)*3+0], azp = p3[(i-1)*3+2];
+                                double bxp = p3[i*3+0],     bzp = p3[i*3+2];
+                                double ex = bxp-axp, ez = bzp-azp, L2 = ex*ex+ez*ez;
+                                double t = (L2 > 1e-9) ? ((ta[0]-axp)*ex + (ta[2]-azp)*ez)/L2 : 0.0;
+                                if (t < 0) t = 0; else if (t > 1) t = 1;
+                                double px = axp + t*ex, pz = azp + t*ez;
+                                double dd = (ta[0]-px)*(ta[0]-px) + (ta[2]-pz)*(ta[2]-pz);
+                                if (dd < off_ribbon) off_ribbon = dd;
+                                (void)cur;
+                            }
+                            off_ribbon = std::sqrt(off_ribbon);
+                        }
+                        bool clear_of_others = true;
+                        for (auto& q : placed) {
+                            double dx = ta[0]-q.first, dz = ta[2]-q.second;
+                            if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { clear_of_others = false; break; }
+                        }
                         if (std::isfinite(ta[0]) && std::isfinite(ta[2]) &&
-                            d2(ti, ta[0], ta[2]) <= d2(si, ta[0], ta[2])) {
+                            off_ribbon < 80.0 &&                      // measured vanilla max: 51.6
+                            d2(ti, ta[0], ta[2]) <= d2(si, ta[0], ta[2]) &&
+                            clear_of_others) {
                             *(float*)(nlv + LV_ANCHOR + 0) = ta[0];
                             *(float*)(nlv + LV_ANCHOR + 8) = ta[2];
                             placed.push_back({ta[0], ta[2]});

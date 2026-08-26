@@ -326,3 +326,30 @@ The engine row builder (0x13FDBE0..0x13FDDB0) inlines two helpers:
 The country handle is `*(uint64*)(rec+0x10)` -- copy it, never synthesise (the validity byte at
 bits 56..63 matters). Shields we add are wiped by the engine count gate on the next frame, so they
 are re-added from the Update hook every frame, the same cost the removal path already pays.
+
+## Direct merchant placement (send-merchant trace, 2026-08-26)
+
+**`0x3BAD90 PlaceMerchantAtNode(CCountry* rcx, CEnvoy* rdx, u8 mode r8b, CTradeNode* r9,
+int32 steerLinkIndex [rsp+0x20], u8 force [rsp+0x28])`** -- mode 0 collect / 1 transfer;
+steerLinkIndex -1 = engine's choice; force 1 skips the eligibility check. Callers: trade-company
+add/remove `0x3BAB22`/`0x3BB173`, and `0x774E05` (picks the first envoy with `+0x18 == 0` and
+calls with mode=0, link=-1, force=0).
+
+Body: `operator new(0xA0)` -> `CMerchantConstruction` ctor `0x25AAF0` -> `mc+0x40 = country+0x20`
+(the 8-byte handle; `CCountry+0x20` IS the handle, confirmed at `0x774E02`/`0x3BADD0` and
+`0x305C27`) -> node location province -> `SetEnvoy(mc, prov, envoy, force*2+1)` -> `envoy+0x18 = 2`
+(`0x3BAE14`) -> if steerLinkIndex >= 0: `GetTraderRecord` `0xB58CC0` then `rec+0xA8 = it`
+(`0x3BAE33`). `force*2+1` in {1,3} takes SetEnvoy's instant branch (`0x25C9BD`; progress 0x3E8),
+tail-jumps into Update, where `cmp ecx,3; je` at `0x25B920` skips `CanSendMerchantTo` and reaches
+`SetTrader` at `0x25B9A3`. The `+0xA8` write lands after SetTrader's link scoring (`0xB599AE`), so
+a passed index overrides. One call = send + steer, no queue, no gate, no travel.
+
+Caveat: SetTrader on that path is guarded by `rec+0xAE == 0` (`0x25B98E`): at a node where the
+country already has a trader the envoy is placed but the record's mode is not rewritten.
+
+Envoy lifecycle: action 1 (travelling) set at `0x25C896`/`0x25C923` in SetEnvoy; action 2 (posted)
+at `0x25AE0B` in `CMerchantConstruction::Update`, then SetTrader `0x25AE22`; action 0 (free) at
+`0x9DC3EC` after `0x6FF570(envoy, 0)` (recall). `CMerchantConstruction+0x80` (posted node) is
+written only by the ctor `0x25AB92` and the re-derive `0x25AC10` (`= province+0xE8`). `rec+0xAE`
+has one semantic writer, `0xB5E2FF` inside SetTrader `0xB5E290`, sole caller `0xB599E5`.
+`0x305C6C` = `SetTrader(homeNode, handle, 0)`, the default collect-at-home.

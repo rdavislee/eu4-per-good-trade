@@ -1,76 +1,159 @@
 // SENDING A MERCHANT TO THE NODE THE PLAN CHOSE (spec 3.14; the frontier model's last link).
 //
 // frontier::plan says where a country's k merchants should stand. aiwire can only write a
-// placement where a merchant already IS; a planned node with no merchant there is counted as
-// g_wants_move and nothing happens -- 1,005 of them on tick 7, against 8 placed. This file is the
-// mechanic that closes that gap: dispatch the country's free (or worst-placed) merchant to the
-// planned node through the engine's own send-merchant command, so it physically travels, posts,
-// and acquires a trade record there that syncrec can then set to steer.
+// placement where a merchant already IS; a planned node with no merchant there was counted as
+// g_wants_move and nothing happened -- 1,005 of them on tick 7, against 8 placed. This is the
+// mechanic that closes the gap.
 //
-// Everything below the constants is engine-fact-free: the token, Execute RVA, payload layout and
-// posting path come from the send-merchant trace (Q1-Q5) and are filled in from it. Until they
-// are, install() refuses and the AI keeps counting wants_move -- it never posts a guessed command.
+// THE SEAM, from the send-merchant trace: the engine has a direct placement function, used by its
+// own trade-company code (0x3BAB22, 0x3BB173) and by 0x774E05 (which picks a free envoy and calls
+// it with mode=0, link=-1, force=0):
+//
+//   0x3BAD90  PlaceMerchantAtNode(CCountry* country /*rcx*/, CEnvoy* envoy /*rdx*/,
+//                                 uint8 mode /*r8b: 0 collect, 1 transfer*/, CTradeNode* node /*r9*/,
+//                                 int32 steerLinkIndex /*[rsp+0x20]; -1 = engine's choice*/,
+//                                 uint8 force /*[rsp+0x28]; 1 skips the eligibility check*/)
+//
+// Body: operator new(0xA0) -> CMerchantConstruction ctor 0x25AAF0 -> mc+0x40 = country+0x20 (the
+// handle) -> location province of the node -> SetEnvoy(mc, prov, envoy, force*2+1) -> envoy+0x18
+// = 2 (posted) -> if steerLinkIndex >= 0, GetTraderRecord(node, handle) and rec+0xA8 = it
+// (0x3BAE33). The force*2+1 is load-bearing: SetEnvoy's tail takes r9d in {1,3} as "instant"
+// (progress 0x3E8, dates collapsed, 0x25C9C4..0x25C9DC) and tail-jumps into Update, where
+// `cmp ecx,3; je` at 0x25B920 skips CanSendMerchantTo entirely and lands on SetTrader at
+// 0x25B9A3. So one call places, registers the trade record, and sets the steer index -- with the
+// +0xA8 write landing AFTER SetTrader's own link scoring (0xB599AE), so our override wins. No
+// command queue, no gate, no travel delay.
+//
+// Caveat from the trace: SetTrader on that path is guarded by rec+0xAE == 0 (0x25B98E), so at a
+// node where the country ALREADY has a trader the envoy is placed but the record's mode is not
+// rewritten. We never call it in that state: a planned node with a merchant standing there is
+// handled by aiwire (table + syncrec), and dispatch only targets nodes with none.
+//
+// Merchants never collect (user decision 2026-08-26): mode is always 1. steerLinkIndex is passed
+// as -1 and the real target is written by syncrec from the table on the next tick, because a
+// reverse end has no link index to pass.
 #pragma once
 #include <windows.h>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #include "livetrade.h"
+#include "assign.h"
 #include "aiwire.h"
+#include "../src/frontier.h"
 
 namespace envoy {
 
-// ---- FROM THE TRACE. Zero means "not yet established"; install() refuses on any zero. ----
-constexpr uint32_t  CMD_TOKEN        = 0;        // send-merchant command token id
-constexpr uintptr_t CMD_VTABLE       = 0;        // its vtable RVA
-constexpr uintptr_t CMD_EXECUTE      = 0;        // Execute RVA (vtable slot +0x48 for steer; confirm)
-constexpr size_t    CMD_SIZE         = 0;        // operator new size
-constexpr int       CMD_COUNTRY      = 0;        // offset of the 8-byte country handle
-constexpr int       CMD_NODE         = 0;        // offset of the destination node index
-constexpr int       CMD_ENVOY        = 0;        // offset of the envoy/merchant id, if any
-constexpr int       CMD_MODE         = 0;        // offset of collect(0)/transfer(1), if any
-constexpr bool      NODE_IS_1BASED   = false;    // def+0xD8 style (1-based) vs array index
+constexpr uintptr_t PLACE_MERCHANT = 0x3BAD90;
+constexpr int ENVOY_ACTION = 0x18;      // 0 free / 1 travelling / 2 posted
+constexpr int ENVOY_ID     = 0x44;
 
-inline bool established() {
-    return CMD_TOKEN && CMD_VTABLE && CMD_SIZE && CMD_COUNTRY && CMD_NODE;
-}
+using FnPlace = void (__fastcall*)(uintptr_t country, uintptr_t envoy, uint8_t mode, uintptr_t node,
+                                   int32_t steerLinkIndex, uint8_t force);
 
-inline uint64_t g_sent = 0, g_refused = 0;
+inline uint64_t g_sent = 0, g_no_free = 0, g_no_node = 0;
+inline std::map<std::pair<int, int>, int> g_sent_tick;   // (country, node) -> tick, dwell
 inline std::string g_log;
+inline bool g_installed = false;
 
-// Post a send-merchant for `country_index` toward `node` (field index -> engine node). Returns
-// false and touches nothing if the command is not established or any input fails validation.
-inline bool send(int country_index, uintptr_t node_obj, int merchant_id, std::ofstream* lg) {
-    if (!established()) { g_refused++; return false; }
-    (void)country_index; (void)node_obj; (void)merchant_id; (void)lg;
-    // Filled in from the trace:
-    //   1. handle = *(uint64*)(record+0x10) for this country at ANY node it has a record, or from
-    //      the country object (0xD01A0 accessor) -- never synthesised.
-    //   2. cmd = operator new(CMD_SIZE); *(void**)cmd = base+CMD_VTABLE; token at its slot;
-    //      handle at CMD_COUNTRY; node id at CMD_NODE (1-based if NODE_IS_1BASED);
-    //      envoy id at CMD_ENVOY; mode=1 (transfer) at CMD_MODE.
-    //   3. post via the same path the UI uses (IGI->vtbl[0x80] -> [[rcx]+0x30]) or call Execute
-    //      directly if the trace shows the gate would drop a DLL-posted command in single-player.
-    return false;
+// the engine node object for a field index, by name
+inline uintptr_t node_obj(const std::vector<livetrade::SimNode>& sim, const std::string& name) {
+    for (auto& s : sim) if (s.name == name) return s.obj;
+    return 0;
 }
 
-// One pass per AI tick: for each country, for each planned node with no merchant standing there,
-// send its least profitable merchant (or a free one) there. Damped by the same dwell floor as
-// aiwire so a merchant is not bounced every cadence.
-inline int dispatch_wants(std::ofstream* lg) {
-    if (!established()) return 0;
-    (void)lg;
+// a free envoy (action 0) of this country, or 0
+inline uintptr_t free_envoy(int country_idx) {
+    uintptr_t c = aiwire::country_by_index(country_idx);
+    if (!c || !livetrade::validate_region(c + 0x1480, 8)) return 0;
+    uintptr_t vec = livetrade::fq(c + 0x1480);
+    if (!vec || !livetrade::validate_region(vec + 8, 8)) return 0;
+    uintptr_t cont = livetrade::fq(vec + 8);
+    if (!cont || !livetrade::validate_region(cont + 0x20, 16)) return 0;
+    uintptr_t first = livetrade::fq(cont + 0x20), last = livetrade::fq(cont + 0x28);
+    if (!first || last <= first || (last - first) > 8 * 256) return 0;
+    for (uintptr_t p = first; p + 8 <= last; p += 8) {
+        uintptr_t e = livetrade::fq(p);
+        if (e && livetrade::validate_region(e, 0x48) && livetrade::fi(e + ENVOY_ACTION) == 0) return e;
+    }
     return 0;
+}
+
+// Place a free merchant of `country_idx` at `node` transferring. Returns false, touching nothing,
+// if there is no free merchant or the node is unresolved.
+inline bool send(int country_idx, uintptr_t node, std::ofstream* lg, const std::string& node_name) {
+    uintptr_t c = aiwire::country_by_index(country_idx);
+    if (!c || !node) { g_no_node++; return false; }
+    uintptr_t e = free_envoy(country_idx);
+    if (!e) { g_no_free++; return false; }
+    auto place = (FnPlace)(livetrade::module_base() + PLACE_MERCHANT);
+    place(c, e, 1, node, -1, 1);
+    g_sent++;
+    if (lg) *lg << "  [envoy] country#" << country_idx << " merchant#" << livetrade::fi(e + ENVOY_ID)
+                << " placed at " << node_name << " (transfer; target set by the table next tick)" << (char)10;
+    return true;
+}
+
+// One pass per AI tick, after aiwire::step: for each country, for each planned node with no
+// merchant standing there, send a free one. Dwell-floored so a merchant is not bounced.
+inline int dispatch(const std::vector<livetrade::SimNode>& sim,
+                    const std::vector<std::string>& names,
+                    const std::vector<econ::NodeStandings>& st,
+                    const std::vector<std::vector<int>>& undirected_adj,
+                    const std::vector<econ::GoodFlow>& per_good,
+                    int tick, std::ofstream* lg) {
+    if (!g_installed) return 0;
+    int sent = 0;
+    std::set<int> countries;
+    for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) countries.insert(e.country);
+    for (int c : countries) {
+        int cidx = livetrade::country_index_of(c);
+        int home = -1;
+        for (int fn = 0; fn < (int)st.size() && home < 0; fn++)
+            for (auto& e : st[fn].entries) if (e.country == c && e.is_capital) { home = fn; break; }
+        if (home < 0) continue;
+        auto ms = aiwire::merchants_of(cidx);
+        if (ms.empty()) continue;
+        int k = (int)ms.size();
+        std::set<int> standing;
+        std::map<int, int> eng_to_field;
+        for (int fn = 0; fn < (int)names.size(); fn++)
+            for (auto& s : sim) if (s.name == names[fn]) { eng_to_field[s.index] = fn; break; }
+        for (auto& m : ms) if (m.action == 2) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
+        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, per_good, c);
+        for (auto& pl : plan) {
+            if (standing.count(pl.node)) continue;               // aiwire handles the ones already there
+            if (pl.node == home) continue;                        // never at the capital
+            auto key = std::make_pair(c, pl.node);
+            auto it = g_sent_tick.find(key);
+            if (it != g_sent_tick.end() && tick - it->second < (int)ai::DWELL_FLOOR_MONTHS) continue;
+            uintptr_t nd = node_obj(sim, names[pl.node]);
+            if (!send(cidx, nd, lg, names[pl.node])) break;      // no free merchant: stop for this country
+            // the table entry is what routing and syncrec read; write it now
+            assign::set(c, names[pl.node], names[pl.target]);
+            g_sent_tick[key] = tick;
+            standing.insert(pl.node);
+            sent++;
+        }
+    }
+    if (lg && sent) *lg << "  [envoy] dispatched " << sent << " merchants to planned nodes this tick ("
+                        << g_sent << " total; " << g_no_free << " refused: no free merchant)" << (char)10;
+    return sent;
 }
 
 inline bool install(const std::string& logpath, std::string* err) {
     g_log = logpath;
-    if (!established()) {
-        if (err) *err = "send-merchant command not established (token/vtable/size/offsets are 0)";
-        return false;
-    }
+    uintptr_t fn = livetrade::module_base() + PLACE_MERCHANT;
+    if (!livetrade::validate_region(fn, 16)) { if (err) *err = "0x3BAD90 unreadable"; return false; }
+    // the traced prologue, byte-exact; any other build is refused (spec 2.5)
+    static const uint8_t expect[20] = {0x48,0x89,0x5C,0x24,0x10, 0x48,0x89,0x6C,0x24,0x18,
+                                       0x48,0x89,0x74,0x24,0x20, 0x57, 0x48,0x83,0xEC,0x20};
+    if (memcmp((const void*)fn, expect, 20) != 0) { if (err) *err = "0x3BAD90 prologue differs (patched binary?)"; return false; }
+    g_installed = true;
     return true;
 }
 

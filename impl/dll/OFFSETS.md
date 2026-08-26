@@ -283,3 +283,15 @@ At our hook `0xB4BF09` the driver does only `for each valid node: 0xB584F0(node)
 writes NO CTradeNode field. So everything we write survives to the UI and to a save; only
 `+0xB0 current`, `+0xD0`, `+0xE8` and the country records at `+0x18` are consumed afterwards.
 Every scalar is wiped at the START of the next month by `0xB51290`/`0xB51360`.
+
+## CGuiOverlappingElementsBox child list (measured live, 2026-08-25)
+
+`director_flags` on a trade-link panel is a `CGuiOverlappingElementsBox` (vtable `0x1DA4910`).
+Dumped `box+0xE8..0x120` in the running game: `+0xE8` heap ptr, **`+0xF0` and `+0xF8` two
+vptrs** (the list sub-object begins at `+0xF0`, its vptr `0x1D90318`), **`+0x100` head,
+`+0x108` tail** (node = `{payload@0, prev@8, next@0x10}`, 0x20 bytes), `+0x110` is NOT a count
+(holds a float). Remove one child: `box->vt[0x270](box, holder, relayoutNow)`; clear all:
+`vt[0x278]` (deletes children); relayout `vt[0x2C0]`.
+
+On a FORWARD panel for link #0 the list is **empty after Update** across 10,932 inspections --
+the engine does not draw reverse-end (`+0xA8 = 0`) records there, so no alias removal is needed.

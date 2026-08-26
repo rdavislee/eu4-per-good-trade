@@ -62,6 +62,7 @@ using FnDtor    = void (__fastcall*)(uintptr_t, unsigned);
 inline FnUpdate g_orig = nullptr;
 inline bool g_installed = false;
 inline uint64_t g_cleared = 0;      // aliased shields removed from forward link-#0 panels
+inline uint64_t g_inspected = 0, g_shields = 0;   // forward-#0 panels seen / shields walked
 
 // the ordinal a FORWARD panel represents: its entry's target within its source's outgoing vector
 inline int panel_ordinal(uintptr_t lv) {
@@ -94,12 +95,18 @@ inline bool steers_reverse_here(int country_index, const std::string& node_key, 
     return false;
 }
 
+// MEASURED, 10932 forward-#0 panels over five ticks: the box's child list is EMPTY after g_orig
+// (box+0x100 head == 0, +0x108 tail == 0). The engine does not draw the +0xA8=0 records on
+// forward link #0 after all -- so there is nothing to remove, and this hook is a guard that
+// costs one list-head read per panel per frame. Kept so a future engine path that does draw
+// them is corrected rather than silently shown.
 inline void __fastcall update_hook(uintptr_t panel) {
     if (g_orig) g_orig(panel);                  // the engine builds the row exactly as it wants
     if (!panel || !livetrade::validate_region(panel + PANEL_LINKVIEW, 8)) return;
     uintptr_t lv = livetrade::fq(panel + PANEL_LINKVIEW);
     if (!lv || revpanel::is_reverse(lv)) return;         // reverse panels: the engine is right
     if (panel_ordinal(lv) != 0) return;                  // only link #0 collects the aliases
+    g_inspected++;
     if (assign::g_table.empty()) return;
     uintptr_t srcdef = livetrade::fq(lv + revpanel::LV_SRCDEF);
     std::string node_key = livetrade::def_key(srcdef);
@@ -139,6 +146,7 @@ inline void __fastcall update_hook(uintptr_t panel) {
         uintptr_t icon = find_icon(hw, "trade_node_trader_shield");
         if (!icon || !livetrade::validate_region(icon + ICON_HANDLE, 8)) continue;
         uint64_t handle = livetrade::fq(icon + ICON_HANDLE);
+        g_shields++;
         int cidx = (int)(int16_t)(handle >> 32);
         if (!steers_reverse_here(cidx, node_key, srcdef)) continue;
         remove(box, h, 0);

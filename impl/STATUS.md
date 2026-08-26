@@ -182,3 +182,13 @@ positive-only. Ledger: B1 EQUAL (engine lists == installed graph, 159/159), D3 l
 G1 28%, G2 0 churn, E1/E4 clean, H3 ~230 ms vs vanilla ~90. OPEN: C1 incoming tabs read "?????";
 C2 blocked on player-side no-collect (engine disables the steer button where the country collects);
 per-good view still shows both panels per link (D2); province-click trigger not built (D1).
+
+**2026-08-26, later (52680d1..):** recall v2 after a second review (victims scored on the
+candidate network, valid victims only, per-country budget, touched-tick dwell, landing check: 24 recalls /
+16 refusals over 10 ticks, every recalled envoy still at its target +1/+3 ticks). nocollect.h: SetTrader
+prologue hook forces transfer for every trader record except capitals + a per-tick sweep (37 converted on
+tick 1, 0 after; 56 merchants still collect at the two Phi_w END nodes where the engine has no link to
+steer along -- residual, fix = relink ALLOUT). C2 MEASURED PASS (player click on a reverse panel at
+bordeaux steers exactly the goods oriented that way). C1: incoming tabs read ????? only with relink on
+(vanilla lists name them) -- probe queued. B1 EQUAL each tick; D3 logged. H3 ~130 ms tick, ~230 ms
+frame gap vs vanilla ~90.

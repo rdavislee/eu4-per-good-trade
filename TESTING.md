@@ -87,7 +87,12 @@ to `genua` via `champagne`; 29 live goods; 2–8 sinks per good; coal produces n
   on the hook. The AI path (G1) already exercises the same table + syncrec representation the
   click writes. C1 as observed in the same session: the Sevilla window shows its three Phi_w-outgoing
   tabs named (Valencia, Tunis, Safi) and its two incoming tabs as "?????" -- the incoming group's
-  names do not resolve through relink's rebuilt incoming lists. DEFECT, open.
+  names do not resolve through relink's rebuilt incoming lists. DEFECT, open. Narrowed 2026-08-26:
+  with `pgt.RELINK` absent (vanilla lists, before any rebuild) the same window names them
+  (Ivory Coast, Caribbean), so the label is read from something relink's step 2/3 does not carry
+  over -- not the def pointer (LISTDUMP resolves those) and not the def key. Next probe: dump the
+  raw 0x78-byte outgoing entries and the def incoming vectors of sevilla before and after
+  relink::apply and diff them field by field.
 
   **C2 MEASURED 2026-08-26 (pgt_h3v, seated as Castile, no-collect enforced).** With the sweep
   having flipped the Bordeaux merchant to transfer, clicking the steer button of the reverse panel

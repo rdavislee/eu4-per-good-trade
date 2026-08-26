@@ -253,6 +253,7 @@ inline void frame_view_poll() {
 
 inline int apply(uintptr_t mgr) {
     // PHASE PROFILE (H3): where the monthly cost goes. Marks are cumulative ms since apply() began.
+    livetrade::tick_cache_reset();
     LARGE_INTEGER ph_f, ph_t0, ph_t; QueryPerformanceFrequency(&ph_f); QueryPerformanceCounter(&ph_t0);
     std::string ph_line;
     auto PH = [&](const char* name) { QueryPerformanceCounter(&ph_t); ph_line += std::string(" ") + name + "=" + std::to_string((int)(1000.0 * (double)(ph_t.QuadPart - ph_t0.QuadPart) / (double)ph_f.QuadPart)); };
@@ -427,7 +428,9 @@ inline int apply(uintptr_t mgr) {
     // alone, so the aggregate is taken over just the selected good.
     viewmode::poll(g_plan.good_names);
 
+    PH("pre-orient");
     install_active_orientation();
+    PH("orient");
 
     std::vector<econ::GoodFlow> shown = per_good;
     std::vector<std::vector<double>> shown_inj = inj_field;
@@ -465,15 +468,18 @@ inline int apply(uintptr_t mgr) {
                 if (v >= 0) { und[u].push_back(v); und[v].push_back(u); phi_out[u].push_back(v); }
         ai::Orient orient = aiwire::build_orient(g_plan.N, per_good, g_plan.graphs, inj_field);
         std::ofstream la(g_log, std::ios::app);
+        PH("pre-flowmat");
         frontier::FlowMatrix flowmat = frontier::flow_matrix(g_plan.N, per_good);   // once per tick
+        PH("flowmat");
         aiwire::g_flowmat = &flowmat;
         aiwire::g_shard = (int)(g_ticks.load() % 3);
         frontier::g_calls_candidates = 0; frontier::g_calls_plan = 0; aiwire::g_plan_cache.clear();
+        livetrade::g_validate_calls = 0;
         aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
         PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
         PH("dispatch");
-        { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/cost] plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
+        { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/cost] validate_region calls this tick=" << livetrade::g_validate_calls << " syscalls=" << livetrade::g_validate_syscalls << "; plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
         aiwire::g_flowmat = nullptr;
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);

@@ -50,18 +50,17 @@ inline double share_at(const std::vector<econ::NodeStandings>& st, int n, int co
 // The per-tick flow matrix: F[n][m] = total over goods of realized flow leaving n toward m.
 // Summed ONCE per tick. flow_toward() below re-summed 29 goods for every (edge, candidate) of
 // every country -- measured at 450 ms on an AI tick against 22 ms otherwise.
-using FlowMatrix = std::vector<std::map<int, double>>;
+// A flat N x N array, not a vector of maps: the map form allocated per node per tick and cost
+// ~100 ms a month on its own (measured as the whole of what had been attributed to planning).
+struct FlowMatrix { int N = 0; std::vector<double> v; double at(int n, int m) const { return (n < 0 || m < 0 || n >= N || m >= N) ? 0.0 : v[(size_t)n * N + m]; } };
 inline FlowMatrix flow_matrix(int N, const std::vector<econ::GoodFlow>& per_good) {
-    FlowMatrix F(N);
+    FlowMatrix F; F.N = N; F.v.assign((size_t)N * N, 0.0);
     for (auto& G : per_good)
         for (int n = 0; n < N && n < (int)G.flow.size(); n++)
-            for (auto& [m, v] : G.flow[n]) F[n][m] += v;
+            for (auto& [m, val] : G.flow[n]) if (m >= 0 && m < N) F.v[(size_t)n * N + m] += val;
     return F;
 }
-inline double flow_of(const FlowMatrix& F, int n, int m) {
-    if (n < 0 || n >= (int)F.size()) return 0.0;
-    auto it = F[n].find(m); return it == F[n].end() ? 0.0 : it->second;
-}
+inline double flow_of(const FlowMatrix& F, int n, int m) { return F.at(n, m); }
 
 // total (over goods) realized flow leaving n toward m, this tick
 inline double flow_toward(const std::vector<econ::GoodFlow>& per_good, int n, int m) {

@@ -25,6 +25,7 @@
 // CEnvoy: +0x10 CMerchantConstruction*, +0x18 action (0 free / 1 travelling / 2 posted), +0x44 id
 // CMerchantConstruction: +0x80 the node it is posted at
 #pragma once
+#include <windows.h>
 #include <algorithm>
 #include <fstream>
 #include <map>
@@ -163,6 +164,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
     std::set<int> live_countries;
     for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) live_countries.insert(e.country);
 
+    LARGE_INTEGER qf, qt; QueryPerformanceFrequency(&qf); double t_merch = 0, t_plan = 0, t_weak = 0; auto now = [&](){ QueryPerformanceCounter(&qt); return 1000.0 * (double)qt.QuadPart / (double)qf.QuadPart; };
     for (int c : live_countries) {
         if (g_shard >= 0 && (livetrade::country_index_of(c) % 3) != g_shard) continue;   // amortised over the cadence
         if (c == player_country) continue;                 // spec 3.14 is about the AI
@@ -170,7 +172,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         // country's index into the manager array and whose byte 3 is a validity tag. Passing the
         // raw value as an array index silently found nothing at all.
         int cidx = livetrade::country_index_of(c);
-        auto ms = merchants_of(cidx);
+        double t0 = now(); auto ms = merchants_of(cidx); t_merch += now() - t0;
         if (ms.empty()) continue;
         std::map<int, int> cur;
         for (auto& m : ms) if (m.action == 2 && m.node_index >= 0) cur[m.id] = m.node_index;
@@ -308,11 +310,12 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         int k = (int)posted_node.size();
         if (k <= 0) continue;
         if (changed.empty()) continue;                       // no merchant to evaluate: no plan (652 -> few plan() calls)
-        const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c);
+        double t1 = now(); const auto& plan = cached_plan((int)names.size(), home, k, undirected_adj, st, c); t_plan += now() - t1;
         g_frontier_cands += (long long)plan.size();
         // the weakest CURRENT placement, for the x1.5 move test
         std::set<int> network{home};
         for (int n2 : standing_at) network.insert(n2);
+        double t2 = now();
         double weakest = 1e300;
         for (auto& [key, tgt] : assign::g_table) {
             if (key.first != c) continue;
@@ -323,7 +326,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
                                              (int)(nf - names.begin()), (int)(tf - names.begin()));
             if (v < weakest) weakest = v;
         }
-        if (weakest > 1e299) weakest = 0.0;
+        if (weakest > 1e299) weakest = 0.0; t_weak += now() - t2;
         for (auto& pl : plan) {
             g_evals++;
             if (!standing_at.count(pl.node)) { g_wants_move++; continue; }   // no merchant there yet
@@ -360,6 +363,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             placed++;
         }
     }
+    log << "  [ai/split] merchants_of=" << (int)t_merch << "ms plan=" << (int)t_plan << "ms weakest-walk=" << (int)t_weak << "ms" << (char)10;
     g_triggers += triggers; g_placed += placed;
     long long tot = g_phi_out + g_phi_in;
     int worst_flip = 0;

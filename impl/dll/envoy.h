@@ -124,6 +124,10 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
     int sent = 0;
     std::set<int> countries;
     for (auto& ns : st) for (auto& e : ns.entries) if (e.power > 0) countries.insert(e.country);
+    // hoisted: the same for every country, was rebuilt per country (80 x sim.size() string compares)
+    std::map<int, int> eng_to_field;
+    for (int fn = 0; fn < (int)names.size(); fn++)
+        for (auto& s : sim) if (s.name == names[fn]) { eng_to_field[s.index] = fn; break; }
     for (int c : countries) {
         int cidx = livetrade::country_index_of(c);
         if (aiwire::g_shard >= 0 && (cidx % 3) != aiwire::g_shard) continue;   // same shard as step
@@ -142,9 +146,6 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         // (the plan is the same until the standings move); skip it for the dwell floor
         { auto ns = g_nothing_tick.find(c); if (ns != g_nothing_tick.end() && tick - ns->second < (int)ai::DWELL_FLOOR_MONTHS) continue; }
         std::set<int> standing;
-        std::map<int, int> eng_to_field;
-        for (int fn = 0; fn < (int)names.size(); fn++)
-            for (auto& s : sim) if (s.name == names[fn]) { eng_to_field[s.index] = fn; break; }
         for (auto& m : ms) if (m.action == 2) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
         const auto& plan = aiwire::cached_plan((int)names.size(), home, k, undirected_adj, st, c);
         int sent_here = 0;

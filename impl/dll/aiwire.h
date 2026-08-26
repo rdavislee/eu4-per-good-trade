@@ -39,6 +39,9 @@
 
 namespace aiwire {
 
+// the tick's flow matrix, summed once after routing (ticklive sets it before step/dispatch)
+inline const frontier::FlowMatrix* g_flowmat = nullptr;
+
 struct Merchant { int id = 0; int action = 0; int node_index = -1; };
 
 inline uintptr_t country_mgr_array() {
@@ -291,7 +294,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         for (auto& [id, n2] : posted_node) standing_at.insert(n2);
         int k = (int)posted_node.size();
         if (k <= 0) continue;
-        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, *per_good, c);
+        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, *g_flowmat, c);
         g_frontier_cands += (long long)plan.size();
         // the weakest CURRENT placement, for the x1.5 move test
         std::set<int> network{home};
@@ -302,7 +305,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             auto nf = std::find(names.begin(), names.end(), key.second);
             auto tf = std::find(names.begin(), names.end(), tgt);
             if (nf == names.end() || tf == names.end()) continue;
-            double v = frontier::added_value((int)names.size(), home, network, undirected_adj, st, *per_good, c,
+            double v = frontier::added_value((int)names.size(), home, network, undirected_adj, st, *g_flowmat, c,
                                              (int)(nf - names.begin()), (int)(tf - names.begin()));
             if (v < weakest) weakest = v;
         }

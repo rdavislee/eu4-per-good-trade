@@ -252,6 +252,10 @@ inline void frame_view_poll() {
 }
 
 inline int apply(uintptr_t mgr) {
+    // PHASE PROFILE (H3): where the monthly cost goes. Marks are cumulative ms since apply() began.
+    LARGE_INTEGER ph_f, ph_t0, ph_t; QueryPerformanceFrequency(&ph_f); QueryPerformanceCounter(&ph_t0);
+    std::string ph_line;
+    auto PH = [&](const char* name) { QueryPerformanceCounter(&ph_t); ph_line += std::string(" ") + name + "=" + std::to_string((int)(1000.0 * (double)(ph_t.QuadPart - ph_t0.QuadPart) / (double)ph_f.QuadPart)); };
     if (!g_plan.ready) return 0;
     // Adopt a newly published orientation, if the background solver produced one since the last
     // tick. The swap is whole-orientation: a tick never mixes old and new graphs.
@@ -286,6 +290,7 @@ inline int apply(uintptr_t mgr) {
     int gc = 0, matched = 0;
     auto inject = install::gather_inject(sim, g_plan.names, gc, matched);
     std::map<int, std::vector<int>> collect_nodes;
+    PH("standings");
     auto st = install::read_standings_field(sim, g_plan.names, g_plan.link_targets, collect_nodes);
     // spec 1.7: merchants assigned to a link END the engine has no index for (a link drawn INTO
     // this node) live in our own table and are merged on top of the engine's own assignments.
@@ -417,6 +422,7 @@ inline int apply(uintptr_t mgr) {
             }
         }
     }
+    PH("routed");
     // SWAP-ON-VIEW (spec 1.12): in a per-good view the SAME fields carry that good's numbers
     // alone, so the aggregate is taken over just the selected good.
     viewmode::poll(g_plan.good_names);
@@ -459,8 +465,11 @@ inline int apply(uintptr_t mgr) {
                 if (v >= 0) { und[u].push_back(v); und[v].push_back(u); phi_out[u].push_back(v); }
         ai::Orient orient = aiwire::build_orient(g_plan.N, per_good, g_plan.graphs, inj_field);
         std::ofstream la(g_log, std::ios::app);
+        frontier::FlowMatrix flowmat = frontier::flow_matrix(g_plan.N, per_good);   // once per tick
+        aiwire::g_flowmat = &flowmat;
         aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), -1, la, &per_good);
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
+        aiwire::g_flowmat = nullptr;
     }
     auto agg = econ::aggregate(g_plan.N, shown, shown_inj);
     auto gross = econ::gross_link_flows(shown);                  // WITH steering bonus
@@ -484,6 +493,8 @@ inline int apply(uintptr_t mgr) {
     // belong at both ends; without a record for links drawn OUT of this node, the value
     // arriving along them has nowhere to live and is omitted from incoming entirely.
     outlinks::g_log_inc = g_log;
+    PH("ai+dispatch");
+    if (livetrade::marker_present("NOWRITE")) { PH("nowrite"); std::ofstream lg0(g_log, std::ios::app); lg0 << "[tick/phases]" << ph_line << " (NOWRITE: engine writes skipped)" << (char)10; return 0; }
     outlinks::install_incoming(sim, g_plan.names, gross, install::g_id_to_name);
     // `away` (NO steering bonus), not `gross`. These become per-mille SHARES of the node's
     // outflow, and the tooltip turns them into ducats by multiplying by node+0xC0 == the
@@ -498,8 +509,10 @@ inline int apply(uintptr_t mgr) {
     // rule per good; this field only carries the resulting aggregate split.
     outlinks::install(sim, g_plan.names, away, install::g_id_to_name);
     // 2. one canonical value per physical link, written into BOTH endpoints' records
+    PH("incoming");
     linkvalue::install(sim, g_plan.names, gross, install::g_id_to_name);
     // 2. now derive the node figures from those final records
+    PH("linkvalue");
     int wrote = install::install_aggregate(sim, g_plan.names, agg, viewmode::per_good());
     // 3. the outgoing figure = the sum of this node's own outgoing rows, so the per-link
     //    amounts add up to it. Safe now that every link has a record at both ends.
@@ -550,6 +563,8 @@ inline int apply(uintptr_t mgr) {
     // standings dump): overwriting it blind could disturb displays that read the same field.
     if (livetrade::marker_present("INCOME"))
         install::install_power_shares(sim, g_plan.names, st);
+    PH("aggregate+shares");
+    { std::ofstream lgp(g_log, std::ios::app); lgp << "[tick/phases]" << ph_line << (char)10; }
     return wrote;
 }
 

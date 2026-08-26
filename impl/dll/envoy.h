@@ -137,7 +137,7 @@ inline int dispatch(const std::vector<livetrade::SimNode>& sim,
         for (int fn = 0; fn < (int)names.size(); fn++)
             for (auto& s : sim) if (s.name == names[fn]) { eng_to_field[s.index] = fn; break; }
         for (auto& m : ms) if (m.action == 2) { auto f = eng_to_field.find(m.node_index); if (f != eng_to_field.end()) standing.insert(f->second); }
-        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, per_good, c);
+        auto plan = frontier::plan((int)names.size(), home, k, undirected_adj, st, *aiwire::g_flowmat, c);
         for (auto& pl : plan) {
             if (standing.count(pl.node)) continue;               // aiwire handles the ones already there
             if (pl.node == home) continue;                        // never at the capital

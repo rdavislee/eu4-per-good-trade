@@ -102,6 +102,7 @@ int main(int argc, char** argv) {
         drain::Result r = drain::run(g, b, f.tie_cost_edge, f.node_wealth, f.S[gi], f.C[gi]);
         per_good.push_back(econ::route(N, r.directed, inject[gi], st, collect_nodes, 0.05));
     }
+    frontier::FlowMatrix FM = frontier::flow_matrix(N, per_good);
     printf("routed %zu goods over %d nodes; %zu countries with a trade capital\n\n", per_good.size(), N, home_of.size());
 
     for (int a = 4; a < argc; a++) {
@@ -114,7 +115,7 @@ int main(int argc, char** argv) {
         printf("== %s  home=%s  share_at_home=%.3f  k=%d ==\n", tag.c_str(), tn.order[home].c_str(), frontier::share_at(st, home, c), k);
         // show the first frontier fully, then the plan
         set<int> net{home};
-        auto first = frontier::candidates(N, home, net, adj, st, per_good, c);
+        auto first = frontier::candidates(N, home, net, adj, st, FM, c);
         printf("  frontier from home (%zu edges), top 6:\n", first.size());
         for (size_t i = 0; i < first.size() && i < 6; i++) {
             auto& p = first[i];
@@ -122,7 +123,7 @@ int main(int argc, char** argv) {
             double so = frontier::share_at(st, p.node, c, frontier::MERCHANT_PRESENT_POWER);
             printf("    %-18s -> %-18s flow=%8.3f  share@stand=%.3f  x path=%.3f  = %8.4f\n", tn.order[p.node].c_str(), tn.order[p.target].c_str(), fl, so, p.added / (fl * so > 0 ? fl * so : 1), p.added);
         }
-        auto plan = frontier::plan(N, home, k, adj, st, per_good, c);
+        auto plan = frontier::plan(N, home, k, adj, st, FM, c);
         printf("  plan(%d):\n", k);
         for (auto& p : plan) printf("    stand at %-18s steer -> %-18s added=%8.4f\n", tn.order[p.node].c_str(), tn.order[p.target].c_str(), p.added);
         printf("\n");

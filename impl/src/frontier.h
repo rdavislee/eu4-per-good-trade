@@ -46,6 +46,22 @@ inline double share_at(const std::vector<econ::NodeStandings>& st, int n, int co
     return tot > 0 ? mine / tot : 0.0;
 }
 
+// The per-tick flow matrix: F[n][m] = total over goods of realized flow leaving n toward m.
+// Summed ONCE per tick. flow_toward() below re-summed 29 goods for every (edge, candidate) of
+// every country -- measured at 450 ms on an AI tick against 22 ms otherwise.
+using FlowMatrix = std::vector<std::map<int, double>>;
+inline FlowMatrix flow_matrix(int N, const std::vector<econ::GoodFlow>& per_good) {
+    FlowMatrix F(N);
+    for (auto& G : per_good)
+        for (int n = 0; n < N && n < (int)G.flow.size(); n++)
+            for (auto& [m, v] : G.flow[n]) F[n][m] += v;
+    return F;
+}
+inline double flow_of(const FlowMatrix& F, int n, int m) {
+    if (n < 0 || n >= (int)F.size()) return 0.0;
+    auto it = F[n].find(m); return it == F[n].end() ? 0.0 : it->second;
+}
+
 // total (over goods) realized flow leaving n toward m, this tick
 inline double flow_toward(const std::vector<econ::GoodFlow>& per_good, int n, int m) {
     double f = 0;
@@ -88,7 +104,7 @@ inline double path_share(const std::vector<econ::NodeStandings>& st, const std::
 inline std::vector<Placement> candidates(int N, int home, const std::set<int>& network,
                                          const std::vector<std::vector<int>>& adj,
                                          const std::vector<econ::NodeStandings>& st,
-                                         const std::vector<econ::GoodFlow>& per_good,
+                                         const FlowMatrix& F,
                                          int country) {
     std::vector<Placement> out;
     if (home < 0 || home >= N) return out;
@@ -100,7 +116,7 @@ inline std::vector<Placement> candidates(int N, int home, const std::set<int>& n
         if (inside < 0 || inside >= (int)adj.size()) continue;
         for (int outside : adj[inside]) {
             if (network.count(outside)) continue;         // not a frontier edge
-            double f = flow_toward(per_good, outside, inside);
+            double f = flow_of(F, outside, inside);
             if (f <= 0) continue;                         // nothing moves inward here
             // the merchant would stand at `outside`: its own presence is +2 there, so its
             // share at the entry node is never zero even where nothing propagates
@@ -143,13 +159,13 @@ inline double collect_value(const std::vector<econ::NodeStandings>& st,
 inline std::vector<Placement> plan(int N, int home, int k,
                                    const std::vector<std::vector<int>>& adj,
                                    const std::vector<econ::NodeStandings>& st,
-                                   const std::vector<econ::GoodFlow>& per_good,
+                                   const FlowMatrix& F,
                                    int country) {
     std::vector<Placement> chosen;
     if (home < 0 || home >= N || k <= 0) return chosen;
     std::set<int> network{home};
     for (int i = 0; i < k; i++) {
-        auto cands = candidates(N, home, network, adj, st, per_good, country);
+        auto cands = candidates(N, home, network, adj, st, F, country);
         if (cands.empty() || cands.front().added <= 0) break;   // nothing left worth a merchant
         chosen.push_back(cands.front());
         network.insert(cands.front().node);
@@ -161,11 +177,11 @@ inline std::vector<Placement> plan(int N, int home, int k,
 inline double added_value(int N, int home, const std::set<int>& network,
                           const std::vector<std::vector<int>>& adj,
                           const std::vector<econ::NodeStandings>& st,
-                          const std::vector<econ::GoodFlow>& per_good,
+                          const FlowMatrix& F,
                           int country, int node, int target) {
     std::vector<int> parent = network_parents(N, home, network, adj);
     if (target < 0 || target >= N || parent[target] < 0) return 0.0;
-    return flow_toward(per_good, node, target) * path_share(st, parent, target, home, country);
+    return flow_of(F, node, target) * path_share(st, parent, target, home, country);
 }
 
 } // namespace frontier

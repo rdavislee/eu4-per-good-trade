@@ -35,6 +35,7 @@
 #include "revpanel.h"
 #include "flagfix.h"
 #include "clickfix.h"
+#include "nocollect.h"
 #include "envoy.h"
 #include "aisilence.h"
 #include "ticklive.h"
@@ -419,6 +420,13 @@ static void run_install(const std::string& logpath) {
                     else
                         log << "  send-merchant dispatch NOT installed: " << eerr << (char)10;
                     // ...and vanilla's own merchant AI is silenced so it cannot undo ours.
+                    // ...and no merchant may collect, for the player too: every SetTrader with
+                    // hasTrader is forced to transfer unless the record is a capital (nocollect.h).
+                    std::string ncerr;
+                    if (nocollect::install(&ncerr))
+                        log << "  no-collect enforced at SetTrader (prologue hook at 0xB5E290)" << (char)10;
+                    else
+                        log << "  no-collect NOT installed: " << ncerr << (char)10;
                     std::string serr;
                     if (aisilence::install(&serr))
                         log << "  vanilla merchant AI silenced (call at 0x1B831D -> NOPs)" << (char)10;

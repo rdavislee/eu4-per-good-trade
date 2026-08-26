@@ -41,6 +41,7 @@
 #include "flagfix.h"
 #include "clickfix.h"
 #include "envoy.h"
+#include "nocollect.h"
 #include "caravan.h"
 #include "money.h"
 #include "aiwire.h"
@@ -481,6 +482,8 @@ inline int apply(uintptr_t mgr) {
           aiwire::step(sim, g_plan.names, st, orient, und, phi_out, (int)g_ticks.load(), pidx, la, &per_good); }
         PH("ai-step");
         envoy::dispatch(sim, g_plan.names, st, und, per_good, (int)g_ticks.load(), &la);   // send free merchants to planned nodes
+        nocollect::sweep(sim, &la);       // records still collecting from before the hook (the save)
+        nocollect::report(la);
         PH("dispatch");
         { std::ofstream lc(g_log, std::ios::app); lc << "  [ai/cost] validate_region calls this tick=" << livetrade::g_validate_calls << " syscalls=" << livetrade::g_validate_syscalls << "; plan() calls=" << frontier::g_calls_plan << " candidates() calls=" << frontier::g_calls_candidates << " cache hits=" << aiwire::g_plan_cache_hits << (char)10; }
         aiwire::g_flowmat = nullptr;

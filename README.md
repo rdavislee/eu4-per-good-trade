@@ -5,6 +5,12 @@ DRAIN operator; the engine's own money is routed through those graphs and writte
 engine's own structures. Target: EU4 **1.37.5** (build `835bfdf8`), Windows/Steam, single-player,
 runtime-attached DLL.
 
+## Playing it
+
+**[INSTALL.md](INSTALL.md)** — installation (one file into the game folder, one into your mod
+folder), the 1.37.5 build lock, uninstall and troubleshooting.
+**[ABOUT.md](ABOUT.md)** — what the mod does to trade and why it improves on vanilla's authored map.
+
 ## The spec
 
 **`per-good-trade-spec.md`** at this root is the release copy of the current specification —

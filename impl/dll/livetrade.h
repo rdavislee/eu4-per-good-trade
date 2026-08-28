@@ -33,6 +33,15 @@ inline std::string self_dir() {
     size_t slash = p.find_last_of("\\/");
     return slash == std::string::npos ? std::string(".") : p.substr(0, slash);
 }
+// A SHIPPED BUILD MUST WORK WITH NOTHING BESIDE IT. Nine markers began as developer switches and
+// quietly became requirements: without them the DLL attaches and does nothing, which looks exactly
+// like a failed install. Features now default ON and each keeps a `pgt.NO<NAME>` escape hatch, so
+// bisection still works the way every debugging session in this project relied on.
+inline bool feature_on(const char* name) {
+    std::string off = self_dir() + "\\pgt.NO" + name;
+    return GetFileAttributesA(off.c_str()) == INVALID_FILE_ATTRIBUTES;
+}
+
 inline bool marker_present(const char* name) {
     std::string path = self_dir() + "\\pgt." + name;
     return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;

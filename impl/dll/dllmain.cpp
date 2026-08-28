@@ -20,6 +20,7 @@
 #include <string>
 #include "pattern.h"
 #include "hooks.h"
+#include "proxy.h"
 #include "livetrade.h"
 #include "install.h"
 #include "nodemap.h"
@@ -205,7 +206,7 @@ static bool run_install(const std::string& logpath) {
                     std::string ends;
                     for (int i = 0; i < lf.N; i++) if (od[i] == 0) ends += tn.order[i] + " ";
                     log << "    live Phi_w ends { " << ends << "}\n";
-                    if (livetrade::marker_present("LIVEFIELD")) {
+                    if (livetrade::feature_on("LIVEFIELD")) {
                         f = lf;                     // the live field becomes the model's field
                         log << "    USING THE LIVE FIELD (orientation now tracks the campaign)\n";
                     }
@@ -311,7 +312,7 @@ static bool run_install(const std::string& logpath) {
         static std::map<int, std::string> s_id2name;
         s_netlinks = net_links; s_id2name = nm.id_to_name;
 
-        if (livetrade::marker_present("INSTALL")) {
+        if (livetrade::feature_on("INSTALL")) {
             // LINKS FIRST: install_aggregate derives each node's outgoing from what the node
             // actually holds (engine local + the incoming records), so the model's arrivals must
             // already be in those records when it runs.
@@ -325,7 +326,7 @@ static bool run_install(const std::string& logpath) {
             // THE TICK HOOK (spec 2.6): land the write inside the engine's own monthly
             // update, between the value pass and the collector division. Preferred over the
             // polling loop -- it is the point spec 2.6 names, and pass 10 then divides OUR pool.
-            if (livetrade::marker_present("TICKHOOK")) {
+            if (livetrade::feature_on("TICKHOOK")) {
                 ticklive::g_log = logpath;
                 ticklive::g_plan.graphs = s_graphs;
                 ticklive::g_plan.slots = s_slots;
@@ -397,7 +398,7 @@ static bool run_install(const std::string& logpath) {
                     else
                         log << "  direction gates NOT installed: " << gerr << (char)10;
                 }
-                if (livetrade::marker_present("CARAVAN")) {
+                if (livetrade::feature_on("CARAVAN")) {
                     std::string kerr;
                     if (caravan::install(&kerr))
                         log << "  caravan condition ACTIVE at eu4.exe+0xB53CC5: a merchant that "
@@ -405,7 +406,7 @@ static bool run_install(const std::string& logpath) {
                     else
                         log << "  caravan condition NOT installed: " << kerr << "\n";
                 }
-                if (livetrade::marker_present("CLICKGATE")) {
+                if (livetrade::feature_on("CLICKGATE")) {
                     std::string cerr;
                     if (clickgate::open_gate(&cerr))
                         log << "  click gate OPEN at eu4.exe+0x8317EF: incoming link entries now "
@@ -490,7 +491,7 @@ static bool run_install(const std::string& logpath) {
                     else
                         log << "  node-window transfer text NOT installed: " << terr << (char)10;
                 }
-                if (livetrade::marker_present("REVPANEL")) {
+                if (livetrade::feature_on("REVPANEL")) {
                     revpanel::g_log = logpath;
                     std::string rerr;
                     if (revpanel::install(&rerr))
@@ -540,7 +541,7 @@ static bool run_install(const std::string& logpath) {
                     else
                         log << "  vanilla merchant AI NOT silenced: " << serr << (char)10;
                 }
-                                if (!livetrade::marker_present("REVPANEL")) {
+                                if (!livetrade::feature_on("REVPANEL")) {
                     // these four are ENFORCEMENT, not reverse-panel features: they must run in every
                     // configuration or the first tick never fires and vanilla's merchant AI fights the
                     // model (reviewed). The REVPANEL block above installs them in the normal setup.
@@ -753,6 +754,21 @@ static void attach_main() {
 
 BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
+        // FIRST, BEFORE ANYTHING ELSE: point the fifteen version.dll exports we stand in for at the
+        // real system DLL. eu4.exe cannot call them before its own code runs, which is after this,
+        // but nothing below may run ahead of it either -- a half-served proxy is a load-time death.
+        proxy::init();
+        {   // Logged HERE, before the build-hash gate can refuse and return: the proxy is what keeps
+            // the process alive at all, so its status must never depend on the mod choosing to run.
+            std::ofstream pl(livetrade::self_dir() + "\\per-good-trade.log", std::ios::app);
+            pl << "version.dll proxy: " << proxy::g_resolved << "/17 exports resolved from "
+               << (proxy::g_private_path.empty() ? std::string("(no private copy)") : proxy::g_private_path)
+               << (proxy::g_loaded ? "" : "  [FAILED TO LOAD THE REAL DLL]")
+               << (proxy::g_self_collision ? "  [SELF-COLLISION DETECTED AND REFUSED]" : "") << (char)10;
+        }
+        // Say what happened: a proxy that silently serves nothing is indistinguishable from a
+        // working one until the game calls a version API and dies.
+
         // ONE INSTANCE PER PROCESS -- decided by the CODE, never by a kernel object (2026-08-27).
         // A second copy of this DLL in the SAME process (proxy + injector) must stay inert: its
         // earlyload install would find the call sites already repointed and its done!=6 cleanup

@@ -347,7 +347,7 @@ inline void install_active_orientation() {
 // re-installed when the VIEW changes and not only when the solver publishes a new generation,
 // because selecting a good does not advance the generation. This also has to run after
 // viewmode::poll, which is why it no longer lives in the adopt block above.
-if (livetrade::marker_present("ARROWS") &&
+if (livetrade::feature_on("ARROWS") &&
     (g_plan.generation != g_installed_gen || viewmode::g_selected != g_installed_view)) {
     const std::vector<std::pair<int, int>>& active =
         (viewmode::per_good() && viewmode::g_selected < (int)g_plan.graphs.size())
@@ -373,7 +373,7 @@ if (livetrade::marker_present("ARROWS") &&
     }
     // REORIENT THE DEFINITION GRAPH -- what drives the node window's tabs AND the arrows.
     int relinked = -1;
-    if (livetrade::marker_present("RELINK")) {
+    if (livetrade::feature_on("RELINK")) {
         std::ofstream lgr(g_log, std::ios::app);
         auto sim_now = livetrade::read_sim_nodes();      // needed for the steer clamp
         std::set<std::pair<std::string, std::string>> want;
@@ -386,7 +386,7 @@ if (livetrade::marker_present("ARROWS") &&
                 relink::dump_lists(g_log, {"baltic_sea", "novgorod", "lubeck"});
         }
     }
-    int flipped = livetrade::marker_present("RELINK") ? relinked
+    int flipped = livetrade::feature_on("RELINK") ? relinked
                                                       : arrows::set_directions(desired);
     // REBUILD THE LAYER ON EVERY INSTALL, not only when `flipped > 0`: relink returns links
     // reversed vs the FILE declaration, not vs the previous install, so leaving a per-good view
@@ -712,7 +712,7 @@ inline void frame_view_poll() {
     }
 
     // Reverse-direction map panels, driven from the frame hook (render thread, inside the frame).
-    if (livetrade::marker_present("REVPANEL")) {
+    if (livetrade::feature_on("REVPANEL")) {
         std::ofstream rp(g_log, std::ios::app);
         revpanel::frame_tick(&rp);
     }
@@ -1143,7 +1143,7 @@ inline int apply(uintptr_t mgr) {
     auto away  = econ::directed_flows_no_bonus(shown);           // NO bonus (used again below for the per-mille shares)
     homeward::publish(g_plan.names, und, collect_nodes, sim, &away);   // the SetTrader hook homeward default: a user rule, not an AI feature (reviewed)
     compute_matrix_c();                                           // the model reach into the engine byte (light ships, +10%/merchant bonus)
-if (livetrade::marker_present("AI")) {   // every month, a third of the countries (aiwire::g_shard)
+if (livetrade::feature_on("AI")) {   // every month, a third of the countries (aiwire::g_shard)
         ai::Orient orient = aiwire::build_orient(g_plan.N, per_good, g_plan.graphs, inj_field);
         std::ofstream la(g_log, std::ios::app);
         PH("pre-flowmat");

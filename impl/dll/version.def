@@ -1,28 +1,32 @@
-; Export forwarders so per-good-trade.dll can stand in as the game's version.dll: EU4 imports
-; VERSION.dll, Windows loads the game-directory copy before the System32 one (version.dll is NOT
-; a KnownDLL -- checked), so our DllMain runs before the game's main and the mod is present in
-; EVERY launch, Steam's included. No injector, nothing to time.
+; Stand in as the game's version.dll. EU4 imports VERSION.dll; Windows loads the game-directory
+; copy before the System32 one (version.dll is NOT a KnownDLL -- checked), so our DllMain runs
+; before the game's main and the mod is present in EVERY launch, Steam's included.
 ;
-; THE FORWARDER TARGET MUST NOT BE "version" (2026-08-27): the loader resolves a forwarder's
-; module name by the normal search order, which finds the GAME-DIRECTORY version.dll -- us --
-; and a self-referential forwarder is a load-time failure. eu4.exe then dies before its window
-; appears (measured: process gone within 2 s, no log, no crash dump). install-proxy.ps1 therefore
-; copies the real System32ersion.dll into the game directory as pgt_version_orig.dll, and every
-; export below forwards there.
+; NO FORWARDERS ANY MORE (2026-08-28). These used to read `= pgt_version_orig.<name>`, which meant
+; the user had to hand-copy System32's version.dll into the game directory under that private name
+; -- the most error-prone step in installing the mod, and one whose failure kills the process at
+; load with no window and no log. The target could never simply be "version": the loader resolves a
+; forwarder's module by the normal search order, finds US, and a self-referential forwarder is a
+; load-time failure.
+;
+; Each name below is now a real exported stub (proxy.h) that jumps through a pointer filled during
+; DllMain from the system copy, loaded by absolute path. One file to install instead of two.
 LIBRARY per-good-trade
 EXPORTS
-    GetFileVersionInfoA        = pgt_version_orig.GetFileVersionInfoA
-    GetFileVersionInfoByHandle = pgt_version_orig.GetFileVersionInfoByHandle
-    GetFileVersionInfoExW      = pgt_version_orig.GetFileVersionInfoExW
-    GetFileVersionInfoSizeA    = pgt_version_orig.GetFileVersionInfoSizeA
-    GetFileVersionInfoSizeExW  = pgt_version_orig.GetFileVersionInfoSizeExW
-    GetFileVersionInfoSizeW    = pgt_version_orig.GetFileVersionInfoSizeW
-    GetFileVersionInfoW        = pgt_version_orig.GetFileVersionInfoW
-    VerFindFileA               = pgt_version_orig.VerFindFileA
-    VerFindFileW               = pgt_version_orig.VerFindFileW
-    VerInstallFileA            = pgt_version_orig.VerInstallFileA
-    VerInstallFileW            = pgt_version_orig.VerInstallFileW
-    VerLanguageNameA           = pgt_version_orig.VerLanguageNameA
-    VerLanguageNameW           = pgt_version_orig.VerLanguageNameW
-    VerQueryValueA             = pgt_version_orig.VerQueryValueA
-    VerQueryValueW             = pgt_version_orig.VerQueryValueW
+    GetFileVersionInfoA
+    GetFileVersionInfoByHandle
+    GetFileVersionInfoExA
+    GetFileVersionInfoExW
+    GetFileVersionInfoSizeA
+    GetFileVersionInfoSizeExA
+    GetFileVersionInfoSizeExW
+    GetFileVersionInfoSizeW
+    GetFileVersionInfoW
+    VerFindFileA
+    VerFindFileW
+    VerInstallFileA
+    VerInstallFileW
+    VerLanguageNameA
+    VerLanguageNameW
+    VerQueryValueA
+    VerQueryValueW

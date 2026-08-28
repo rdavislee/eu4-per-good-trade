@@ -1,85 +1,116 @@
-# Per-Good Trade — an EU4 trade overhaul
+# Mare Liberum
 
-**Every trade good gets its own trade network, and every arrow on the map is computed from the state
-of the world instead of drawn by a designer.**
+*"The free sea": an EU4 trade overhaul where every arrow on the map is computed from the
+state of the world, not drawn by a designer.*
 
-In vanilla, the trade map was decided once and never moves: Venice is rich because the arrows point
-at Venice, and no amount of development turns a single one. Goods are cosmetic — grain, spices and
-cloth all flow the same way to the same place.
+**For Europa Universalis IV 1.37.5 · Steam · Windows · single-player · no DLC required**
 
-Here trade is an outcome. Each good runs from where it is produced toward where the wealth wants it,
-recomputed every month, so conquering a producer hands you a commodity to route home; developing
-base tax pulls the world's goods toward your capital while base production makes a distant province
-a source; and the world's centers of trade move when the wealth does. In a 200-year test campaign
-they migrated from Genoa and Hangzhou to the English Channel, the Rhineland and Nippon — Britain
-built the Channel into a market by developing both banks, while China lost the east by spending the
-era at war. **Any nation can do it. There is no mission and no unique mechanic.**
+**TL;DR:** Vanilla's trade map is hardwired and everything drains to Europe, forever. Mare
+Liberum recomputes the whole trade map every in-game month, one network per trade good, from
+where things are made and where the wealth is, so trade can flow in any direction and the
+world's trade capitals are earned, not scripted. The controls stay vanilla's, with one
+decision fewer. Installing is two drops and a checkbox.
 
-### → [Install it](INSTALL.md)  ·  [What it changes, and why](ABOUT.md)
+What if the trade map answered to the world?
 
-EU4 **1.37.5** (build `835bfdf8`), Windows/Steam, single-player. Drag-and-drop: one file into the
-game folder, one folder into your mod folder.
+In vanilla EU4 the arrows between trade nodes (the routes trade value travels on the map)
+were drawn once, before release, and no action in the game moves one. Every route on the
+planet eventually drains into the English Channel, Genoa or Venice, in 1444 and in 1821,
+whoever owns the world. You can fight for a bigger share of the flow; you can never change
+where the flow goes. And the moment goods enter that network they become one number: the game
+still lists what's in the barrel, but grain, silk and spices all ride the same arrows to the
+same three rooms in Europe.
+
+**Mare Liberum computes the arrows instead.** Every trade good gets its own trade network
+(29 of them at the 1444 start), each one re-derived every in-game month from where that good
+is actually produced and where the world's wealth actually sits. The same strait can carry
+cloth east and furs west at the same time. And the places everything ultimately drains toward
+are an output of *your* campaign, not a line in a data file.
+
+- **Conquer the source, not the arrows.** A province's pull on the world's goods comes from
+  its development and its land, not its flag, so painting the map bigger doesn't bend the
+  arrows toward you on its own. Conquest still buys trade power and share, as it always did;
+  what's new is that it buys *supply*. Take the region that grows the spices and you hold the
+  source of the spice network, and the map carries the good toward whoever wants it most.
+  Make sure that's you.
+- **Build the next Venice.** An *end* (a node with no outgoing arrows, where the world's
+  trade stops) is computed from wealth, not chosen by a designer. In one two-century
+  hands-off test the ends held at Genoa and Hangzhou; in another, by 1635 they were the
+  English Channel, the Rhineland and Nippon. No mission, no special mechanic: the ends are
+  yours to fight over.
+- **Play both directions.** A merchant can work either end of a link, including pushing
+  goods *against* the prevailing current, the way European cloth really did sail toward the
+  colonies. The AI plays the reverse board too: Ming's first picks steer Hangzhou and Xi'an
+  inland, toward Beijing.
+- **Spend development like a trader.** Base tax is pure demand: it makes a place hungrier,
+  and goods orient toward hunger. Base production is supply; it makes the province a source
+  (and, since goods are worth money, adds some pull of its own). Two buttons, two different
+  instruments.
+- **Let war bend the map.** Vanilla already makes devastated land produce less; here it also
+  stops *pulling*, and when a region stops pulling, arrows turn around. Stripping the
+  Hangzhou node bare flipped 35 links in one tick and moved the East's terminus within
+  months; devastating Champagne reversed the Channel's trade, and healing it reverted every
+  flip, exactly.
+- **Keep your instincts.** Vanilla nodes, vanilla goods and prices, vanilla merchant range.
+  And your income is still booked by the engine itself. You never issue an order for a single
+  good; every control stays node-wide. One choice is gone outright: collecting is your
+  capital's job now, and merchants exist to steer. Collecting abroad was only ever vanilla's
+  workaround for a one-way map that stranded value downstream of your home; with goods
+  flowing in every direction, nothing is stranded. You steer it home instead.
+
+### → [Install it](INSTALL.md): two drops and a checkbox. · [What it changes, and why](ABOUT.md) · [The story](WHY.md)
+
+**Does it hold up?** A 201-year hands-off campaign (1444–1645) ran unattended at speed 5
+without a crash, and every month of it each country's ledger trade income was checked against
+what the mod computed. The worst disagreement in two centuries was about three hundredths of
+a ducat. In separate control tests from the same start, world trade income ran a steady ~3%
+above unmodded runs with no drift or compounding. The live-game test record, residuals
+included, is [`TESTING.md`](TESTING.md).
+
+| | |
+|---|---|
+| Game | EU4 **1.37.5**, Steam, Windows 64-bit. The mod verifies the game binary at startup and refuses any other build |
+| Mode | Single-player, non-ironman (achievements off, as with any mod) |
+| DLC | None required. *Wealth of Nations* is worth having: it lets you move your trade capital, which is now your only collection point |
+| Other mods | Total conversions supported by design; developed and debugged against Anbennar and Extended Timeline ([notes](INSTALL.md)) |
+| Distribution | [GitHub releases](https://github.com/rdavislee/eu4-per-good-trade/releases): half the mod is a native plug-in (`version.dll`) that Steam Workshop can't host. Nothing on disk is patched, the game's exe is never modified, the DLL makes no network connections, and the build is bit-reproducible so you can build it yourself and check the hash ([how](INSTALL.md#build-it-yourself)) |
 
 ---
 
-*The rest of this file is for people working on the mod.*
-
-Every good's network is computed monthly from the world state by the DRAIN operator; the engine's
-own money is routed through those graphs and written back into the engine's own structures.
+*The rest of this file is for people working on the mod. The project's working name in the
+spec, the code, the log and the DLL is **per-good trade** (`pgt`); Mare Liberum is the
+player-facing title.*
 
 ## The spec
 
-**`per-good-trade-spec.md`** at this root is the release copy of the current specification —
-**v6.6**, 2,283 lines, MD5 `48414cb316bd6b3c3355b1b87afdc3e2` — byte-identical to the canonical
-file at `docs/v6-owner-agnostic/per-good-trade-spec.md`. The canonical copy is the one the harness
-verifies and the one to edit; refresh this root copy from it on any change.
-
-The spec is self-contained and implementable as-is: §1 mechanics, §2 implementation (§2.9 is the
-build order), §3 reasoning and open questions. It survived eleven adversarial audit rounds; its
-final graded state is **1,176 claims CONFIRMED, 0 REFUTED**
-(`docs/audit/validation-round11.md`, with the full grading and its bookkeeping).
+**`per-good-trade-spec.md`** at this root is the release copy of the specification (**v6.6**,
+MD5 `48414cb316bd6b3c3355b1b87afdc3e2`), byte-identical to the canonical file at
+`docs/v6-owner-agnostic/per-good-trade-spec.md`. The canonical copy is the one the harness
+verifies and the one to edit; refresh this root copy from it on any change. §1 is mechanics,
+§2 implementation, §3 reasoning. It survived eleven adversarial audit rounds
+(`docs/audit/validation-round11.md` has the final grading).
 
 ## Layout
 
 | path | what it is |
 |---|---|
-| `per-good-trade-spec.md` | v6.6 release copy (read this) |
-| `docs/v6-owner-agnostic/` | the canonical tree: spec, `changes-v6.md` (deleted text), `fixes-agreed.md` (v5→v6 ledger, frozen), and `scripts/` |
-| `docs/v6-owner-agnostic/scripts/` | the reference implementation and harness (below), plus per-round validator probes in `r7/`–`r12/` |
-| `docs/audit/` | the complete audit trail: validations, claim censuses, negotiated fix lists, frozen baselines and their byte-verified diffs (see `docs/README.md`) |
-| `docs/v1-laplacian/` … `docs/v5-owner-agnostic/` | historical version trees, cited by the spec and the audit records; do not modify |
-| `docs/v2-drain/drain-orientation.md` | the DRAIN operator's original write-up, cited by the spec by bare name |
+| `per-good-trade-spec.md` | v6.6 release copy (read this first) |
+| `impl/` | the DLL and solver implementation; `impl/DEPARTURES.md` records where the build deliberately differs from the spec |
+| `dist/` | the shippable mod folder (`pgt.mod` + `pgt/`) |
+| `docs/v6-owner-agnostic/` | the canonical tree: spec, reference implementation and harness (`scripts/`) |
+| `docs/audit/` | the complete audit trail (see `docs/README.md`) |
+| `docs/v1-laplacian/` … `docs/v5-owner-agnostic/` | historical version trees, cited by the spec; do not modify |
 
-## Verify before you build
+## Verify and build
 
 ```
 cd docs/v6-owner-agnostic/scripts
-python verify6.py ../per-good-trade-spec.md    # figures in the doc vs values computed from the install
+python verify6.py ../per-good-trade-spec.md    # figures in the spec vs values computed from the install
 ```
 
-Expected: `RESULT: 37 checks, 0 failed`. Requires the EU4 1.37.5 install at
-`C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV` and the readable saves
-(`VANILLA_start.eu4`, `Castile1444_12_22.eu4`) in the documents save-games directory; `numpy` and
-`scipy` (HiGHS) in Python. Some figures also cite `measure6.py`, `round6.py`, `props6.py`,
-`final.py` — all runnable the same way. `coverage6.py` measures what the harness does *not* guard;
-re-run it rather than quoting it.
-
-## Acceptance tests
-
-**`TESTING.md`** is the live-game acceptance suite — what must be seen working in the running
-game, from the `Φ_w` map mode and any-edge merchant assignment through per-good views and the
-monthly income checks. The ★ tests are the bar for "it works".
-
-## Implementation entry points
-
-- **Build order**: spec §2.9 — defines parser first, then the save parser and `path`/`control`
-  read, then the b-flow + sweep with their per-tick assertions (each paired with a negative
-  fixture), and the survival table; the memory track is §2.7's fifteen open probes plus locating
-  the live produced-quantity fields.
-- **Reference implementation** (`scripts/`): `solver.py` (field build), `drain.py` (the DRAIN
-  operator), `flowop.py` (LP + `LP_OPTS`, the pinned tolerances), `nodes.py` (tradenodes parse),
-  `measure6.py` (the figure battery). The DLL must agree with it on **orientation exactly**
-  (spec §2.8's cross-implementation check).
-- **What the DLL adds**: live memory reads (per-node `trade_goods_size`, §1.8), the per-good
-  routing and ÷12 engine writes (§2.6), the emitted `00_tradenodes.txt` (§2.4), the trade UI
-  (§1.12), AI merchant scoring (§3.14), attachment via pattern scanning (§2.5, EU4dll precedent).
+Expected: `RESULT: 37 checks, 0 failed` (requires the 1.37.5 install, the readable saves, and
+`numpy` + `scipy`). The reference implementation is `solver.py`, `drain.py`, `flowop.py`,
+`nodes.py`, `measure6.py`; the DLL must agree with it on orientation exactly (spec §2.8).
+Building the DLL from source is covered in [`INSTALL.md`](INSTALL.md#build-it-yourself);
+the build is bit-reproducible, so a release binary can be verified rather than trusted.
+`TESTING.md` is the live-game acceptance suite; the ★ tests are the bar.

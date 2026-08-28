@@ -82,6 +82,33 @@ DIRECTION GATES OPEN (spec 1.10): 5/6 rebuild call sites hooked [MISSED 0x775EEC
 `5/6` is correct, not an error: the sixth site is claimed by another part of the mod that
 installs first. The log says so plainly rather than quietly rounding up.
 
+## Optional: launcher tile art
+
+Purely cosmetic, skip freely. The launcher will show Mare Liberum with a blank tile. That is
+a launcher limitation, not a broken install: the launcher only shows tile art it downloaded
+from Steam Workshop, and never reads a picture from a locally installed mod's folder (the mod
+ships `thumbnail.png` and declares it in `pgt.mod`; the launcher ignores both).
+
+`set-launcher-thumbnail.ps1`, next to `pgt.mod` in the release, fixes the tile by doing for
+this mod exactly what the launcher does for a Workshop mod, and nothing else: it copies
+`mod\pgt\thumbnail.png` into the launcher's image cache (as
+`.launcher-cache\local-mod-thumbnail-pgt\thumbnail.png`) and fills in one column
+(`thumbnailPath`) of the launcher's mod database (`launcher-v2.sqlite`), on Mare Liberum's row
+only. It uses Windows' own SQLite (`winsqlite3.dll`), so nothing is installed and no network
+is touched; the script is short and readable if you'd rather check than trust.
+
+With the mod installed, the launcher run at least once since (so the mod is in its database),
+and the launcher **closed**:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\set-launcher-thumbnail.ps1
+```
+
+Run it from the folder holding the script (in a repo clone: `dist\`). Safe to re-run; if the
+launcher ever rebuilds its database and the tile goes blank, run it again. To undo, delete the
+`local-mod-thumbnail-pgt` folder from `.launcher-cache`: the tile returns to blank and nothing
+else changes.
+
 ## What the mod writes (and doesn't)
 
 Worth knowing before your file monitor tells you:
@@ -108,7 +135,9 @@ ends come back steering vanilla's first outgoing link).
 
 For a spotless removal, also delete the leftovers, all inert: `per-good-trade.log` and any
 `pgt.*` marker files in the game folder, `%TEMP%\pgt_version_orig.dll`, the `.eu4.pgt`
-sidecars beside your saves, and the `pgt` folder + `pgt.mod` in your mod directory.
+sidecars beside your saves, the `pgt` folder + `pgt.mod` in your mod directory, and, if you
+ran the optional tile-art script, `.launcher-cache\local-mod-thumbnail-pgt` next to the mod
+directory.
 
 ## Why a file called `version.dll`
 

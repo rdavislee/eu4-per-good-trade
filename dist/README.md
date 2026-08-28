@@ -12,6 +12,8 @@ INSTALL.md's steps can actually be followed:
 | `pgt/common/tradenodes/00_tradenodes.txt` | `impl/out/00_tradenodes.txt` |
 | `pgt/interface/countrytradeview.gui` | `impl/mod/interface/countrytradeview.gui` |
 | `pgt.mod`, `pgt/descriptor.mod` | written here |
+| `pgt/thumbnail.png` | written here (generated art; the launcher ignores it for local mods, see below) |
+| `set-launcher-thumbnail.ps1` | written here; optional, gives the launcher tile its image ([../INSTALL.md](../INSTALL.md#optional-launcher-tile-art)) |
 
 Re-assemble after changing either source file:
 

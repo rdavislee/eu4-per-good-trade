@@ -3,7 +3,7 @@
 Two drops and a checkbox:
 
 1. Copy **`version.dll`** into your EU4 game folder, next to `eu4.exe`.
-2. Copy **`pgt.mod`** and the **`pgt`** folder into your EU4 mod folder.
+2. Copy **`dist/pgt.mod`** and the **`dist/pgt`** folder into your EU4 mod folder.
 3. Enable **Per-Good Trade** in the launcher and play.
 
 That is the whole installation. No injector, no separate launcher, no script, no configuration
@@ -82,13 +82,42 @@ refused. The log says which.
 
 **Antivirus quarantines the file.** Expected, and worth taking seriously as a category: this is a DLL
 that loads into another process and patches its code, which is precisely what the heuristic looks
-for. You are trusting whoever built the binary. Build it yourself from this repository if you would
-rather not.
+for. You are trusting whoever built the binary — so don't: **build it yourself and check the hash
+matches** (see below). The build is bit-reproducible, so a binary that differs from your own build
+is a binary you should not run.
 
 **It stopped working after a Steam update.** The build check is refusing a patched executable. Roll
 back to 1.37.5.
 
 **Multiplayer.** Not supported, not tested. Trade is computed locally; two clients would diverge.
+
+## Build it yourself
+
+The build is **bit-reproducible**: two builds of the same source produce byte-identical DLLs, so you
+can verify a release binary instead of trusting it.
+
+```powershell
+winget install MartinStorsjo.LLVM-MinGW.UCRT     # toolchain, once
+cd impl\dll
+.\build-dll.ps1                                  # finds the toolchain, builds to %TEMP%
+```
+
+Verified with **llvm-mingw-20260421-ucrt-x86_64** (clang 22.1.4); any llvm-mingw UCRT x86_64 build
+should work, and plain MSYS2 mingw-w64 is untested. `-Mingw <path>\bin` points at a specific
+toolchain and `-Scratch <dir>` builds elsewhere.
+
+Compare your build against the one you were given:
+
+```powershell
+Get-FileHash .\per-good-trade.dll -Algorithm MD5
+Get-FileHash "$env:TEMP\per-good-trade-build\per-good-trade.dll" -Algorithm MD5
+```
+
+Equal hashes mean the binary is exactly this source. (Reproducibility comes from
+`-Wl,--no-insert-timestamp`: the PE and debug-directory timestamps were the only bytes that ever
+differed between builds — four of them, measured.)
+
+The solver-side acceptance suite, which needs no running game, is `impl\accept.ps1`.
 
 ## For developers
 

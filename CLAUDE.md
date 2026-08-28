@@ -9,7 +9,7 @@ audited specification. Read `README.md` first, then the spec.
    rounds; every figure in it is instrument-backed. Implement what it says. If it seems wrong,
    check `docs/audit/` before concluding that — most "bugs" you will suspect were already
    litigated there.
-2. **The reference implementation** (`v6-owner-agnostic/scripts/`: `solver.py`, `drain.py`,
+2. **The reference implementation** (`docs/v6-owner-agnostic/scripts/`: `solver.py`, `drain.py`,
    `flowop.py`, `nodes.py`, `measure6.py`) is correct **by definition** where your code disagrees
    with it on orientation (spec §2.8). Diff against it early and often.
 3. Everything else — audit records, probe outputs, historical `v1`–`v5` trees — is read-only
@@ -22,13 +22,13 @@ audited specification. Read `README.md` first, then the spec.
   baselines and `round*.diff` files are MD5-pinned and the diff chain reconstructs byte-exactly.
   Never let a tool rewrite line endings in those files.
 - If the spec must change: keep `python scripts/verify6.py ../per-good-trade-spec.md` (run from
-  `v6-owner-agnostic/scripts/`) at **0 failed**, and refresh the root `per-good-trade-spec.md` as
+  `docs/v6-owner-agnostic/scripts/`) at **0 failed**, and refresh the root `per-good-trade-spec.md` as
   a byte-identical copy (update the MD5 quoted in `README.md`).
 - **Target build only**: EU4 1.37.5, binary `835bfdf8`. The DLL must verify the build hash at
   attach and refuse others (§2.5). Any patch invalidates every found offset.
 - **Single-player only.** Do not attempt multiplayer; §2.1's build-discipline checks gate it.
 - New implementation code goes in a **new top-level directory** (e.g. `impl/`), not inside
-  `v6-owner-agnostic/`.
+  `docs/v6-owner-agnostic/`.
 
 ## Environment
 

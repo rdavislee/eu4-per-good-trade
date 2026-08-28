@@ -2,8 +2,18 @@
 # Fails loudly if any step regresses. The engine-side (★) tests in TESTING.md need the DLL
 # attached to a running game and are not run here.
 $ErrorActionPreference = "Stop"
-$mingw = "C:\Users\rdavi\AppData\Local\Microsoft\WinGet\Packages\MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\llvm-mingw-20260421-ucrt-x86_64\bin"
-$env:PATH = "$mingw;" + $env:PATH
+# TOOLCHAIN: llvm-mingw UCRT x86_64 (verified with llvm-mingw-20260421-ucrt-x86_64, clang 22.1.4).
+#   winget install MartinStorsjo.LLVM-MinGW.UCRT      -- or pass -Mingw <toolchain>\bin
+# Scratch defaults to $env:TEMP; -Scratch overrides. Both were hardcoded to one machine.
+param([string]$Mingw = "", [string]$Scratch = "")
+if (-not $Mingw -and -not (Get-Command g++ -ErrorAction SilentlyContinue)) {
+  $glob = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\MartinStorsjo.LLVM-MinGW.UCRT_*\llvm-mingw-*-ucrt-x86_64\bin"
+  $f = Get-ChildItem -Path $glob -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+  if ($f) { $Mingw = $f.FullName }
+}
+if ($Mingw) { $env:PATH = "$Mingw;" + $env:PATH }
+if (-not $Scratch) { $Scratch = Join-Path $env:TEMP "per-good-trade-build" }
+New-Item -ItemType Directory -Force $Scratch | Out-Null
 $impl = $PSScriptRoot
 $exe  = "$impl\impl.exe"
 $eu4  = "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV"
@@ -28,7 +38,7 @@ Step "per-tick assertion battery" { (& $exe checks $eu4 $save | Select-String "R
 Step "negative fixtures (each checker goes RED)" { (& $exe fixtures | Select-String "RESULT") | Out-Host }
 Step "economy fixtures (spec 1.8 routing, each with a red twin)" { (& $exe econ | Select-String "RESULT") | Out-Host }
 Step "inline-hook machinery self-test (detour.h)" {
-  $sc = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+  $sc = "$Scratch\dllbuild"
   & g++ -O2 -std=c++17 -o "$sc\detourtest.exe" "$impl\dll\detourtest.cpp" 2>&1 | Select-Object -First 4 | Out-Host
   (& "$sc\detourtest.exe" | Select-String "RESULT") | Out-Host
 }
@@ -43,19 +53,19 @@ Step "reference harness verify6 (0 failed)" {
   Pop-Location
 }
 # Preserve the live-game evidence before the gate steps (which rewrite the same log file).
-$sc0 = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+$sc0 = "$Scratch\dllbuild"
 if (Test-Path "$sc0\per-good-trade.log") { Copy-Item "$sc0\per-good-trade.log" "$sc0\live-evidence.log" -Force }
 
 Step "DLL build (attach + embedded solver)" { & "$impl\dll\build-dll.ps1" | Select-Object -Last 1 | Out-Host }
 Step "DLL attach gate refuses a non-target host (A4)" {
-  $sc = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+  $sc = "$Scratch\dllbuild"
   Remove-Item "$sc\per-good-trade.log" -ErrorAction SilentlyContinue
   Push-Location $sc; $d = (Get-ChildItem "$sc\per-good-trade*.dll" | Sort-Object LastWriteTime -Desc | Select-Object -First 1).FullName; & "$sc\loadtest.exe" $d | Out-Null; Pop-Location
   $refused = (Get-Content "$sc\per-good-trade.log" -ErrorAction SilentlyContinue) -match "REFUSE"
   if ($refused) { Write-Host "refused non-target host (fails closed)" } else { Write-Host "GATE DID NOT REFUSE"; exit 1 }
 }
 Step "DLL pass path + in-process solver" {
-  $sc = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+  $sc = "$Scratch\dllbuild"
   $log = "$eu4\per-good-trade.log"
   Remove-Item $log -ErrorAction SilentlyContinue
   $env:PGT_ROOT = $eu4
@@ -69,14 +79,14 @@ Step "DLL pass path + in-process solver" {
 }
 
 Step "DLL injector builds (live attach to a running game)" {
-  $mingw = "C:\Users\rdavi\AppData\Local\Microsoft\WinGet\Packages\MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\llvm-mingw-20260421-ucrt-x86_64\bin"
+  $mingw = $Mingw
   $env:PATH = "$mingw;" + $env:PATH
-  $sc = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+  $sc = "$Scratch\dllbuild"
   & g++ -O2 -std=c++17 -o "$sc\injector.exe" "$impl\dll\injector.cpp" 2>&1 | Select-Object -First 4 | Out-Host
   if (Test-Path "$sc\injector.exe") { Write-Host "injector.exe built" } else { Write-Host "INJECTOR BUILD FAILED"; exit 1 }
 }
 Step "live-game integration (evidence from the running EU4)" {
-  $sc = "C:\Users\rdavi\AppData\Local\Temp\claude\C--Users-rdavi-OneDrive-Documents-Paradox-Interactive-Europa-Universalis-IV-mod-per-good-trade\2212c201-8c92-4b43-9989-442dc2c2b754\scratchpad\dllbuild"
+  $sc = "$Scratch\dllbuild"
   $log = "$sc\live-evidence.log"
   if (-not (Test-Path $log)) { $log = "$sc\per-good-trade.log" }
   if (-not (Test-Path $log)) { Write-Host "no live-game log yet (inject the DLL into a running game)"; return }

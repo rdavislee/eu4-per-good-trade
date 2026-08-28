@@ -15,7 +15,7 @@ folder), the 1.37.5 build lock, uninstall and troubleshooting.
 
 **`per-good-trade-spec.md`** at this root is the release copy of the current specification —
 **v6.6**, 2,283 lines, MD5 `48414cb316bd6b3c3355b1b87afdc3e2` — byte-identical to the canonical
-file at `v6-owner-agnostic/per-good-trade-spec.md`. The canonical copy is the one the harness
+file at `docs/v6-owner-agnostic/per-good-trade-spec.md`. The canonical copy is the one the harness
 verifies and the one to edit; refresh this root copy from it on any change.
 
 The spec is self-contained and implementable as-is: §1 mechanics, §2 implementation (§2.9 is the
@@ -28,16 +28,16 @@ final graded state is **1,176 claims CONFIRMED · 0 REFUTED · 5 accepted nitpic
 | path | what it is |
 |---|---|
 | `per-good-trade-spec.md` | v6.6 release copy (read this) |
-| `v6-owner-agnostic/` | the canonical tree: spec, `changes-v6.md` (deleted text), `fixes-agreed.md` (v5→v6 ledger, frozen), and `scripts/` |
-| `v6-owner-agnostic/scripts/` | the reference implementation and harness (below), plus per-round validator probes in `r7/`–`r12/` |
+| `docs/v6-owner-agnostic/` | the canonical tree: spec, `changes-v6.md` (deleted text), `fixes-agreed.md` (v5→v6 ledger, frozen), and `scripts/` |
+| `docs/v6-owner-agnostic/scripts/` | the reference implementation and harness (below), plus per-round validator probes in `r7/`–`r12/` |
 | `docs/audit/` | the complete audit trail: validations, claim censuses, negotiated fix lists, frozen baselines and their byte-verified diffs (see `docs/README.md`) |
-| `v1-laplacian/` … `v5-owner-agnostic/` | historical version trees, cited by the spec and the audit records; do not modify |
-| `v2-drain/drain-orientation.md` | the DRAIN operator's original write-up, cited by the spec by bare name |
+| `docs/v1-laplacian/` … `docs/v5-owner-agnostic/` | historical version trees, cited by the spec and the audit records; do not modify |
+| `docs/v2-drain/drain-orientation.md` | the DRAIN operator's original write-up, cited by the spec by bare name |
 
 ## Verify before you build
 
 ```
-cd v6-owner-agnostic/scripts
+cd docs/v6-owner-agnostic/scripts
 python verify6.py ../per-good-trade-spec.md    # figures in the doc vs values computed from the install
 ```
 

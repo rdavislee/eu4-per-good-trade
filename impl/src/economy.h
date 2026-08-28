@@ -37,6 +37,7 @@ struct Standing {
     bool has_own = false;      // own computed (else per-good power falls back to power)
     bool merchant_floor = false;   // a table-owned merchant stands here: final per-good power >= 2
     double pp = 0;      // provincial power here (rec+0x28), the source of propagation
+    double received = 0;   // D3: power received here from downstream provincial fifths (written to rec+0x40 for the tooltip)
     bool collects;      // collecting here: home node, or a merchant collecting
     int steer_to;       // link end this country's merchant steers toward (node index), or -1
     bool is_capital = false;   // this node is the country's trade capital (home)
@@ -117,11 +118,11 @@ inline int apply_split_propagation(int N, std::vector<NodeStandings>& st, const 
             double r = 0; auto it = left.find(e.country); if (it != left.end()) { r = it->second; left.erase(it); }
             double v = base + r; if (v < 0) v = 0;
             if (e.merchant_floor && v < 2.0) v = 2.0;
-            e.power = v;
+            e.power = v; e.received = r;
         }
         for (auto& [c, r] : left) {
             if (r <= 0) continue;
-            Standing s{}; s.country = c; s.power = r; s.own = 0; s.has_own = true; s.pp = 0; s.collects = false; s.steer_to = -1;
+            Standing s{}; s.country = c; s.power = r; s.own = 0; s.has_own = true; s.pp = 0; s.collects = false; s.steer_to = -1; s.received = r;
             st[n].entries.push_back(s); added++;
         }
     }

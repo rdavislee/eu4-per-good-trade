@@ -38,6 +38,7 @@ namespace relink {
 // merchants forced from steer to collect because their node has no outgoing link
 // under the installed orientation (a sink). Counted separately from index clamps.
 inline uint64_t g_demoted = 0;
+inline uint64_t g_reclaimed = 0;   // engine replaced one of our installed vectors; we re-allocated
 
 constexpr int D_NAME      = 0x10;   // inline std::string (size +0x20, cap +0x28)
 constexpr int D_IN_BEGIN  = 0x80;   // incoming {begin,end,cap_end}, stride 8 (definition ptrs)
@@ -66,10 +67,31 @@ struct DefInfo {
     std::vector<int> incident;             // indices into g_links
 };
 
+// EVERYTHING INSTALLED INTO ENGINE OBJECTS COMES FROM THE ENGINE'S ALLOCATOR (2026-08-27).
+// The entry arrays and any >SSO name buffer live inside engine-owned structures; if the engine
+// grows, assigns or destroys one, it frees the memory with ITS allocator. DLL-heap (mingw)
+// buffers there are a cross-heap free waiting to happen -- vanilla never triggered it (every
+// vanilla node key fits SSO; the engine never grew our vectors), Anbennar did: deterministic
+// 0xC0000374 two ticks in, invisible to HeapValidate (the engine pool checks itself).
+constexpr uintptr_t ENGINE_NEW_R = 0x1A332D4;   // the engine's operator new (outlinks' pattern)
+inline uintptr_t engine_alloc(size_t bytes) {
+    using FnNew = void* (__fastcall*)(size_t);
+    auto alloc = (FnNew)(livetrade::module_base() + ENGINE_NEW_R);
+    void* p = alloc(bytes);
+    if (p) memset(p, 0, bytes);
+    return (uintptr_t)p;
+}
+struct EngBuf {                                  // engine-heap block, never freed by the DLL
+    uintptr_t p = 0; size_t n = 0;
+    uint8_t* data() { return (uint8_t*)p; }
+    size_t size() const { return n; }
+    void engine_assign(size_t bytes) { p = engine_alloc(bytes); n = p ? bytes : 0; }
+};
+
 inline std::map<int, DefInfo> g_defs;       // node index -> definition
 inline std::vector<Link> g_links;
-inline std::map<int, std::vector<uint8_t>> g_out_storage;    // node index -> entry array bytes
-inline std::map<int, std::vector<uintptr_t>> g_in_storage;   // node index -> incoming ptr array
+inline std::map<int, EngBuf> g_out_storage;    // node index -> entry array (ENGINE heap)
+inline std::map<int, EngBuf> g_in_storage;     // (vestigial; kept for reset symmetry)
 // deque, NOT vector: a vector reallocates on growth and would dangle every name pointer
 // already handed to the engine -- that crashed the game on the first run.
 inline std::deque<std::string> g_name_pool;
@@ -103,16 +125,28 @@ inline void write_str(uintptr_t s, const std::string& v) {
         *(uint64_t*)(s + 0x10) = v.size();
         *(uint64_t*)(s + 0x18) = 15;
     } else {
-        g_name_pool.push_back(v);
-        const std::string& kept = g_name_pool.back();
-        *(uintptr_t*)s = (uintptr_t)kept.c_str();
-        *(uint64_t*)(s + 0x10) = kept.size();
-        *(uint64_t*)(s + 0x18) = kept.size() + 1;   // >= 16 so the engine reads the pointer
+        // ENGINE-heap name buffer (deduped): the string lives inside an engine structure, and an
+        // engine-side assign/destroy frees it with the ENGINE's allocator. A DLL-heap c_str here
+        // was a cross-heap free on any node key longer than SSO -- vanilla has none, mods do.
+        static std::map<std::string, uintptr_t> pool;
+        uintptr_t& buf = pool[v];
+        if (!buf) {
+            buf = engine_alloc(v.size() + 1);
+            if (buf) memcpy((void*)buf, v.c_str(), v.size() + 1);
+        }
+        if (!buf) return;
+        *(uintptr_t*)s = buf;
+        *(uint64_t*)(s + 0x10) = v.size();
+        *(uint64_t*)(s + 0x18) = v.size() + 1;   // >= 16 so the engine reads the pointer
     }
     VirtualProtect((void*)s, 0x20, old, &old);
 }
 
 // Snapshot every definition and every declared link. Runs once, on a worker thread.
+// An in-process world reload frees every definition this module captured; writing through them
+// afterwards corrupts the new world's heap. reset() forces a fresh capture() on the new objects.
+inline void reset() { g_ready = false; g_defs.clear(); g_links.clear(); g_out_storage.clear(); g_in_storage.clear(); }
+
 inline bool capture(std::ofstream& log) {
     if (g_ready) return true;
     auto defs = arrows::definitions();
@@ -153,8 +187,8 @@ inline bool capture(std::ofstream& log) {
     }
     // pre-size our arrays so no orientation can ever overflow them
     for (auto& [idx, di] : g_defs) {
-        g_out_storage[idx].assign(di.incident.size() * E_STRIDE + E_STRIDE, 0);
-        g_in_storage[idx].assign(di.incident.size() + 1, 0);
+        g_out_storage[idx].engine_assign(di.incident.size() * E_STRIDE + E_STRIDE);
+        g_in_storage[idx].engine_assign((di.incident.size() + 1) * 8);
     }
     g_ready = true;
     log << "  [relink] captured " << g_defs.size() << " definitions, " << g_links.size()
@@ -365,10 +399,16 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
     }
     for (auto& [idx, di] : g_defs) {
         if (idx == 0) continue;                     // definition 0 is the null sentinel
-        std::vector<uint8_t>& stable = g_out_storage[idx];
+        EngBuf& stable = g_out_storage[idx];
         const std::vector<int>& mine = per_node[idx];
         size_t need = mine.size() * E_STRIDE;
-        if (need > stable.size()) { log << "  [relink] overflow at node " << idx << "\n"; return -1; }
+        if (need > stable.size()) { log << "  [relink] overflow at node " << idx << (char)10; return -1; }
+        {   // the ENGINE may have grown/replaced this vector since the last install (its realloc
+            // freed our engine-heap block cleanly); writing through the old pointer would be a
+            // use-after-free -- take a fresh block instead and count it
+            uintptr_t cur = livetrade::fq(di.obj + D_OUT_BEGIN);
+            if (cur != (uintptr_t)stable.data() && stable.p) { stable.engine_assign(stable.n); g_reclaimed++; }
+        }
         uintptr_t base = (uintptr_t)stable.data();
         for (size_t k = 0; k < mine.size(); k++) {
             const Link& L = g_links[mine[k]];
@@ -427,7 +467,7 @@ inline int apply(const std::set<std::pair<std::string, std::string>>& desired_in
     if (livetrade::marker_present("ALLOUT")) {
         for (auto& [idx, di] : g_defs) {
             if (idx == 0) continue;
-            std::vector<uint8_t>& stable = g_out_storage[idx];
+            EngBuf& stable = g_out_storage[idx];
             const std::vector<int>& mine = per_node[idx];
             std::set<int> have(mine.begin(), mine.end());
             uintptr_t base = (uintptr_t)stable.data();

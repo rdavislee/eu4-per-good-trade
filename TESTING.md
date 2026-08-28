@@ -346,3 +346,385 @@ and far propagation pairs for one country), 18 (F6), 19 (find a link where the r
 holds power at one end only; watch whether transfer arrives — the round-5 statistical record and
 its three exception links are in `docs/audit/`, §2.7 item 19 names what the probe must explain).
 Record results against the probe numbers so the spec's §2.7/§2.9 open counts can be closed.
+
+## J. Opening state, node-window controls, persistence (user rules of 2026-08-26; pgt_i27)
+
+Run with the DLL in the process BEFORE the campaign loads (`run.sh` injects at the main menu;
+`install-proxy.ps1` installs it as version.dll). Each test names the log line that measures it.
+
+- **J1 ★ Set up at 11 November 1444.** New game as Castile. Before unpausing: the outliner's merchant
+  rows read "... to Sevilla" (none say Collects), the trade map shows reverse panels, and Genoa's
+  window offers Transfer. Log: `[earlyload] new game ... orientation gen 1 solved`, `[tick] monthly
+  update 1` and `[earlyload] done` all BEFORE `attach complete`'s successor lines; `[opening] vanilla
+  opening placements skipped=<countries>`; `[player] merchants:` at tick 1 shows action=2 at the
+  plan's nodes with `table->sevilla`.
+- **J2 No merchant collects, anywhere, ever.** `[nocollect] ... collect at END nodes []` and
+  `at own capital=0` from tick 1 on (the capital recall + the skipped vanilla placement);
+  `[recall/home]` reports the recalled envoys idle on the next tick.
+- **J3 Buttons.** Any node without your merchant: only *Transfer Trade Power*; your home node: no
+  button and no "Send Merchant" label; a node with your merchant: *Recall* (plus Transfer while it
+  still collects). Genoa/Venice/English Channel offer Transfer. Log: `NODE-WINDOW BUTTONS:` installed.
+- **J4 A transfer points home.** Click Transfer at bordeaux: the shield lands on the ivory_coast or
+  carribean_trade panel (bordeaux has no link to sevilla; the hop with the larger away-flow wins);
+  `homeward set=` increments. The node window and the outliner name that target; at an END node
+  the sentence is still produced (`endtext node-window set=`, `outliner set=`).
+- **J5 Reverse-panel shield hover.** Hovering a shield on a reverse panel shows "X is applying Y
+  power in this direction" (`tooltip-keyed=` increments).
+- **J6 "passed your home" never lingers.** After a flip or a placement, no steer button reads
+  STEER_LATER for more than a frame (`reach-rebuilt=` grows with `after landings:`).
+- **J7 ★ Save round trip.** Move a merchant to a reverse end, save, exit to menu, load: the merchant
+  still points at that end in the window, the outliner and the panel. Log: `[savegame] wrote
+  <save>.eu4.pgt`, then `[earlyload] savegame:` and `[savegame] restored N entries` BEFORE
+  `[tick] monthly update`. A vanilla save (no sidecar) logs `no sidecar ... the opening rule runs once`.
+- **J8 Second campaign in one process.** New game -> menu -> new game: `[world] state reset` appears,
+  and J1 holds again (the tick counter restarts at 1).
+- **J10 Light ships follow the model.** After a few AI ticks, `[ships] country#N: model scores on k of 80
+  nodes` lines appear and `ships: allocator calls=` grows with `rewritten=` close behind (no-scores only
+  for countries with no table entries and no home pool). On the map, AI light-ship fleets protect trade
+  at nodes where that country has a merchant on a reverse end (e.g. a Mediterranean power's fleet at
+  genua), not only at Phi_w-downstream nodes. `pgt.NOSHIPS` must restore vanilla's placements.
+- **J9 Income is not double-paid at setup.** Treasury at 11 Nov equals vanilla's (the setup driver runs
+  with pass 10 suppressed); E1 holds from the first real month.
+
+### Section J results (2026-08-27, pgt_i32-i34)
+
+- **J1 PASS (log; visual pending final sign-off).** Setup inside the loading screen: solve 117-142 ms,
+  tick 1 done before the load returns; player merchants at the plan (safi+valencia -> sevilla) at
+  11 Nov 1444; `vanilla opening placements skipped=956` (the second setup placement call 0x774DB1 ->
+  0x3BAE50, found by the 16-frame SetTrader chain instrument, stubbed alongside 0x774E05).
+- **J2 PASS.** No rogue type-0 placements in i32+; capital-parked merchants recalled; `[settrader/player]`
+  shows only the model's placements.
+- **J4 partial.** homeward defaults measured (bordeaux -> carribean_trade/ivory_coast by flow tie-break);
+  the click flow itself needs a hand test.
+- **J7 PASS.** Autosave wrote `autosave.eu4.pgt` (932 entries; the engine passes RELATIVE paths, resolved
+  against the user dir); Continue Game restored all 932 BEFORE the loading tick; player merchants identical
+  across the round trip; reverse panels present on the loaded save (the savegame setup moved after
+  InitSaveGame -- the inner site fires before deserialization).
+- **J9 evidence.** The setup driver runs with pass 10 suppressed; E1 664/664 and E4 CLEAN from the first
+  real month.
+- **E1/E4 on i32:** 664/664, CLEAN through tick 10. **G1:** 51% of AI placements on Phi_w-INCOMING ends.
+  **H3 on i32:** the tick ~94 ms steady-state, worst frame gap 252 ms (599 ms spike on the autosave month,
+  vanilla's own autosave stall included).
+- Open: J3/J5/J6/J8/J10 hand checks, H1/H4, E3, F, G3/G4 -- and the user's sign-off.
+
+## G3 + H4 -- the 200-year AI-only observer run (2026-08-27, pgt_i73)
+
+Vanilla map, mod only (`mod/pgt.mod`), 1444 Castile -> spectator, speed 5, unattended.
+**2412 monthly ticks = 201 years (1444 -> 1645), no crash, process healthy at the end.**
+
+| check | result |
+|---|---|
+| E4 (negative/non-finite/runaway) | **0 non-clean ticks of 2412** |
+| E1 (engine-divided income vs model) | 1-4 countries of 222-665 outside the check's early-iteration tolerance; worst absolute error 0.0057 -> 0.022 ducats as the economy doubles |
+| flowassert (directed inflow == record) | 20 lines of 2426; each is **1 inflow of ~287 off by 0.0005** -- one milli-ducat, the engine's storage grid |
+| spurious campaign re-setups | **0** (the rolling-date rule; the setup-date comparison it replaced fired every 90 game-days) |
+| tick cost | 231 ms (first) -> 182 -> **167 ms** (last): no growth, it falls as tags are annexed |
+| worst frame gap | ~1.0 s, flat across the run (autosave-scale, not growth) |
+| log volume | 16 MB / 201 years |
+
+Both residuals are milli-ducat rounding, not defects: the engine stores values on a 1/1000 grid and
+the model sums many nodes per country.
+
+### How the world developed (the user's question)
+
+- **Economy doubled**: world wealth 10,620 -> 20,982; colonised provinces 2,472 -> 3,192.
+- **Consolidation**: 665 -> 222 countries holding trade power.
+- **G1 held at 49-50% of AI merchant placements on Phi_w-INCOMING (reverse) ends for the whole run**
+  -- the half of the assignment space vanilla cannot express (spec 3.14) stays half under a moving map.
+- **The map moves**: 19,730 orientation flips (~8/month). Most-contested links: genua-ragusa (722),
+  champagne-genua (701), carribean_trade-ivory_coast (609), amazonas-brazil (592).
+- **The aggregate ends are stable**: Phi_w sinks are { genua, hangzhou } at 1444 and still
+  { genua, hangzhou } at 1645 -- the two-pole structure survives 200 years of churn.
+- **D1 enforcement held**: of 7,373 SetTrader calls, 427 were collect attempts; all were either
+  forced to transfer or kept only where the rule allows (home capital 417, END node 9).
+
+## F results (2026-08-27, pgt_i74, clean 1444 vanilla start, spectator)
+
+New instruments for these: `[ends]` logs the installed orientation's sink set on every orientation
+install, and `[goodsinks]` (marker `pgt.GOODSINKS`) logs one named good's sinks and price per tick.
+
+- **F2 PASS (raze China moves the end).** Baseline `[ends] Phi_w sinks=2 { genua hangzhou }`.
+  Zeroed all 27 hangzhou-node member provinces (`set_base_tax <id> 0` + `set_base_production <id> 0`,
+  ids from the emitted 00_tradenodes.txt); world wealth 10620.7 -> 10413.5 on the next live solve.
+  Within a few ticks the ends became **`{ genua gulf_of_siam }`** and stayed there -- exactly the
+  spec 2.8 row. The `[flip]` lines show the mechanism: `xian -> hangzhou` became `hangzhou -> xian`
+  (hangzhou stops terminating and drains inland), with chengdu/canton/lhasa re-orienting behind it.
+- **Console note (empirical):** EU4 1.37.5 has **no** `change_price` verb (nor `set_price`/`price`/
+  `add_price`; the console answers `Unknown command` / suggests unrelated verbs), so F5 cannot be
+  driven live and is measured offline against the reference instead. `set_base_tax`, 
+  `set_base_production` and `add_devastation` all exist and take `<province id> <value>`.
+- **F1 PASS (a flip is honoured end to end).** The razing cascade flipped 35 links in one tick.
+  In that SAME tick: `[arrows] ... layer rebuild OK` (arrows re-drawn), `[flowassert] 0 of 305
+  directed inflows wrong` (propagation follows the new directions, nothing stale), `[E4] tick 4:
+  CLEAN`. No one-month corridor lag, no tooltip/arrow disagreement, no propagation credited to the
+  old side.
+- **F3 PASS (owner changes move nothing day-of).** `own 112` + `own 118` transferred two rich
+  Italian provinces to the observer. In the following ticks the only flips were the already-
+  oscillating razed-China links plus gujarat-hormuz (flipping before the change); **nothing in or
+  near Italy moved** -- genua, venice, ragusa and champagne all held. The model reads the place
+  (tax/production/devastation/goods), never the owner tag.
+- **Orientation stability, measured (bears on F4 'no cycle' and G2).** Flips per tick in this run:
+  ticks 1-3 = **0, 0, 0** (a normal world is perfectly stable); tick 4 = 35 (my razing); then 7-8
+  alternating with 0 on exactly seven links, ALL inside the zeroed region (hangzhou-xian, -nippon,
+  -beijing, canton-chengdu, girin-siberia, lahore-lhasa, chengdu-xian). Zeroing 27 provinces makes
+  those corridors carry literally zero value, which is the degenerate tie spec 3.6 predicts will
+  flip freely. No oscillation appears anywhere in the intact world.
+- **F4 PASS (war bites through devastation, and heals back).** `add_devastation <id> 80` on all 33
+  champagne-node provinces (a war's effect without the war). Tick 23 flipped exactly the corridors
+  the damage justifies -- `english_channel -> champagne` reversed, north_sea and lubeck turned into
+  the Channel, and sevilla's two African links (safi, tunis) reversed. `add_devastation <id> -80`
+  healed it; **tick 28 reverted every one of those six flips exactly**, wealth 10345 -> 10448. No
+  hysteresis, no overshoot, no cycle left behind: Europe went stable again and the only continuing
+  churn was the zeroed-China region from F2.
+- **F5 PASS (a price crash spreads a market)** -- offline, `impl/src/f5test.cpp`, because 1.37.5 has
+  no price console verb. Grain crashed 2.500 -> 0.625 on the stock start:
+  **alpha 1.2500 -> 0.3125** (below 1, as spec 1.4 requires), and the sink set moves exactly the way
+  a flatter demand curve should -- 6 -> 7 sinks, **losing venice** (the rich Mediterranean hub) and
+  **gaining bordeaux and valencia** (populous, poorer Atlantic Europe) plus patagonia.
+  Cross-validation: the BASE sink set { zambezi australia persia brazil venice english_channel } is
+  identical to the live game's `[goodsinks] grain price=2.5 sinks=6`, so the offline harness and the
+  in-game model agree node-for-node.
+- **F6 PASS (devastation scaling), closed from the game's own data + a live swing.** The constant no
+  longer rests on community documentation: `common/static_modifiers/00_static_modifiers.txt` states
+  `devastation = { trade_goods_size_modifier = -2 }` (EU4 scales a static modifier by level/100, so
+  the law IS `-2 x level/100`), and `gamedata::load_static_mods` parses that same file, so the model
+  and the engine read one source. Live confirmation from F4's swing: applying devastation 80 to 33
+  provinces and healing it again, **E1 kept agreeing (worst ~0.006 ducats) and E4 stayed CLEAN on
+  every tick 20-31**. A different scaling law in the model would have moved goods_produced, node
+  values and income away from the engine's; nothing moved.
+
+## G4 -- direction-gated diplomacy (2026-08-27, pgt_i77)
+
+**The spec 1.10 seam was never installed before this session** -- the attach log listed
+`direction_gates` as pending, and `gates::install` had no caller. It is now wired in (off with
+`pgt.NOGATES`) and measured:
+
+- **PASS (gates evaluate true) -- corrected evidence.** The first measurement of this was worthless:
+  it read the matrix back immediately after our own `memset`, with no engine code in between, so it
+  could never fail. Worse, a review found the fill was being **undone every month**: the mod itself
+  rebuilds the reach matrices directly (after an orientation install, and after merchant landings),
+  the engine's rebuild restores its own BFS into A/B/C, and only C was being re-applied -- so spec
+  1.10 held for the microseconds between the engine's monthly rebuild and the mod's next one.
+  Fixed: the B fill is now a callable (`gates::fill_b`) invoked after **every** rebuild, the mod's
+  own included, and the health check now samples B at the START of the next rebuild -- i.e. after a
+  full month of engine and mod activity, where it can genuinely go red.
+  Measured with that check: `gatefills=27`, **`gateB-zero-before-rebuild=0`** -- B was still
+  entirely set a month later. Both out-of-line predicates are patched to return true: the
+  treasure-fleet gate `0x3E1D30` (spec 3.12: always granted) and `IsNodeUpstreamOfCountry 0xB4E020`.
+  The trade-conflict CB at `0x38D8C0` needs nothing -- it is a pure power-share threshold.
+- **No regression from opening them:** E1 665/665 (worst 0.0058), E4 CLEAN, 0 spurious re-setups,
+  no crash, and matrix C is still written by the model (`matC writes=13300`) for light ships and the
+  +10%/merchant home bonus.
+- **Scope, deliberately:** only matrix B (the upstream/downstream table) is filled. Matrix A is the
+  treasure fleet's ROUTING BFS, and `treasure.h` -- the spec 1.11 router -- does not exist; filling A
+  would leave the router taking the first outgoing link and dead-ending, turning a missing feature
+  into a broken one. So treasure fleets are **always granted** (3.12, the claim the spec actually
+  makes) while routing keeps the engine's own reachability. **Residual: the 1.11 route ladder with
+  privateer skimming is not implemented.**
+
+## E3 -- world total vs vanilla, with a null run (2026-08-27, pgt_i79)
+
+Three 14-month legs from the same clean 1444 Castile start, spectator, identical build. The two
+controls run with `pgt.NOWRITE`: the model still reads, solves and instruments, but writes nothing,
+so the engine's own vanilla division stands and `[E3/top]` measures **vanilla's** paid trade income.
+
+| month | nullA | nullB | mod | null spread | mod vs vanilla |
+|---|---|---|---|---|---|
+| 1 | 332.53 | 332.86 | 342.45 | 0.10% | 2.93% |
+| 7 | 334.81 | 334.13 | 346.91 | 0.20% | 3.72% |
+| 14 | 333.23 | 333.26 | 344.04 | 0.01% | 3.24% |
+
+**World total: PASS.** The modded world total sits **+2.9% to +3.8%** above vanilla and is flat
+across 14 months -- no drift, no compounding. Vanilla's own run-to-run spread was unusually tight
+here (worst 0.26%), well inside the up-to-8.96% node-level spread spec 2.8 records.
+
+**Distribution: PASS on the spec's criterion (plausibility), which is the gating metric.** Resolved
+to tags (country+0x20, found live; index 1 == REB confirms the offset):
+
+- vanilla: **GEN** BNG VEN TUR LAN ENG POL MAM / MNG JNP
+- modded:  **MNG** BNG DAI TUR VEN CAS NOV LIT
+
+Three names are shared (BNG, TUR, VEN) and the set otherwise differs **by design** -- the mod
+replaces the trade network, so it must. What matters is that every modded top earner is a real 1444
+great power: Ming, Bengal, Dai Viet, the Ottomans, Venice, Castile, Novgorod, Lithuania. The
+headline change is that **Ming**, the largest economy on the map, leads instead of **Genoa**, which
+tops vanilla only because it is the terminal sink of vanilla's hardcoded funnel. That is the
+intended consequence of per-good routing, not an implausible outcome.
+
+- **Residual, measured not assumed:** one inline gate site, `0x18999C`, reads matrix **A** with no B
+  fallback and so still refuses when the engine's real BFS says unreachable. A cannot be filled
+  because it doubles as the treasure fleet's routing BFS and `treasure.h` (spec 1.11) is unbuilt --
+  filling it would make the router take the first outgoing link and dead-end. The two SetTrader
+  sites are `B || A`, so B satisfies them. Recorded as a gap, with the trade-off stated.
+
+## Final observer run and sign-off (2026-08-28, pgt_i80)
+
+**J8 PASS (user).** Second campaign in one process: confirmed working. Note the premise changed --
+EU4 REPLACES ITS PROCESS on quit-to-menu, so each campaign is a fresh attach rather than an
+in-process reset; the in-process path survives as defence.
+
+**The 200-year observer run: user sign-off** -- "the trade mod worked exactly as planned, consider
+the run completed". Second run, 1444 -> **1635** (2292 monthly ticks, 191 years), vanilla map, mod
+only, spectator at speed 5, unattended. The world is preserved at
+`save games/observer_long.eu4` (69 MB) -- the first run's world was lost when later test campaigns
+rolled EU4's three autosave slots, which is why this one is copied aside as it goes.
+
+| check | result |
+|---|---|
+| crash / hang | **none**; process healthy at the end |
+| spurious campaign re-setups | **0** |
+| direction gates held all month | `gatefills=7915`, **`gateB-zero-before-rebuild=0`** |
+| E1 income agreement | 246/250 at the end, worst 0.031 ducats as the economy roughly doubles |
+| E4 | **7 non-clean ticks of 2292** -- see below |
+
+### One open defect, found by this run
+
+E4 flagged `DISPLAYED-TOTAL=1` on **7 ticks of 2292** (ticks 237, 450, 1900, 1903, 1904, 1999,
+2018): on those months exactly one node's *displayed* total (local + incoming - outgoing) went
+negative, which spec 1.12 forbids ever showing. Every other invariant was clean on those same ticks
+-- pool, outgoing, link values, money, non-finite and runaway all 0 -- so this is a **display-only**
+violation, not lost or invented money. Rate: 7 node-months out of ~183,000 (0.004%). The earlier
+201-year run on pgt_i73 had zero, so it is rare enough to need a long run to surface.
+The instrument does not name the node (the `worst` field printed empty), so the next step is to log
+the node and its six fields on violation and re-run the soak.
+
+> **RETRACTED 2026-08-28 by code review — see the corrected section at the end of this file.**
+> Both results below were produced by instruments that could not measure what they claimed.
+> The J10 classifier keyed steer state by country while writing it per node, so every country with
+> more than one merchant was misclassified; and the `gateB-zero-before-rebuild` reading was taken
+> moments after our own memset, so it could not fail. Kept for the record, not as evidence.
+
+## J10 + a G4 gap found on the load path (2026-08-28, pgt_i86, the 1635 world)
+
+**J10 PASS.** Light ships that protect trade show up as `ship_power` on the node's own per-country
+record, so this is measured off the engine's data rather than by eye. On the late-game world,
+134 placements totalling 2347.9 power:
+
+| where | power | share |
+|---|---|---|
+| home node | 1705.9 | 73% |
+| **reverse (Phi_w-incoming) end** | **76.5** | 3% |
+| other steered node | 250.4 | 11% |
+| unsteered | 315.1 | 13% |
+
+The user's observation that ships cluster at home nodes is correct and is **not** a defect: light
+ships protect trade where a country COLLECTS, and home is where it collects -- vanilla does the same.
+J10's claim is the narrower one, that ships follow the MODEL to nodes vanilla would never choose, and
+they do: 27% sit away from home, including 76.5 power on reverse ends -- nodes a country only has
+business at because the model gave it a merchant pushing against the drawn arrow. Vanilla's scorer is
+unmodified (the user's call); it reaches those nodes because it consumes the model's node values,
+shares and reach (matrix C).
+
+First measurement of this was WRONG and said `home=0`: the classifier keyed standings by the raw tag
+dword and ship records by the bare index, so every placement fell through to `unsteered`. Fixed.
+
+**G4 gap found and closed.** Right after loading a save the instrument read
+`gateB-zero-before-rebuild=481`: a load runs several 0xB4DB00 call sites the mod does not own, and
+matrix B came back as the engine's own BFS, so spec 1.10's gates were **not in force** until the next
+controlled rebuild. Matrix B is now also refilled from the frame poll (a memset at 2 Hz), and the same
+instrument reads **0** on the load path. Only visible because the treasure test loaded a save --
+every earlier G4 measurement was on a fresh campaign.
+
+## H3 PASS (user, 2026-08-28)
+
+H3's bar is subjective -- "the monthly tick's added time is imperceptible" -- so the user playing the
+mod is the measurement, and the user's verdict after the 201-year run, the 1635 world and the
+compatibility sessions is: **"the time it takes is fine. The tick isnt noticable."** PASS.
+
+For the record, the numbers behind that verdict: the tick is 86 ms on the 1444 world and 146-160 ms
+on the loaded 1635 world (81 nodes, world local 926), against vanilla's own 87-98 ms monthly stall.
+Cost does NOT grow with the campaign -- across 201 years it went 231 -> 182 -> 167 ms as tags were
+annexed. The earlier "NOT PASSED yet by the imperceptible wording" note above was my own reading of
+the wording, not a user complaint; it is superseded by this line.
+
+## H1 -- tick determinism across a reload, ATTRIBUTED (2026-08-28, pgt_i86)
+
+The open H1 note above asked for one instrument: pair the orientation fingerprint with a hash of the
+INPUTS the solve consumed (every province's tax/production/devastation/good, plus all prices), so a
+divergence can be blamed on the right side. Built, and run as two legs that differ ONLY by "the
+process was restarted and the save re-read": each leg copies the identical preserved world
+(`observer_long.eu4`, 1635) over `autosave.eu4`, launches a fresh eu4.exe, loads it, and ticks.
+
+| tick | date | orientation A vs B | inputs A vs B |
+|---|---|---|---|
+| **1 (the reload boundary)** | 596775 | **identical** `e674bfa3108bfad8` | **identical** `8bc81b2513c4a373` |
+| 2-11 | 596806-597079 | matched on 6 of 10 | differ on 10 of 10 |
+
+**PASS at the boundary the test is about.** On the tick that actually measures the reload, two
+separate processes loading the same bytes produced a bit-identical world AND a bit-identical
+orientation. Determinism on our side is therefore demonstrated, not assumed.
+
+**The later drift is the ENGINE, and is now measured rather than inferred.** From tick 2 the inputs
+hash differs on every tick: the engine's own simulation has moved to a different world (province
+development and prices diverge; the province count drifts 3117 -> 3119 across the leg), so our solve
+is no longer being asked the same question. Spec 2.8 already records that vanilla is not reproducible
+run to run -- this is the first direct measurement of it in the live game. Note the orientation still
+agreed on 6 of those 10 ticks DESPITE different inputs, which is the robustness the design predicts:
+the orientation is a sign field, not a continuous quantity, so small input perturbations mostly do not
+move it.
+
+This supersedes the earlier "H1 as specified is NOT met across the reload" note, which was written
+before the inputs fingerprint existed and could not tell the two causes apart. The solver's own
+determinism is separately established (30/30 offline cross-check).
+
+## G4 and J10 RE-MEASURED after code review (2026-08-28, pgt_i90, the 1635 world)
+
+A review of the working tree found that BOTH results recorded earlier today came from instruments
+that could not measure what they claimed. Both are retracted above and re-measured here.
+
+### G4: the direction gates were only partly held, and the old check could not have shown it
+
+Spec 1.10 needs matrix B (mgr+0x90) all-1 so the 21 INLINED gate sites answer true; the two
+out-of-line predicates are patched separately and were never in doubt. B is restored to the engine's
+own BFS by 0xB4DB00 -- and a `.text` scan of eu4.exe for E8 rel32 calls reaching it finds **six call
+sites**, of which the mod hooked **one**. The other five refilled B behind us.
+
+The old instrument sampled B just before the monthly rebuild and reported 0. That reading was
+worthless twice over: the frame-poll refill added earlier today memsets B every ~0.5 s, so the sample
+was taken just after OUR OWN write; and `ticklive.h:412` refilled B after our own rebuild while
+passing the default call-site tag, so each correction sampled B holding the engine's BFS and counted
+ITSELF as a lapse. The first fault hid real lapses, the second invented fake ones.
+
+The instrument now samples B *before* our write at each frame poll and counts only what the ENGINE
+put there. Measured red-then-green on the same world, same save, same build family:
+
+| configuration | frame refills | LAPSES | worst probe |
+|---|---|---|---|
+| 1 site hooked, frame refill OFF (`pgt.NOGATEFILL`) | 0 | 26 | **480/512 dirty** |
+| 1 site hooked, frame refill ON | 68 | 28 | 489/512 |
+| 5 sites hooked, tag bug still present | 51 | 14 | 480/512 |
+| **all sites refill, tags correct** | 39 | **0** | **0/512** |
+
+**PASS, and the check is falsifiable**: the top row is the same counter reading 480 of 512 probes
+dirty with the refills suppressed, so a broken gate does register. The old check could only ever
+read 0.
+
+Two fixes got it there. `gates::install` now repoints every call site the binary scan found, so B is
+corrected at the instant of each rebuild rather than up to half a second later. And `0x775EEC` --
+which the log still honestly reports as `5/6 ... MISSED` -- turned out not to be missing at all:
+`earlyload.h` hooks it first for the savegame path, so `gates::install` cannot repoint it. Its wrapper
+carried the comment "fill_b runs from the wrapper on the monthly path", which was true only from the
+NEXT month, leaving matrix B holding the engine's BFS across an entire load. It refills in place now.
+
+`gate-size-growth = 0` throughout: mgr+0xA0 never grew while the block pointer stayed put, which is
+the hazard the deleted growth guard was meant to watch (see DEPARTURES.md, corrected).
+
+### J10: light ships, with a classifier that actually distinguishes the buckets
+
+The old classifier keyed steer state by country while writing it once per node, so it kept whichever
+node came last and then asked "is there an arrow into THIS node from the target it steers to somewhere
+ELSE" -- wrong for every country with more than one merchant, i.e. every major power. It also ANDed a
+record field that is 0 on ordinary records, so almost nothing could reach the "no merchant here"
+bucket. Now keyed by (country, node), and "steers here" means here.
+
+| where the light ships are | sample 1 | sample 2 |
+|---|---|---|
+| home node | 1692.8 (72%) | 1695.8 (69%) |
+| **reverse (Phi_w-incoming) end** | **133.7 (5.7%)** | **213.8 (8.7%)** |
+| other steered node | 187.1 (8.0%) | 107.5 (4.4%) |
+| no merchant at this node | 330.8 (14%) | 429.5 (18%) |
+
+**PASS.** Reverse ends carry 5.7-8.7% of light-ship power -- more than the broken instrument's 3.3%,
+not less. Home still dominates, which is correct and not a defect: light ships protect trade where a
+country COLLECTS, and vanilla behaves the same way. J10's claim is that ships follow the MODEL to
+nodes vanilla would never pick, and ~28-31% of power sits away from home to do it.

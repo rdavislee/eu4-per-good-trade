@@ -27,12 +27,15 @@
 #include <windows.h>
 #include "livetrade.h"
 #include "alledges.h"
+#include "outtip.h"
+#include <climits>
 
 namespace outlinks {
 
 inline std::string g_log_inc;
 inline int g_bail_empty=0, g_bail_big=0, g_bail_tmpl=0, g_bail_alloc=0,
            g_skip_same=0, g_rebuilt=0, g_nodes_seen=0;
+inline int g_rev_dest = 0;   // reverse destinations listed for the outgoing tooltip this tick
 
 constexpr int NODE_OUT_VALUES = 0x88;      // int32* begin
 constexpr int NODE_OUT_VALUES_END = 0x90;  // int32* end
@@ -244,84 +247,94 @@ inline int install(const std::vector<livetrade::SimNode>& sim,
         return f == fidx.end() ? -1 : f->second;
     };
     int wrote = 0;
+    // reverse destinations per node (outtip.h): the model's away-flow on links the definition does
+    // NOT list -- every reverse-Phi_w edge, all of an END node's edges
+    std::map<uintptr_t, std::vector<outtip::Line>> rev_lines;
+    std::map<int, uintptr_t> node_of_field;
+    for (auto& s : sim) { int f = field_of_node(s.obj); if (f >= 0) node_of_field[f] = s.obj; }
+    g_rev_dest = 0;
     for (auto& s : sim) {
         int n = def_out_count(s.obj);
         if (n < 0) continue;
-        int32_t* buf = resize(s.obj, n);
+        int32_t* buf = resize(s.obj, n);     // an END node (n == 0) still needs the slack buffer (the crash fix)
         if (!buf) continue;
-        // An end node has no shares to write, but it DID need the buffer above.
-        if (n == 0) continue;
         int src_f = field_of_node(s.obj);
         // A live node the model does not own would otherwise get raw_sum == 0 and be given an even
         // 1/n split, destroying the engine's own steering distribution. resize() above is still
         // wanted (it is the crash fix); only the share write is skipped.
         if (src_f < 0) continue;
 
-        // Pass 1: the model's raw away-flow on each drawn link, and their total.
+        // Pass 1: the model's away-flow on EVERY incident link -- the drawn (definition) ones by
+        // slot, and the rest, which are this node's reverse-Phi_w edges -- and their total.
         std::vector<double> raw((size_t)n, 0.0);
-        double raw_sum = 0.0;
+        std::vector<int> fwd_dst((size_t)n, -1);
+        std::set<uintptr_t> drawn_nodes;               // by NODE: a drawn target that fails to resolve to a field must not reappear as a reverse line (reviewed)
+        double total = 0.0;
         for (int i = 0; i < n; i++) {
-            int dst_f = field_of_node(out_target(s.obj, i));
-            if (src_f >= 0 && dst_f >= 0) {
+            uintptr_t tn = out_target(s.obj, i);
+            if (tn) drawn_nodes.insert(tn);
+            int dst_f = field_of_node(tn);
+            fwd_dst[i] = dst_f;
+            if (dst_f >= 0) {
                 auto it = gross.find({src_f, dst_f});
                 if (it != gross.end() && it->second > 0) raw[i] = it->second / 12.0;
             }
-            raw_sum += raw[i];
+            total += raw[i];
+        }
+        std::vector<std::pair<int, double>> rev;     // (destination field, monthly away-flow) off the drawn list
+        for (auto it = gross.lower_bound({src_f, INT_MIN}); it != gross.end() && it->first.first == src_f; ++it) {
+            if (it->second <= 0) continue;
+            int dst_f = it->first.second;
+            bool drawn = false;
+            for (int i = 0; i < n; i++) if (fwd_dst[i] == dst_f) { drawn = true; break; }
+            { auto nf = node_of_field.find(dst_f); if (nf != node_of_field.end() && drawn_nodes.count(nf->second)) drawn = true; }
+            if (drawn) continue;
+            rev.push_back({dst_f, it->second / 12.0});
+            total += it->second / 12.0;
         }
 
-        // Pass 2: SCALE them to sum to the node's own outgoing figure.
+        // Pass 2: PER-MILLE shares of the node's WHOLE outflow.
         //
-        // The map panels (trade_route_branch / branch_income) read these slots and the node window
-        // reads +0xBC, so writing raw model units here put "11" on the north_sea ->
-        // english_channel panel while the window said "3". Forcing the WINDOW up to the raw sum is
-        // not available: a node's away-flow on its DRAWN links can exceed local + recorded inflow,
-        // because much of its inflow arrives against Phi_w and has no incoming record to live in
-        // -- that drove 15 nodes to a negative displayed total. Scaling the PANELS down to the
-        // window's figure keeps the model's proportions across edges, makes the panels sum to
-        // exactly what the window shows, and cannot go negative, because +0xBC is already clamped
-        // into [0, local + incoming] by install_aggregate.
-        // NO rescaling. Scaling these by outgoing/raw_sum is what made the on-map panel read 2
-        // beside a node-window row reading 10 for the same link. The panel array and the per-link
-        // record now carry the identical canonical number.
-        // node+0x88 is `steer_power`: one entry per outgoing link, in PER-MILLE (x1000), summing
-        // to 1000. Established from the engine's own writers -- the monthly reset at 0xB51360 fills
-        // it with 1000/count, and 0xB54D20 normalises accumulated steer power with
-        // `imul eax,ecx,0x3e8 / idiv ebx`. Both readable saves confirm it: every node's
-        // steer_power list sums to 1.000.
-        //
-        // It is what the outgoing tooltip turns into ducats:
+        // node+0x88 is `steer_power`: one entry per outgoing link, in PER-MILLE (x1000). Established
+        // from the engine's own writers -- the monthly reset at 0xB51360 fills it with 1000/count,
+        // and 0xB54D20 normalises accumulated steer power with `imul eax,ecx,0x3e8 / idiv ebx`.
+        // It is what the outgoing tooltip and the map panels turn into ducats:
         //     line_k = steer_permille[k] * node+0xC0 / 1e6      (0xB5653F..0xB56562)
-        // so writing the model's per-link SHARES here makes each destination's figure the model's
-        // own away-flow, and makes the lines sum to the outgoing header by construction.
+        // The shares used to be normalised over the DRAWN links only and forced to sum to 1000,
+        // which credited the reverse edges' outflow to the drawn ones. Now the whole outflow is
+        // the denominator: forward slots carry their true share, the remainder belongs to the
+        // reverse destinations (listed by outtip's wrapper), and forward + reverse lines sum to
+        // the header (+0xC0) by construction, with the rounding residue on the largest share.
         // Writing ducats here (an earlier attempt) put unrelated numbers on the outgoing side;
         // writing nothing left the engine's even 1000/count split, which is just as wrong.
-        for (int i = 0; i < n; i++) {
-            double share = (raw_sum > 1e-12) ? (raw[i] / raw_sum) : (1.0 / n);
-            buf[i] = (int32_t)(share * 1000.0 + 0.5);
-            wrote++;
-        }
-        // make the shares sum to exactly 1000 -- the engine's own normalisation truncates, and any
-        // residue would show up as the tooltip lines not adding to the header
-        {
-            int tot = 0; for (int i = 0; i < n; i++) tot += buf[i];
-            if (n > 0 && tot != 1000) {
-                int bi = 0; for (int i = 1; i < n; i++) if (buf[i] > buf[bi]) bi = i;
-                buf[bi] += (1000 - tot);
-                if (buf[bi] < 0) buf[bi] = 0;
+        std::vector<int> pm((size_t)n + rev.size(), 0);
+        if (total > 1e-12) {
+            for (int i = 0; i < n; i++) pm[i] = (int)(raw[i] / total * 1000.0 + 0.5);
+            for (size_t j = 0; j < rev.size(); j++) pm[n + j] = (int)(rev[j].second / total * 1000.0 + 0.5);
+            int tot = 0; for (int x : pm) tot += x;
+            if (tot != 1000 && !pm.empty()) {
+                size_t bi = 0; for (size_t k = 1; k < pm.size(); k++) if (pm[k] > pm[bi]) bi = k;
+                pm[bi] += 1000 - tot; if (pm[bi] < 0) pm[bi] = 0;
             }
+        } else if (n > 0) {
+            for (int i = 0; i < n; i++) pm[i] = 1000 / n;    // nothing flows: the engine's own even split
+            pm[0] += 1000 - (1000 / n) * n;
         }
+        for (int i = 0; i < n; i++) { buf[i] = pm[i]; wrote++; }
+        std::vector<outtip::Line> lines;
+        for (size_t j = 0; j < rev.size(); j++) {
+            auto nf = node_of_field.find(rev[j].first);
+            if (nf == node_of_field.end()) continue;
+            lines.push_back({nf->second, pm[n + j]});
+        }
+        if (!lines.empty()) { g_rev_dest += (int)lines.size(); rev_lines[s.obj] = std::move(lines); }
 
         // One incoming record per INCIDENT link, each carrying that link's toward-flow -- so a
-        // node lists BOTH directions of every link it touches (north_sea showing lubeck and
-        // english_channel on the incoming side as well as the outgoing side). This is orthogonal
-        // to the scaling above: the records give the two-way view, the scaling keeps the totals
-        // non-negative. Writing `outgoing` from the raw sum is what broke non-negativity before,
-        // and is deliberately NOT done here.
-        // NOT rebuild_incoming here. It repoints +0xF0/+0xF8 and refills every record, AFTER
-        // install_aggregate has already derived `outgoing` from the old records -- so the UI's
-        // local + Sigma incoming - outgoing was measured against a vector that no longer existed.
-        // That is the negative-total bug. linkvalue::install owns entry+0x10 now.
+        // node lists BOTH directions of every link it touches. That is linkvalue::install's job
+        // (it owns entry+0x10); rebuild_incoming is NOT called here (it repoints +0xF0/+0xF8 after
+        // install_aggregate derived `outgoing` from the old records -- the negative-total bug).
     }
+    outtip::set_lines(rev_lines);
     return wrote;
 }
 

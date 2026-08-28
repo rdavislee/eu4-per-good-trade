@@ -161,8 +161,11 @@ by x1.5. Merchants never collect (user decision; spec 3.14 line 787 says collect
 
 **Offline regression test, no game:** `impl/aitest.exe <eu4_root> <VANILLA_start.eu4>
 <standings1444.json> TAG[,k] ...` drives the real `src/frontier.h` from the save. Expected on
-1444: MNG hangzhou->beijing 11.78, xian->beijing 11.38 (reverse Phi_w ends toward home), 3rd
-canton->hangzhou 2.92; CAS safi->sevilla 0.62; VEN ragusa->venice 0.38. Regenerate the standings
+1444 (re-measured 2026-08-26 night under the D3 v2 power split, which lowers every path share; the PICKS
+are unchanged): MNG hangzhou->beijing 10.03, xian->beijing 7.55 (reverse Phi_w ends toward home), 3rd
+canton->hangzhou 2.16; CAS safi->sevilla 0.86 (tunis->sevilla 0.18 second); VEN ragusa->venice 0.35.
+`impl/d3test.exe` (no arguments) checks the D3 v2 split rule itself: split values and unit sum, conservation of
+every distributed fifth, the threshold, no chaining, the receipt carried on the standing. Regenerate the standings
 with the extractor in the session log if the save changes.
 
 **In-game (f7c51dc):** choices match the offline test; the gap is that 1,005 merchants stand off
@@ -215,3 +218,31 @@ standings world-wide; Genoa's window shows Aragon and Provence steering from Gen
 (pgt_h4v: the four end-node guards relaxed; 0xB53C77 is a signed compare). Offline: aitest applies the
 v2 split (pp approximated by val -- the save has no per-country province_power): Aragon's top pick is
 genua -> valencia. H3: tick 123 ms after dropping VirtualProtect from the record writes (was 402).
+
+## Opening state, node-window controls, persistence (2026-08-26 night, pgt_i27 -- built, not yet run)
+
+- Setup inside the loading screen (`earlyload.h`): the engine's setup-path trade calls are wrapped;
+  install + solve + tick 1 happen before the load returns. `run.sh` injects at the main menu;
+  `install-proxy.ps1` installs the DLL as version.dll for normal launches.
+- Vanilla's opening placement (one collector per capital) is stubbed; capital-parked merchants are
+  recalled to the pool; the opening re-placement runs once with the caps lifted.
+- Node window: no collect item, transfer item at END nodes, nothing at home; transfer placements
+  point home (`homeward.h`); texts and hovers attribute reverse ends (`transfertext.h`,
+  `outlinertext.h`, `endtext.h`, `outtip.h`, shield tooltip key).
+- Sidecar persistence (`savegame.h`): `<save>.eu4.pgt` written at every save, restored on load.
+- Light ships (`lightship.h`, pgt_i27: scores normalised to the best node, node 0 excluded, total = the spendable part): the allocator's score array is the model's per-node value.
+- Measured so far: i20/i21 runs showed the loading-time tick complete before the map (solve 113-120 ms,
+  tick 1 ~330-460 ms); the sidecar and the stubbed opening placement are unmeasured (TESTING.md J).
+
+## Offline re-verification after the 2026-08-26 changes (no game)
+
+- `impl.exe checks` (per-tick assertion battery, 1444): ALL OK on every good; `impl.exe fixtures`: 15 fixtures,
+  0 failed to go red (econtest inside it, its `Standing` construction now by name); `impl.exe determinism`:
+  3 re-solves fingerprint-identical; `tools/compare.py dumps/ref1444.json dumps/cpp1444_night.json`:
+  EXACT ORIENTATION EQUALITY, 30 of 30 graphs; `d3test.exe`: D3 v2 split rule 20/20; `aitest.exe`: picks
+  unchanged (magnitudes re-measured under D3 v2); `verify6.py`: 37 checks, 0 failed; both spec copies
+  MD5-identical (48414cb316bd6b3c3355b1b87afdc3e2).
+- `routetime.exe` (new): the full model route over all 29 live goods on the 1444 field is **0.73 ms**
+  with precomputed reach (1.17 ms if reach is recomputed per good -- the reason the tick precomputes it).
+  So H3's model half is clean by three orders of magnitude; the ~120 ms 'routed' phase in the live log is
+  the live-memory record read/D3 propagation around route(), engine-access-bound and only measurable in game.

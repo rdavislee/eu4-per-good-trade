@@ -58,7 +58,28 @@ inline LONG WINAPI handler(EXCEPTION_POINTERS* ep) {
     void* frames[24];
     USHORT n = 0;
     if (code != EXCEPTION_STACK_OVERFLOW) n = RtlCaptureStackBackTrace(0, 24, frames, nullptr);
-    else {
+    if (code == EXCEPTION_ACCESS_VIOLATION && ep->ContextRecord) {
+        // an AV whose RIP is garbage (a call through a corrupted pointer) gives the unwinder nothing:
+        // scan the FAULTING stack for return addresses resolvable to ANY module and name them
+        puts_("    faulting-stack scan:");
+        uint64_t* sp = (uint64_t*)ep->ContextRecord->Rsp;
+        int shown = 0;
+        for (int i = 0; i < 0x180 && shown < 12; i++) {
+            uint64_t v = 0;
+            if (IsBadReadPtr(sp + i, 8)) break;
+            v = sp[i];
+            if (v < 0x10000 || (v >> 47) != 0) continue;
+            HMODULE hm = nullptr;
+            if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)v, &hm) || !hm) continue;
+            char nmb[MAX_PATH] = {0};
+            GetModuleFileNameA(hm, nmb, MAX_PATH);
+            const char* bn = nmb; for (const char* q = nmb; *q; q++) if (*q == (char)92 || *q == '/') bn = q + 1;
+            puts_(" "); puts_(bn); puts_("+"); puthex(v - (uint64_t)hm);
+            shown++;
+        }
+        puts_("\n");
+    }
+    if (code == EXCEPTION_STACK_OVERFLOW) {
         // on overflow, read return addresses straight off the faulting stack: cheap, allocation-free,
         // and good enough to name the recursion
         uint64_t* sp = (uint64_t*)ep->ContextRecord->Rsp;
@@ -72,9 +93,11 @@ inline LONG WINAPI handler(EXCEPTION_POINTERS* ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+inline void putsp_() {}
 inline void selftest() { RaiseException(SELFTEST_CODE, 0, 0, nullptr); }
 
 inline bool install(const std::string& path, uintptr_t module_base, std::string* err) {
+    if (g_handler) return true;       // already armed: a second install would log every exception twice (reviewed)
     g_module_base = module_base;
     g_file = CreateFileA(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (g_file == INVALID_HANDLE_VALUE) { if (err) *err = "cannot open the crash log file"; return false; }

@@ -34,6 +34,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #include "detour.h"
@@ -54,11 +55,12 @@ inline bool g_active = false;
 inline uint64_t g_added = 0;
 inline int g_logged = 0;
 inline std::string g_log;
-inline size_t g_last_forward = 0;
+inline size_t g_last_forward = 0;
 inline int g_measured = 0;
 inline int g_dumped = 0;
 inline int g_flipped = 0;
-inline int g_fallback = 0;   // anchors the engine would not place for us   // ribbons whose polyline runs target -> source      // how many forward anchors we have measured, for the log
+inline int g_fallback = 0;
+inline int g_unplaced = 0;   // reverse views whose anchor stayed at the SOURCE end (run total)   // anchors the engine would not place for us   // ribbons whose polyline runs target -> source      // how many forward anchors we have measured, for the log
 
 using FnInit  = void*  (__fastcall*)(uintptr_t, int, uintptr_t, uintptr_t, void*);
 using FnLookup= uintptr_t (__fastcall*)(uintptr_t, void*);
@@ -242,12 +244,55 @@ constexpr uintptr_t ENGINE_NEW_E = 0x1A332D4;   // the game's operator new
 constexpr int EN_NAME = 0x10, EN_TARGET = 0x30, EN_ORDINAL = 0x38, EN_PATH = 0x40;
 constexpr int EN_CTRL = 0x58;   // vector<float2> of ribbon control points
 
-inline std::map<uintptr_t, uintptr_t> g_rev_entry;    // forward entry -> our reverse entry
+struct RevEntryRec { uintptr_t e = 0; uintptr_t back = 0; std::vector<uint64_t> poly; };
+inline std::map<uintptr_t, RevEntryRec> g_rev_entry;   // forward entry ADDRESS -> our reverse entry, and what it was built from
+inline int g_refreshed = 0;   // cached reverse entries rebuilt because their slot now holds a different link (a flip)
+
+// the forward entry's control polyline as raw float2 words (empty if unreadable)
+inline std::vector<uint64_t> control_poly(uintptr_t entry) {
+    std::vector<uint64_t> out;
+    if (!livetrade::validate_region(entry + EN_CTRL, 16)) return out;
+    uintptr_t qb = *(uintptr_t*)(entry + EN_CTRL), qe = *(uintptr_t*)(entry + EN_CTRL + 8);
+    size_t bytes = (qb && qe > qb) ? (size_t)(qe - qb) : 0;
+    if (bytes < 8 || bytes > (1u << 20) || !livetrade::validate_region(qb, bytes)) return out;   // ONE control point is a real ribbon: 12 vanilla links have exactly one (north_sea -> english_channel among them)
+    out.assign((const uint64_t*)qb, (const uint64_t*)qb + bytes / 8);
+    return out;
+}
+
+// (re)build the reversed control polyline of reverse entry `e` from `poly`; a fresh engine buffer
+// every time -- the previous one is left to the engine's heap (a few hundred bytes per flip)
+inline void install_reversed_poly(uint8_t* e, const std::vector<uint64_t>& poly) {
+    size_t qn = poly.size();
+    if (qn < 1) return;   // a single point reverses to itself, but still gets its OWN buffer (never alias the engine's)
+    using FnNewE = void* (__fastcall*)(size_t);
+    auto alloc = (FnNewE)(livetrade::module_base() + ENGINE_NEW_E);
+    uint64_t* copy = (uint64_t*)alloc(qn * 8);
+    if (!copy) return;
+    for (size_t i = 0; i < qn; i++) copy[i] = poly[qn - 1 - i];
+    *(uintptr_t*)(e + EN_CTRL)      = (uintptr_t)copy;
+    *(uintptr_t*)(e + EN_CTRL + 8)  = (uintptr_t)copy + qn * 8;
+    *(uintptr_t*)(e + EN_CTRL + 16) = (uintptr_t)copy + qn * 8;
+}
 
 inline uintptr_t reverse_entry(uintptr_t fwd_entry, uintptr_t back_to_def) {
-    auto it = g_rev_entry.find(fwd_entry);
-    if (it != g_rev_entry.end()) return it->second;
     if (!livetrade::validate_region(fwd_entry, 0x78)) return 0;
+    std::vector<uint64_t> poly = control_poly(fwd_entry);
+    auto it = g_rev_entry.find(fwd_entry);
+    if (it != g_rev_entry.end()) {
+        RevEntryRec& r = it->second;
+        if (r.back == back_to_def && r.poly == poly) return r.e;
+        // THE SLOT CHANGED HANDS. relink lays each definition's outgoing entries out in link order
+        // inside stable per-node storage, so a flip that moves a link between two definitions
+        // shifts every later entry of both by one slot: the address this cache keyed on now
+        // describes a DIFFERENT link, and a reverse entry built for the old occupant would place
+        // its panel along the wrong ribbon (first seen after the english_channel <-> north_sea
+        // flip). Refresh the target and the reversed polyline; the vtable/class bytes are common.
+        uint8_t* e = (uint8_t*)r.e;
+        *(uintptr_t*)(e + EN_TARGET) = back_to_def;
+        install_reversed_poly(e, poly);
+        r.back = back_to_def; r.poly = poly; g_refreshed++;
+        return r.e;
+    }
     using FnNewE = void* (__fastcall*)(size_t);
     auto alloc = (FnNewE)(livetrade::module_base() + ENGINE_NEW_E);
     uint8_t* e = (uint8_t*)alloc(0x78);
@@ -263,22 +308,8 @@ inline uintptr_t reverse_entry(uintptr_t fwd_entry, uintptr_t back_to_def) {
     // always works from the ribbon's START, so a ribbon whose control points run target -> source
     // gets its panel placed from the target's end by exactly the code that places outgoing ones.
     // The buffer must be the engine's own -- a LinkView built from this entry may free it.
-    {
-        uintptr_t qb = *(uintptr_t*)(e + EN_CTRL), qe = *(uintptr_t*)(e + EN_CTRL + 8);
-        size_t bytes = (qb && qe > qb) ? (size_t)(qe - qb) : 0;
-        size_t qn = bytes / 8;                       // float2 per control point
-        if (qn >= 2 && livetrade::validate_region(qb, bytes)) {
-            uint64_t* copy = (uint64_t*)alloc(bytes);
-            if (copy) {
-                const uint64_t* src = (const uint64_t*)qb;
-                for (size_t i = 0; i < qn; i++) copy[i] = src[qn - 1 - i];
-                *(uintptr_t*)(e + EN_CTRL)      = (uintptr_t)copy;
-                *(uintptr_t*)(e + EN_CTRL + 8)  = (uintptr_t)copy + bytes;
-                *(uintptr_t*)(e + EN_CTRL + 16) = (uintptr_t)copy + bytes;
-            }
-        }
-    }
-    g_rev_entry[fwd_entry] = (uintptr_t)e;
+    install_reversed_poly(e, poly);
+    g_rev_entry[fwd_entry] = RevEntryRec{(uintptr_t)e, back_to_def, poly};
     return (uintptr_t)e;
 }
 
@@ -295,6 +326,8 @@ inline uintptr_t reverse_entry(uintptr_t fwd_entry, uintptr_t back_to_def) {
 struct RevInfo {
     uintptr_t owner_def = 0;    // the node the panel belongs to (the declared link's TARGET)
     uintptr_t other_def = 0;    // the node it points at  (the declared link's SOURCE)
+    int how = 0;                // 0: anchor LEFT AT THE SOURCE END (a defect), 1: engine-placed, 2: fallback walk
+    const char* why = "";       // why the engine's candidate was not taken (diagnostic)
 };
 inline std::map<uintptr_t, RevInfo> g_rev_views;    // LinkView* -> what it represents
 
@@ -376,6 +409,7 @@ inline int add_reverse(std::ofstream* lg) {
 
         uintptr_t nlv = make(type);
         if (!nlv) continue;
+        int how = 0; const char* why = rev_entry_for_lv ? "" : "no reverse entry";
 
         // Build the ribbon from the FORWARD polyline, unmodified. The strip is offset to one
         // side of the path, so reversing the points (tried, reverted) flips the offset side and
@@ -426,6 +460,7 @@ inline int add_reverse(std::ofstream* lg) {
                 // it. Anything else falls back to a point walked in from our end, which is always
                 // on the ribbon and always on the correct side.
                 bool ok = false;
+                why = "ribbon unreadable";
                 {
                     uintptr_t pb = livetrade::fq(nlv + LV_POLY), pe = livetrade::fq(nlv + LV_POLY + 8);
                     int np = (pb && pe > pb) ? (int)((pe - pb) / 12) : 0;
@@ -474,15 +509,15 @@ inline int add_reverse(std::ofstream* lg) {
                             double dx = ta[0]-q.first, dz = ta[2]-q.second;
                             if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { clear_of_others = false; break; }
                         }
-                        if (std::isfinite(ta[0]) && std::isfinite(ta[2]) &&
-                            off_ribbon < 80.0 &&                      // measured vanilla max: 51.6
-                            d2(ti, ta[0], ta[2]) <= d2(si, ta[0], ta[2]) &&
-                            clear_of_others) {
+                        bool finite_a = std::isfinite(ta[0]) && std::isfinite(ta[2]);
+                        bool our_half = finite_a && d2(ti, ta[0], ta[2]) <= d2(si, ta[0], ta[2]);
+                        if (finite_a && off_ribbon < 80.0 && our_half && clear_of_others) {   // measured vanilla max off-ribbon: 51.6
                             *(float*)(nlv + LV_ANCHOR + 0) = ta[0];
                             *(float*)(nlv + LV_ANCHOR + 8) = ta[2];
                             placed.push_back({ta[0], ta[2]});
-                            ok = true;
+                            ok = true; how = 1; why = "";
                         } else if (total > 1e-3) {
+                            why = !finite_a ? "engine left the anchor unwritten" : (off_ribbon >= 80.0 ? "off the ribbon" : (!our_half ? "at the far end" : "too close to a placed panel"));
                             // Fall back to the forward panel's own arc distance, measured from our
                             // end, capped short of the midpoint so the two panels cannot swap sides.
                             double d = arc_of_nearest(p3, np, si, fa[0], fa[2]);
@@ -510,7 +545,7 @@ inline int add_reverse(std::ofstream* lg) {
                                     *(float*)(nlv + LV_ANCHOR + 0) = (float)ax;
                                     *(float*)(nlv + LV_ANCHOR + 8) = (float)az;
                                     placed.push_back({(float)ax, (float)az});
-                                    ok = true;
+                                    ok = true; how = 2;
                                     g_fallback++;
                                     break;
                                 }
@@ -555,27 +590,43 @@ inline int add_reverse(std::ofstream* lg) {
         void* val = (void*)nlv;
         if (ve < vc) { *(uintptr_t*)ve = nlv; *(uintptr_t*)(ctl + VEC_END) = ve + 8; }
         else         { grow((void*)(ctl + VEC_BEGIN), (void*)ve, (void**)&val); }
-        g_rev_views[nlv] = RevInfo{tgtdef_for_lv, srcdef};
+        g_rev_views[nlv] = RevInfo{tgtdef_for_lv, srcdef, how, why};
+        if (how == 0) g_unplaced++;
         added++;
     }
-    // WHICH PANELS DOES A NODE ACTUALLY GET, and where do they sit? A node with several links can
-    // end up with panels that overlap and hide one another: the engine rejects an anchor that
-    // lands too close to one already in the scratch vector it is given, and we hand it a FRESH
-    // scratch, so our reverse anchors de-duplicate against each other but never against the
-    // forward panels already on the map.
-    if (lg && g_logged < 6) {
+    // WHICH PANELS DOES A NODE ACTUALLY GET, and where do they sit? pgt.PANELDUMP holds a comma
+    // separated list of node keys; every rebuild logs each view owned by one of them: direction,
+    // far node, anchor, the ribbon's two ends, and for a reverse view how its anchor was placed.
+    // Without the marker the first six rebuilds dump wien (the node the placement rule was fixed on).
+    std::set<std::string> dump;
+    if (lg) {   // the marker is read only when there is a log to write to (render thread; reviewed)
+        std::ifstream f(livetrade::self_dir() + std::string(1, (char)92) + "pgt.PANELDUMP");
+        std::string line;
+        if (std::getline(f, line)) {
+            size_t p = 0;
+            while (p <= line.size()) {
+                size_t q = line.find(',', p);
+                if (q == std::string::npos) q = line.size();
+                std::string t = line.substr(p, q - p);
+                while (!t.empty() && (t.back() == (char)13 || t.back() == ' ')) t.pop_back();
+                while (!t.empty() && t.front() == ' ') t.erase(0, 1);
+                if (!t.empty()) dump.insert(t);
+                p = q + 1;
+            }
+        }
+    }
+    if (lg && (!dump.empty() || g_logged < 6)) {
         uintptr_t vb = livetrade::fq(ctl + VEC_BEGIN), ve2 = livetrade::fq(ctl + VEC_END);
-        std::vector<std::pair<float,float>> at;
+        std::map<std::string, std::vector<std::pair<float,float>>> at;
         for (uintptr_t p = vb; p && p + 8 <= ve2; p += 8) {
             uintptr_t v = livetrade::fq(p);
             if (!v || !livetrade::validate_region(v + LV_ANCHOR + 12, 4)) continue;
             uintptr_t owner = livetrade::fq(v + LV_SRCDEF);
-            if (def_key(owner) != "wien") continue;
+            std::string ok = def_key(owner);
+            if (dump.empty() ? ok != "wien" : !dump.count(ok)) continue;
             const float* a = (const float*)(v + LV_ANCHOR);
             uintptr_t ent = livetrade::fq(v + LV_ENTRY);
             std::string other = ent ? def_key(livetrade::fq(ent + 0x30)) : "?";
-            // the ribbon's two ends and the forward anchor, so "which end is the source" can be
-            // checked against what was actually drawn rather than assumed
             uintptr_t pb = livetrade::fq(v + LV_POLY), pe = livetrade::fq(v + LV_POLY + 8);
             int np = (pb && pe > pb) ? (int)((pe - pb) / 12) : 0;
             std::string ends = "?";
@@ -586,27 +637,52 @@ inline int add_reverse(std::ofstream* lg) {
                          p3[0], p3[2], p3[(np-1)*3+0], p3[(np-1)*3+2], np);
                 ends = buf;
             }
-            *lg << "    [wien] " << (is_reverse(v) ? "reverse" : "forward") << " -> " << other
-                << " anchor=(" << a[0] << "," << a[2] << ") " << ends << (char)10;
-            at.push_back({a[0], a[2]});
+            const RevInfo* ri = reverse_info(v);
+            *lg << "    [panel:" << ok << "] " << (ri ? "reverse" : "forward") << " -> " << other
+                << " anchor=(" << a[0] << "," << a[2] << ") " << ends;
+            if (ri) *lg << " placed=" << (ri->how == 1 ? "engine" : ri->how == 2 ? "fallback" : "NOT (source end)")
+                        << (ri->why && ri->why[0] ? std::string(" [") + ri->why + "]" : std::string());
+            *lg << (char)10;
+            at[ok].push_back({a[0], a[2]});
         }
-        for (size_t i = 0; i < at.size(); i++)
-            for (size_t j = i + 1; j < at.size(); j++) {
-                double dx = at[i].first - at[j].first, dz = at[i].second - at[j].second;
-                double d = std::sqrt(dx*dx + dz*dz);
-                if (d < MIN_SEP)
-                    *lg << "    [wien] OVERLAP: panels " << i << " and " << j
-                        << " are " << d << " apart (vanilla keeps >= " << MIN_SEP << ")" << (char)10;
-            }
+        for (auto& [key, pts] : at)
+            for (size_t i = 0; i < pts.size(); i++)
+                for (size_t j = i + 1; j < pts.size(); j++) {
+                    double dx = pts[i].first - pts[j].first, dz = pts[i].second - pts[j].second;
+                    double d = std::sqrt(dx*dx + dz*dz);
+                    if (d < MIN_SEP)
+                        *lg << "    [panel:" << key << "] OVERLAP: panels " << i << " and " << j
+                            << " are " << d << " apart (vanilla keeps >= " << MIN_SEP << ")" << (char)10;
+                }
     }
-    if (scratch.first)
-        efree(scratch.first, (size_t)((char*)scratch.end - (char*)scratch.first));
+    // FREE THE ENGINE-GROWN SCRATCH VECTOR AT THE RIGHT BASE (Anbennar crash, 2026-08-27; RE-proven).
+    // The engine grows this vector through operator new 0x950B0, which for a capacity >= 0x1000 bytes
+    // over-allocates and returns a 32-BYTE-ALIGNED pointer, stashing the true base at [ptr-8]. A raw
+    // operator delete on that aligned pointer frees base+offset and smashes the heap -- deterministic
+    // 0xC0000374 two ticks in, but ONLY once the vector crosses 0x1000: vanilla's 159 links stay under,
+    // Anbennar's 255 dense-ribbon links (up to 59 control points each) do not. This is the exact
+    // >= 0x1000 alignment-header hazard already documented for the ctl+0x4B8 view vector above, which
+    // the engine frees header-aware (0xC9D60); the mod frees THIS one itself, so it must recover the
+    // base the same way. Capacity, not size, is what the allocator sized -- measure end-first (== the
+    // engine's _Myend - _Myfirst for this vector, since it grows to exact capacity each realloc).
+    if (scratch.first) {
+        size_t capbytes = (size_t)((char*)scratch.end - (char*)scratch.first);
+        void* base = scratch.first;
+        if (capbytes >= 0x1000) {
+            void* stored = *(void**)((char*)scratch.first - 8);   // 0x950DE: mov [rax-8], realbase
+            // sanity: the stored base must sit just below first, within one 32-byte alignment slack
+            uintptr_t d = (uintptr_t)scratch.first - (uintptr_t)stored;
+            if (stored && d >= 8 && d <= 0x27) base = stored;
+        }
+        efree(base, capbytes);
+    }
     g_last_forward = fwd.size();
     g_added += added;
-    if (lg && g_logged < 6) {
+    if (lg && (g_logged < 6 || !dump.empty())) {
         g_logged++;
         *lg << "  [revpanel] " << fwd.size() << " forward panels, added " << added
-            << " reverse ones (" << g_fallback << " anchors placed by fallback)" << "\n";
+            << " reverse ones (run totals: " << g_fallback << " anchors placed by fallback, "
+            << g_unplaced << " left at the source end, " << g_refreshed << " reverse entries refreshed after a flip)" << (char)10;
     }
     return added;
 }

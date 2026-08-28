@@ -70,6 +70,7 @@ inline void handler(detour::Regs* r) {
 }
 
 inline bool install(const std::string& logpath, std::string* err) {
+    if (g_hook.active) return true;   // a second campaign re-runs the install: the live hook stays (reviewed)
     g_log = logpath;
     std::vector<uint8_t> expected{
         0x4c, 0x89, 0x44, 0x24, 0x18,               // mov [rsp+0x18], r8

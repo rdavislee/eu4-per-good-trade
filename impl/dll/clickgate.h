@@ -36,6 +36,7 @@ constexpr uintptr_t GATE_CALL = 0x8317EF;
 inline bool g_open = false;
 
 inline bool open_gate(std::string* err) {
+    if (g_open) return true;   // a second campaign re-runs the install (reviewed)
     uintptr_t at = livetrade::module_base() + GATE_CALL;
     std::vector<uint8_t> expected{0xE8, 0x7C, 0x76, 0xBE, 0x00};       // call 0x1418E70
     std::vector<uint8_t> patched {0xB0, 0x01, 0x90, 0x90, 0x90};       // mov al,1 ; nop*3

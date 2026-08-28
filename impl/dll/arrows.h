@@ -54,6 +54,7 @@ inline void capture_handler(detour::Regs* r) {
 }
 
 inline bool install_capture(std::string* err) {
+    if (g_capture.active) return true;   // a second campaign re-runs the install (reviewed)
     uintptr_t site = livetrade::module_base() + BUILD_LAYER;
     std::vector<uint8_t> expected{
         0x48, 0x89, 0x4c, 0x24, 0x08,               // mov [rsp+8], rcx

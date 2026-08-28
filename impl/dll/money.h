@@ -99,6 +99,7 @@ inline void check_e4(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
     // in a per-good view) while this check still read CLEAN. Spec 1.12: no negative is ever
     // displayed, so the displayed quantity is what has to be measured.
     int neg_total = 0; double worst_total = 0; std::string worst_node;
+    double worst_loc = 0, worst_in = 0, worst_out = 0;
     double world_pool = 0, world_local = 0, world_links = 0;
     for (auto& s : sim) {
         double pool = livetrade::fi(s.obj + 0xB0) / 1000.0;
@@ -125,14 +126,28 @@ inline void check_e4(const std::vector<livetrade::SimNode>& sim, std::ofstream& 
         double total = loc + in_sum - outg;
         if (total < -0.0005) {
             neg_total++;
-            if (total < worst_total) { worst_total = total; worst_node = s.name; }
+            if (total < worst_total) {
+                worst_total = total;
+                // name it even when this sim copy was never named (check_e4 runs off pass 10's own
+                // read, which does not carry names) -- an unnamed worst node made the 7 violations
+                // of the 191-year run undiagnosable
+                worst_node = s.name;
+                if (worst_node.empty()) {
+                    auto it = install::g_id_to_name.find(s.index);
+                    worst_node = (it != install::g_id_to_name.end()) ? it->second
+                                                                    : ("#" + std::to_string(s.index));
+                }
+                worst_loc = loc; worst_in = in_sum; worst_out = outg;   // the three terms, to diagnose
+            }
         }
     }
     bool ok = !neg_pool && !neg_out && !neg_link && !nan_ct && !huge && !neg_money && !neg_total;
     lg << "[E4] tick " << tick << ": " << (ok ? "CLEAN" : "VIOLATION")
        << " -- negative pool=" << neg_pool << " outgoing=" << neg_out << " link=" << neg_link
        << " money=" << neg_money << " DISPLAYED-TOTAL=" << neg_total
-       << (neg_total ? (" (worst " + worst_node + ")") : std::string())
+       << (neg_total ? (" (worst " + worst_node + " total=" + std::to_string(worst_total)
+                          + " local=" + std::to_string(worst_loc) + " incoming=" + std::to_string(worst_in)
+                          + " outgoing=" + std::to_string(worst_out) + ")") : std::string())
        << ", non-finite=" << nan_ct << ", runaway=" << huge
        << " | world local=" << world_local << " pool=" << world_pool
        << " links=" << world_links << "\n";
@@ -155,7 +170,9 @@ inline bool g_exact = false;
 
 using FnPass10 = void(__fastcall*)(uintptr_t);
 
+inline bool g_suppress_pay = false;   // the attach-time setup run of the driver: no division, no AddDelayedIncome (reviewed)
 inline void __fastcall pass10_wrapper(uintptr_t node) {
+    if (g_suppress_pay) return;
     // BOTH samples inside pass 10. The 'before' sample used to come from the tick hook, which
     // is earlier in the same monthly update -- but measured, 70 of ~100 countries showed the
     // accumulator growing by LESS than trade paid (worst shortfall 4.0 ducats), which a plain

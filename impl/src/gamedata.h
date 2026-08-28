@@ -266,4 +266,59 @@ inline TradeNodes load_tradenodes(const std::string& path) {
     return parse_tradenodes(zipread::read_file(path));
 }
 
+// ---------------------------------------------- mod-overlay variants (2026-08-27) ----
+// The DLL resolves content the way the ENGINE does under mods (impl/dll/modfs.h): per FILE,
+// later enabled mods override the install; a directory is the union of winning filenames in
+// name order. Each variant takes that winning file set and concatenates before one parse --
+// these files are flat declaration lists, so concatenation preserves the engine's read order.
+// The single-root loaders above stay for the offline reference tools.
+inline std::string concat_files(const std::vector<std::string>& files) {
+    std::string all;
+    for (auto& f : files) { all += zipread::read_file(f); all.push_back(10); }   // newline between files
+    return all;
+}
+inline TradeNodes load_tradenodes_files(const std::vector<std::string>& files) {
+    return parse_tradenodes(concat_files(files));
+}
+inline std::map<std::string, double> load_prices_files(const std::vector<std::string>& files) {
+    auto root = pdx::parse(concat_files(files));
+    std::map<std::string, double> prices;
+    for (auto& p : root->kv) {
+        if (p.first.empty() || !p.second.is_node()) continue;
+        std::string bp = p.second.node->get_str("base_price", "1.0");
+        prices[p.first] = std::stod(bp);           // a later redefinition of the same good wins
+    }
+    return prices;
+}
+inline std::vector<std::string> load_goods_order_files(const std::vector<std::string>& files) {
+    auto root = pdx::parse(concat_files(files));
+    std::vector<std::string> order;
+    std::set<std::string> seen;
+    for (auto& p : root->kv)                       // the slot is the FIRST definition's position
+        if (!p.first.empty() && p.second.is_node() && seen.insert(p.first).second)
+            order.push_back(p.first);
+    return order;
+}
+inline StaticMods load_static_mods_files(const std::vector<std::string>& files) {
+    auto root = pdx::parse(concat_files(files));
+    StaticMods sm{};
+    const pdx::Value* pps = root->get("provincial_production_size");
+    if (!pps || !pps->is_node())
+        throw std::runtime_error("provincial_production_size not found - re-derive GP_COEFF");
+    std::string tg = pps->node->get_str("trade_goods_size");
+    if (tg.empty())
+        throw std::runtime_error("provincial_production_size carries no trade_goods_size");
+    sm.gp_coeff = std::stod(tg);
+    for (const char* key : {"devastation", "prosperity", "occupied", "under_siege"}) {
+        const pdx::Value* blk = root->get(key);
+        if (!blk || !blk->is_node())
+            throw std::runtime_error(std::string("static modifier not found: ") + key);
+        std::string v = blk->node->get_str("trade_goods_size_modifier");
+        if (v.empty())
+            throw std::runtime_error(std::string(key) + " carries no trade_goods_size_modifier");
+        sm.state_goods_mod[key] = std::stod(v);
+    }
+    return sm;
+}
+
 } // namespace gamedata

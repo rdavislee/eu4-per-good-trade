@@ -113,7 +113,12 @@ inline bool exec(const std::string& line, std::string* reply) {
 
 // Drain `pgt.CMD`: every non-blank, non-# line is one console command. The file is DELETED once
 // executed so a command fires exactly once, and the marker can simply be rewritten to fire again.
+inline bool g_hold = false;   // set at attach: commands wait until the first tick has run (earlyload.h / ticklive.h)
+inline unsigned long long g_hold_since = 0;
+inline void set_hold(bool on) { g_hold = on; g_hold_since = on ? GetTickCount64() : 0; }
+constexpr unsigned long long HOLD_DEADLINE_MS = 180000;  // covers the late path's world wait + install + solve; a hold nobody released is a bug, not a lock (reviewed)
 inline void drain(const std::string& logpath) {
+    if (g_hold && GetTickCount64() - g_hold_since < HOLD_DEADLINE_MS) return;   // the run's `speed` command must not move the world before the setup
     if (!livetrade::marker_present("CMD")) return;
     std::string path = livetrade::self_dir() + "\\pgt.CMD";
     std::vector<std::string> lines;

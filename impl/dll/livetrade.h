@@ -370,7 +370,7 @@ inline std::string node_key(uintptr_t node) {
     return def_key(rq(node + 0xA8));
 }
 
-inline std::vector<SimNode> read_sim_nodes(int max_nodes = 100) {
+inline std::vector<SimNode> read_sim_nodes(int max_nodes = 4096) {   // total conversions exceed vanilla's 81 (Anbennar: 129 with the sentinel; the count guard above stays the bound)
     std::vector<SimNode> out;
     uintptr_t mgr = trade_manager();
     if (!mgr) return out;

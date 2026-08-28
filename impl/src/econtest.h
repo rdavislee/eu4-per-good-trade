@@ -8,6 +8,11 @@
 #include "economy.h"
 
 namespace econtest {
+// Standing gained fields after these tests were written (own/has_own/merchant_floor/pp/received): build it by name
+static inline econ::Standing econtest_standing(int country, double power, bool collects, int steer_to) {
+    econ::Standing st{}; st.country = country; st.power = power; st.collects = collects; st.steer_to = steer_to; return st;
+}
+
 
 struct Runner {
     int failed = 0, total = 0;
@@ -47,8 +52,8 @@ inline void run_all(Runner& R) {
     // --- 2. lone steerer takes ALL of the remainder down its link; unsteered link gets nothing ---
     {
         std::vector<econ::NodeStandings> st(N);
-        st[1].entries.push_back({7, 0.5, false, 2});      // tiny power, steering B->C
-        st[1].entries.push_back({8, 40.0, false, -1});    // big power, inert (no collector reachable)
+        st[1].entries.push_back(econtest_standing(7, 0.5, false, 2));      // tiny power, steering B->C
+        st[1].entries.push_back(econtest_standing(8, 40.0, false, -1));    // big power, inert (no collector reachable)
         auto F = econ::route(N, dir, inject, st, {}, MOD);
         R.ok(near(F.flow[1][2], 12.0) && F.flow[1].count(3) == 0, "lone steerer: winner-take-all (0.5 power vs 40 inert)",
              "flow B->C=" + std::to_string(F.flow[1][2]));
@@ -64,9 +69,9 @@ inline void run_all(Runner& R) {
     // --- 3. collected_share = Pc/(Pc+Pt) with per-good eligibility ---
     {
         std::vector<econ::NodeStandings> st(N);
-        st[1].entries.push_back({1, 10.0, true, -1});     // collector at B, power 10
-        st[1].entries.push_back({2, 30.0, false, 3});     // steerer toward D, power 30
-        st[1].entries.push_back({3, 60.0, false, -1});    // collects at C (reachable) -> eligible
+        st[1].entries.push_back(econtest_standing(1, 10.0, true, -1));     // collector at B, power 10
+        st[1].entries.push_back(econtest_standing(2, 30.0, false, 3));     // steerer toward D, power 30
+        st[1].entries.push_back(econtest_standing(3, 60.0, false, -1));    // collects at C (reachable) -> eligible
         std::map<int, std::vector<int>> cn{{3, {2}}};
         auto F = econ::route(N, dir, inject, st, cn, MOD);
         R.ok(near(F.collected_share[1], 10.0 / 100.0), "collected_share = 10/(10+30+60)",
@@ -86,8 +91,8 @@ inline void run_all(Runner& R) {
         std::vector<std::pair<int, int>> dX{{0, 1}, {1, 2}, {1, 3}};
         std::vector<std::pair<int, int>> dY{{2, 1}, {1, 3}, {0, 1}};   // C->B->D, A->B
         std::vector<econ::NodeStandings> st(N);
-        st[1].entries.push_back({5, 10.0, false, 2});
-        st[2].entries.push_back({6, 10.0, false, 1});
+        st[1].entries.push_back(econtest_standing(5, 10.0, false, 2));
+        st[2].entries.push_back(econtest_standing(6, 10.0, false, 1));
         std::vector<double> injX{12, 0, 0, 0}, injY{0, 0, 12, 0};
         auto FX = econ::route(N, dX, injX, st, {}, MOD);
         auto FY = econ::route(N, dY, injY, st, {}, MOD);
@@ -105,7 +110,7 @@ inline void run_all(Runner& R) {
         R.ok(near(row, 1.0), "survival row A sums to 1 without steering", "row=" + std::to_string(row));
         R.ok(near(S[0][2], 0.5) && near(S[0][3], 0.5), "A's unit halves to C and D");
         std::vector<econ::NodeStandings> st2(N);
-        st2[1].entries.push_back({7, 1.0, false, 2});
+        st2[1].entries.push_back(econtest_standing(7, 1.0, false, 2));
         auto F2 = econ::route(N, dir, inject, st2, {}, MOD);
         auto S2 = econ::survival(N, F2, dir);
         R.ok(near(S2[0][2], 1.05) && near(S2[0][3], 0.0), "steered: A's unit arrives at C with +5%",

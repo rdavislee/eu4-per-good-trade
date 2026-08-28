@@ -49,6 +49,7 @@
 #include <vector>
 #include "livetrade.h"
 #include "detour.h"
+#include "homeward.h"
 
 namespace nocollect {
 
@@ -81,17 +82,47 @@ inline uintptr_t record_for(uintptr_t node, uint64_t handle) {
     return rb + (uintptr_t)idx * 0xC0;
 }
 
+inline uint64_t g_player_settrader_logged = 0;
 inline void on_set_trader(detour::Regs* r) {
     g_calls++;
-    if ((r->r8 & 0xFF) != 0) return;                           // already transfer
-    g_type0++;
+    homeward::g_reach_dirty = true;                            // the frame poll rebuilds the engine's reachability tables once
     uintptr_t node = r->rcx; uint64_t handle = r->rdx;
+    // WHO PLACES THE PLAYER'S MERCHANTS? The return address names the engine path (arrival 0x25AE22,
+    // instant placement 0x25B9A3, command 0x27424A, capital move 0x305C6C, our dispatch = DLL memory).
+    // Instrument for the bordeaux question (user, 2026-08-27); ~40 lines per run at most.
+    if (g_player_settrader_logged < 40) {
+        int pidx = -1;
+        { uintptr_t g = livetrade::game_singleton();
+          if (g && livetrade::validate_region(g + 0x1E60, 16)) {
+              uint64_t h = (livetrade::fb(g + 0x1E66) == 7 && livetrade::fb(g + 0x1E6F) != 0) ? livetrade::fq(g + 0x1E68) : livetrade::fq(g + 0x1E60);
+              pidx = (int)(int16_t)(h >> 32);
+          } }
+        if (pidx >= 0 && (int)(int16_t)(handle >> 32) == pidx) {
+            g_player_settrader_logged++;
+            uintptr_t base = livetrade::module_base();
+            std::ofstream lg(livetrade::self_dir() + std::string(1, (char)92) + "per-good-trade.log", std::ios::app);
+            uintptr_t def = livetrade::validate_region(node + 0xA8, 8) ? livetrade::fq(node + 0xA8) : 0;
+            lg << "  [settrader/player] node=" << livetrade::def_key(def) << " type=" << (int)(r->r8 & 0xFF) << " chain:";
+            // the CALL CHAIN, not just the first frame: scan the stack for eu4.exe code addresses (the
+            // engine builds without frame pointers, so a conservative scan is the only portable walk)
+            int shown = 0;
+            for (uintptr_t sp = r->rsp(); shown < 16 && sp < r->rsp() + 0xC00; sp += 8) {
+                if (!livetrade::validate_region(sp, 8)) break;
+                uint64_t v = *(uint64_t*)sp;
+                if (v >= base && v < base + 0x2000000) { lg << " +0x" << std::hex << (v - base) << std::dec; shown++; }
+            }
+            lg << (char)10;
+        }
+    }
+    if ((r->r8 & 0xFF) != 0) { homeward::auto_target(node, handle); return; }   // already transfer: point it home unless the table decides
+    g_type0++;
     if (!node_has_outgoing(node)) g_kept_end++;                // counted; type 1 at an END node is safe (relink.h, syncrec.h notes)
     uintptr_t rec = record_for(node, handle);
     if (!rec) return;                                          // cannot see the record: leave the engine alone
     if (livetrade::fb(rec + 0xAD) != 0) { g_kept_capital++; return; }
     r->r8 = (r->r8 & ~(uint64_t)0xFF) | 1;                     // collect -> transfer; the engine scores the link
     g_forced++;
+    homeward::auto_target(node, handle);                       // ...and the table points it home (homeward.h)
 }
 
 inline bool install(std::string* err) {

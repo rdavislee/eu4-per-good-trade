@@ -27,6 +27,8 @@
 #include "resolver.h"
 #include "arrows.h"
 #include "clickgate.h"
+#include "gates.h"
+#include "treasure.h"
 #include "caravan.h"
 #include "money.h"
 #include "booklog.h"
@@ -35,12 +37,21 @@
 #include "revpanel.h"
 #include "flagfix.h"
 #include "clickfix.h"
+#include "envoybuttons.h"
 #include "nocollect.h"
+#include "outtip.h"
+#include "transfertext.h"
+#include "outlinertext.h"
+#include "endtext.h"
 #include "crashlog.h"
 #include "aiguard.h"
 #include "envoy.h"
+#include "lightship.h"
 #include "aisilence.h"
 #include "ticklive.h"
+#include "earlyload.h"
+#include "savegame.h"
+#include "modfs.h"
 #include "../src/attach.h"
 #include "../src/gamedata.h"
 #include "../src/save.h"
@@ -113,9 +124,11 @@ struct Installed {
     bool ok = false;
 };
 
-static void run_install(const std::string& logpath) {
+static bool run_install(const std::string& logpath) {
     std::ofstream log(logpath, std::ios::app);
     log << "=== INSTALL: per-good economy -> engine (name-keyed) ===\n";
+    ticklive::g_plan.ready = false;                 // a second install never reports the previous world's readiness (reviewed)
+    console::set_hold(true);                        // the late path: hold the run's commands through the install
 
     // WAIT FOR LIVE TRADE DATA. The engine populates each node's trade_goods_size and
     // local_value in the monthly value pass; a DLL injected before the first pass (or while a
@@ -130,11 +143,12 @@ static void run_install(const std::string& logpath) {
         if (!sim.empty() && world_local > 0.0) break;
         Sleep(500);
     }
-    if (sim.empty()) { log << "  no live nodes; aborting install\n"; return; }
+    if (sim.empty()) { log << "  no live nodes; aborting install\n"; console::set_hold(false); return false; }
     if (world_local <= 0.0) {
         log << "  live trade state still empty after waiting (is a campaign running?); "
                "aborting install rather than writing zeros\n";
-        return;
+        console::set_hold(false);
+        return false;
     }
     int named = 0; for (auto& s : sim) if (!s.name.empty()) named++;
     log << "  live: " << sim.size() << " nodes, world local=" << world_local
@@ -145,11 +159,21 @@ static void run_install(const std::string& logpath) {
         "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV"
         "\\save games\\VANILLA_start.eu4";
     try {
-        gamedata::TradeNodes tn = gamedata::load_tradenodes(
-            root + "/common/tradenodes/00_tradenodes.txt");
-        gamedata::StaticMods sm = gamedata::load_static_mods(root);
-        auto prices = gamedata::load_prices(root);
-        auto goods_order = gamedata::load_goods_order(root);   // slot k <-> goods_order[k-1] (1-based)
+        // CONTENT COMES FROM WHAT THE ENGINE LOADED (user, 2026-08-27: Anbennar/Extended Timeline).
+        // Under a total conversion the install's files describe a world the engine is not
+        // running -- measured: matched 0/80 live nodes by name, world total 0. Resolve the
+        // statics through dlc_load.json's enabled mods exactly as the engine does.
+        {
+            std::ofstream lmf(logpath, std::ios::app);
+            modfs::build(root, &lmf);
+        }
+        gamedata::TradeNodes tn = gamedata::load_tradenodes_files(
+            modfs::resolve_dir("common/tradenodes", ".txt"));
+        gamedata::StaticMods sm = gamedata::load_static_mods_files(
+            modfs::resolve_dir("common/static_modifiers", ".txt"));
+        auto prices = gamedata::load_prices_files(modfs::resolve_dir("common/prices", ".txt"));
+        auto goods_order = gamedata::load_goods_order_files(
+            modfs::resolve_dir("common/tradegoods", ".txt"));   // slot k <-> goods_order[k-1] (1-based)
         std::map<std::string, int> good_slot;                  // good name -> engine tgs slot
         for (int k = 0; k < (int)goods_order.size(); k++) good_slot[goods_order[k]] = k + 1;
         save::SaveData sd = save::load(save);
@@ -291,8 +315,11 @@ static void run_install(const std::string& logpath) {
             // LINKS FIRST: install_aggregate derives each node's outgoing from what the node
             // actually holds (engine local + the incoming records), so the model's arrivals must
             // already be in those records when it runs.
-            int links = install::install_links(sim, tn.order, net_links, nm.id_to_name);
-            int wrote = install::install_aggregate(sim, tn.order, agg);
+            int links = 0, wrote = 0;
+            if (!livetrade::marker_present("NOWRITE")) {   // the seed is a write too (crash bisection)
+                links = install::install_links(sim, tn.order, net_links, nm.id_to_name);
+                wrote = install::install_aggregate(sim, tn.order, agg);
+            }
             log << "  INSTALLED pool+outgoing on " << wrote << " nodes, " << links
                 << " link values (local left intact per B4)\n";
             // THE TICK HOOK (spec 2.6): land the write inside the engine's own monthly
@@ -343,6 +370,33 @@ static void run_install(const std::string& logpath) {
                     else
                         log << "  booking log off (pgt.BOOKLOG absent: its 52k redirected calls cost ~3.4 s per month)" << (char)10;
                 }
+                // SPEC 1.10 / TEST G4: every upstream-downstream gate evaluates TRUE. The engine
+                // expresses them through the reach matrices A/B plus two leaf predicates; gates.h
+                // fills A and B after each rebuild and patches the predicates. Off with pgt.NOGATES.
+                // SPEC 1.11: route the treasure fleet by the 1.10 ladder so privateers skim at every
+                // node en route. Without it a fleet whose Phi_w path does not connect teleports and
+                // skims at two nodes -- which is the Spanish silver case (mexico/lima). Off with
+                // pgt.NOTREASURE; the hook declines to answer whenever it is unsure, which is exactly
+                // the engine's own behaviour.
+                if (livetrade::marker_present("TREASURE")) {   // OPT-IN: it crashed a late-game load (see DEPARTURES)
+                    std::string terr;
+                    if (treasure::install(&terr))
+                        log << "  TREASURE ROUTING (spec 1.11): next hop supplied from the Phi_w / per-good / undirected ladder at 0x3E2358" << (char)10;
+                    else
+                        log << "  treasure routing NOT installed: " << terr << (char)10;
+                }
+                if (!livetrade::marker_present("NOGATES")) {
+                    // pgt.NOGATEFILL: keep sampling matrix B at the frame poll but do NOT refill it.
+                    // That is the red half of the gate test -- with the refill off the lapse counter
+                    // must climb, which is what proves the counter can fail at all.
+                    gates::g_no_frame_fill = livetrade::marker_present("NOGATEFILL");
+                    std::string gerr;
+                    if (gates::install(&gerr))
+                        log << "  DIRECTION GATES OPEN (spec 1.10): " << gates::g_sites_hooked << "/6 rebuild call sites hooked" << (gates::g_site_report.empty() ? std::string() : (" [MISSED " + gates::g_site_report + "]")) << ", matrix B refilled after each, "
+                               "treasure-fleet gate 0x3E1D30 and IsNodeUpstreamOfCountry 0xB4E020 forced true" << (char)10;
+                    else
+                        log << "  direction gates NOT installed: " << gerr << (char)10;
+                }
                 if (livetrade::marker_present("CARAVAN")) {
                     std::string kerr;
                     if (caravan::install(&kerr))
@@ -379,7 +433,6 @@ static void run_install(const std::string& logpath) {
                     // builder itself runs only at map init, long before we attach) and polls the
                     // console queue even while the game is paused.
                     std::string ferr;
-                    frame::g_view_poll = &ticklive::frame_view_poll;
                     if (frame::install(logpath, &ferr))
                         log << "  FRAME HOOK installed at eu4.exe+0x10A6EC0 (map renderer capture + console while paused)\n";
                     else
@@ -393,6 +446,49 @@ static void run_install(const std::string& logpath) {
                                "as an outgoing panel\n";
                     else
                         log << "  all-edges NOT installed: " << aeerr << "\n";
+                }
+                if (!livetrade::marker_present("NOCOLOR")) {
+                    std::string cverr;
+                    if (colorview::install(&cverr))
+                        log << "  PER-GOOD MAP COLORING: trade-mapmode plane detour at 0x12F0B40 (producers colored, rest gray while a good view is open)" << (char)10;
+                    else
+                        log << "  per-good map coloring NOT installed: " << cverr << (char)10;
+                }
+                if (!livetrade::marker_present("NOOUTTIP")) {
+                    std::string oerr;
+                    if (outtip::install(&oerr))
+                        log << "  OUTGOING TOOLTIP: reverse destinations appended (node window + ledger call sites)" << (char)10;
+                    else
+                        log << "  outgoing tooltip NOT installed: " << oerr << (char)10;
+                }
+                // (the console hold is armed at attach, before the worker; see attach_main)
+                if (!livetrade::marker_present("NOBUTTONS")) {
+                    std::string berr;
+                    if (envoybuttons::install(&berr))
+                        log << "  NODE-WINDOW BUTTONS: no collect item anywhere, transfer item at END nodes, none at home (4 byte patches)" << (char)10;
+                    else
+                        log << "  node-window buttons NOT patched: " << berr << (char)10;
+                }
+                if (!livetrade::marker_present("NOTRANSFERTEXT")) {
+                    std::string eterr;
+                    if (endtext::install(&eterr))
+                        log << "  END-NODE TRANSFER TEXT: node window + outliner post-hooks (5 call sites)" << (char)10;
+                    else
+                        log << "  end-node transfer text NOT installed: " << eterr << (char)10;
+                }
+                if (!livetrade::marker_present("NOTRANSFERTEXT")) {
+                    std::string oterr;
+                    if (outlinertext::install(&oterr))
+                        log << "  OUTLINER TRANSFER TEXT: table target substituted (call site 0x12BEDFA)" << (char)10;
+                    else
+                        log << "  outliner transfer text NOT installed: " << oterr << (char)10;
+                }
+                if (!livetrade::marker_present("NOTRANSFERTEXT")) {
+                    std::string terr;
+                    if (transfertext::install(&terr))
+                        log << "  NODE-WINDOW TRANSFER TEXT: table target substituted (call site 0x13D0539)" << (char)10;
+                    else
+                        log << "  node-window transfer text NOT installed: " << terr << (char)10;
                 }
                 if (livetrade::marker_present("REVPANEL")) {
                     revpanel::g_log = logpath;
@@ -444,12 +540,41 @@ static void run_install(const std::string& logpath) {
                     else
                         log << "  vanilla merchant AI NOT silenced: " << serr << (char)10;
                 }
+                                if (!livetrade::marker_present("REVPANEL")) {
+                    // these four are ENFORCEMENT, not reverse-panel features: they must run in every
+                    // configuration or the first tick never fires and vanilla's merchant AI fights the
+                    // model (reviewed). The REVPANEL block above installs them in the normal setup.
+                    std::string e2;
+                    if (crashlog::install(livetrade::self_dir() + std::string(1, (char)92) + "pgt_crash.log", livetrade::module_base(), &e2))
+                        log << "  crash logger armed (no-REVPANEL run)" << (char)10;
+                    if (nocollect::install(&e2)) log << "  no-collect hook installed (no-REVPANEL run)" << (char)10;
+                    else log << "  no-collect NOT installed: " << e2 << (char)10;
+                    if (aisilence::install(&e2)) log << "  vanilla merchant AI silenced (no-REVPANEL run)" << (char)10;
+                    else log << "  vanilla merchant AI NOT silenced: " << e2 << (char)10;
+                    if (envoy::install(logpath, &e2)) log << "  envoy seams installed (no-REVPANEL run)" << (char)10;
+                }
+                // LIGHT SHIPS (user, 2026-08-27): as close to vanilla as possible. Vanilla's own scorer
+                // ((1 - share) x node value, crowding, reach) already consumes the MODEL's numbers -- the
+                // mod writes every field it reads (val/max_pow/shares/node totals/reachability) -- so it
+                // sends ships to reverse-steered nodes by itself. The model score-replacement stays as an
+                // opt-in experiment: pgt.MODELSHIPS.
+                if (livetrade::marker_present("MODELSHIPS")) {
+                    std::string lserr;
+                    if (lightship::install(logpath, &lserr))
+                        log << "  LIGHT-SHIP ALLOCATION owned by the model (pgt.MODELSHIPS; detour on 0x1B8340)" << (char)10;
+                    else
+                        log << "  light-ship allocation NOT installed: " << lserr << (char)10;
+                } else log << "  light ships: vanilla's scorer on the model's data (default; pgt.MODELSHIPS opts into the model score)" << (char)10;
                 ticklive::start_verifier();
                 if (ticklive::install_hook(&herr))
                     log << "  TICK HOOK installed at eu4.exe+0xB4BF09 (writes land inside the "
                            "engine's monthly update, before the collector division)\n";
                 else
                     log << "  tick hook NOT installed: " << herr << "\n";
+                // the frame poll is armed only now: nothing runs on the game thread while call sites
+                // are still being patched, and the attach-time tick sees every hook in place (reviewed)
+                frame::g_view_poll = &ticklive::frame_view_poll;
+                ticklive::g_attach_done = true;
             }
             if (livetrade::marker_present("MONTHLY")) {
                 static std::string s_log = logpath;
@@ -494,6 +619,7 @@ static void run_install(const std::string& logpath) {
         log << "  install failed: " << e.what() << "\n";
     }
     log << "=== INSTALL complete ===\n";
+    return ticklive::g_plan.ready;
 }
 
 static void attach_main() {
@@ -529,6 +655,7 @@ static void attach_main() {
     g_logpath = logpath;
     g_log.open(logpath, std::ios::app);
     L("=== per-good-trade.dll attach ===");
+    L("pid: " + std::to_string(GetCurrentProcessId()) + " (the process these patches live in)");
     L("install dir: " + root);
 
     // 1. build gate -- in-memory version string first (EU4dll's method), then file identity
@@ -563,6 +690,22 @@ static void attach_main() {
     // 4. in-process live trade access (injected into a running game). Spawns a worker thread so
     // no heavy memory-walking happens under the loader lock.
     static std::string s_logpath = g_logpath;
+    // THE LOADING-PATH SETUP (earlyload.h): when the DLL is in the process before a campaign loads,
+    // the engine's own setup call carries the whole install + first tick under the loading screen.
+    {   // the pass-10 wrapper needs nothing from the world; installed here so the savegame path's
+        // suppressed driver run works on the FIRST campaign of the process (reviewed)
+        std::string me;
+        if (money::install_exact(g_logpath, &me)) L("pass-10 wrapper installed at attach (income suppression available)");
+        else L("pass-10 wrapper NOT installed at attach: " + me);
+    }
+    earlyload::g_log = g_logpath;
+    ticklive::g_gamelog_path = savegame::userdir_root() + std::string(1, (char)92) + "logs" + (char)92 + "game.log";   // the campaign-change signal (truncated per launch)
+    earlyload::g_run_install = []() -> bool { return run_install(s_logpath); };
+    { std::string ee; if (earlyload::install(&ee)) L("LOADING-PATH SETUP installed (new game 0x774C3B, savegame 0x775EEC): a campaign sets up before it appears");
+                      else L("loading-path setup NOT installed: " + ee); }
+    console::set_hold(!livetrade::marker_present("NOFIRSTTICK"));   // pgt.CMD waits for the first tick (180 s deadline)
+    { std::string se; if (savegame::install(g_logpath, &se)) L("SAVEGAME SIDECAR installed: the table is written beside every save and restored on load");
+                      else L("savegame sidecar NOT installed: " + se); }
     HANDLE wt = CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
         // Log directly (not via L(), whose ofstream belongs to the attach thread) so every stage
         // is visible even if a later stage faults.
@@ -573,6 +716,19 @@ static void attach_main() {
         note("worker started");
         Sleep(1500);
         note("scanning for trade nodes...");
+        // EARLY ATTACH: with no trade world yet (main menu, or a campaign still loading) the
+        // loading-path wrapper (earlyload.h) owns the install; this thread only stands in as the
+        // fallback for a DLL injected after the setup call sites have already passed.
+        {
+            auto world_has_value = []() { double v = 0; try { for (auto& s0 : livetrade::read_sim_nodes()) v += s0.local_value; } catch (...) { return false; } return v > 0.0; };
+            if (!world_has_value()) {
+                note("no trade world yet: the loading-path setup will install when a campaign loads");
+                for (;;) { Sleep(1000); if (earlyload::g_claimed.load()) { note("install owned by the loading path"); return 0; } if (world_has_value()) break; }
+                Sleep(5000);   // grace: the loading-path wrapper claims first when it is going to
+                if (earlyload::g_claimed.load()) { note("install owned by the loading path"); return 0; }
+            }
+            if (!earlyload::claim()) { note("install already claimed"); return 0; }
+        }
         try {
             livetrade::log_snapshot(s_logpath);
             if (livetrade::marker_present("LINKDUMP")) {
@@ -580,7 +736,9 @@ static void attach_main() {
                 livetrade::dump_incoming(s_logpath, sim0);
             }
             note("snapshot complete");
-            run_install(s_logpath);
+            bool ok = run_install(s_logpath);
+            if (ok) earlyload::g_install_done = true;
+            else { earlyload::g_claimed = false; console::set_hold(false); note("install did not produce a ready plan: claim released"); }
         } catch (const std::exception& e) {
             std::ofstream f(s_logpath, std::ios::app);
             f << "[worker] EXCEPTION: " << e.what() << "\n";
@@ -595,6 +753,32 @@ static void attach_main() {
 
 BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
+        // ONE INSTANCE PER PROCESS -- decided by the CODE, never by a kernel object (2026-08-27).
+        // A second copy of this DLL in the SAME process (proxy + injector) must stay inert: its
+        // earlyload install would find the call sites already repointed and its done!=6 cleanup
+        // would revert the first instance's patches. A named mutex was the WRONG tool: "Local"
+        // names are SESSION-scoped, and EU4 REPLACES ITS PROCESS on every quit-to-menu -- the
+        // dying process still held the mutex while its successor attached, so the successor went
+        // permanently inert and every in-session campaign switch ran vanilla (measured: patches
+        // in pid 26844, the player in pid 14396, one attach in the log). The correct per-process
+        // test: is the InitNewGame call site already repointed outside the image?
+        {
+            uintptr_t exe = (uintptr_t)GetModuleHandleA(nullptr);
+            if (exe) {
+                uint32_t peoff = *(uint32_t*)(exe + 0x3C);
+                uint32_t imgsz = *(uint32_t*)(exe + peoff + 0x50);          // NTHeaders+0x50 == OptionalHeader+0x38 == SizeOfImage (PE32 and PE32+ alike)
+                uint8_t* site = (uint8_t*)(exe + 0x81AC47);                 // SITE_INIT_NEWGAME
+                // the site must be INSIDE this image before it is read: loadtest.exe /
+                // selftest_host.exe (TESTING A4) load this DLL into a few-hundred-KB host,
+                // where reading exe+0x81AC47 is ~8 MB out of bounds -- an AV inside DllMain
+                // under the loader lock, which would kill A4 instead of letting the build
+                // gate refuse cleanly (reviewed).
+                if (imgsz > 0x81AC4C && site[0] == 0xE8) {
+                    uintptr_t tgt = (uintptr_t)(site + 5) + *(int32_t*)(site + 1);
+                    if (tgt < exe || tgt >= exe + imgsz) return TRUE;       // another instance owns this process
+                }
+            }
+        }
         attach_main();
     }
     return TRUE;

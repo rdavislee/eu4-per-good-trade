@@ -55,6 +55,9 @@ constexpr int       HOLDER_WINDOW  = 0x40;
 constexpr int       ICON_HANDLE    = 0x1E8;
 constexpr int       BOX_APPEND     = 0x260;     // box vtbl: append child (holder), relayout flag
 constexpr int       BOX_CLEAR      = 0x278;     // box vtbl: clear all (deletes the children)
+constexpr int       BOX_SETTOOLTIP = 0x118;     // box vtbl: SetTooltip(const std::string*) -- stores +0x38 and pushes to the children (0x163DA20)
+constexpr uintptr_t STR_MAPICON_TRADEROUTE = 0x232B2E0;   // the engine's static std::string("mapicon_traderoute") (built at 0x1337C2E)
+inline uint64_t g_rev_tooltip_set = 0;
 constexpr uintptr_t GUI_MANAGER    = 0x23494F0; // *(CGui**)
 constexpr uintptr_t HOLDER_CTOR    = 0x152DF80; // (holder, gui, const std::string* windowName)
 constexpr uintptr_t SHIELD_SETUP   = 0x10B44B0; // (iface, elem, handle, setFrame, clickable, defTooltip, flagA, flagB)
@@ -129,6 +132,7 @@ constexpr int BTN_SETFRAME    = 0xA8;    // button vtbl: SetFrame(int)
 constexpr int BTN_FRAME       = 0x64;    // int32 frame: 1 steering here, 2 not
 inline std::string g_log;   // set by install(); empty = self_dir()/per-good-trade.log
 inline uint64_t g_frames_forced = 0, g_sb_entered = 0, g_sb_nokey = 0, g_sb_want0 = 0, g_sb_nowin = 0, g_sb_nobtn = 0, g_sb_curbad = 0, g_sb_same = 0;
+inline int g_sb_curbad_logged = 0;
 inline int player_index() {
     uintptr_t g = livetrade::game_singleton();
     if (!g || !livetrade::validate_region(g + 0x1E60, 16)) return -1;
@@ -160,12 +164,22 @@ inline void fix_steer_button(uintptr_t panel, uintptr_t lv, const revpanel::RevI
     auto fb = (FnFindBox)livetrade::fq(wvt + WIN_FIND_BUTTON);
     uintptr_t btn = fb ? fb(win, "steer_button") : 0;
     if (!btn || !livetrade::validate_region(btn, 0x70)) { g_sb_nobtn++; return; }
+    // ALWAYS SET IT. The engine writes this button's frame every frame (0x13FD1DD: vt[0xA8](1|2),
+    // and 0x13A8D80 is `mov [rcx+0x64], edx`), so calling SetFrame with the table's answer is exactly
+    // the call the engine just made. The earlier gate that only overwrote a field reading 0/1/2
+    // skipped ~25% of panels whose +0x64 read 127/556 (measured: `curbad`), and that is how a
+    // merchant moved from a node's forward link to a reverse one stayed 'steering' on BOTH boxes
+    // (user, valencia: genua then sevilla). The odd reads are counted, not obeyed.
     int32_t cur = livetrade::fi(btn + BTN_FRAME);
-    // MEASURED: on our reverse panels the engine never writes the frame at all (its Update sets 1/2
-    // only on the path it takes for links it can index), so the field reads 0 -- and the tooltip
-    // treats anything but 2 as "steering". 0 is therefore a legitimate starting state to overwrite.
-    if (cur != 0 && cur != 1 && cur != 2) { g_sb_curbad++; if (g_sb_curbad < 4) { std::ofstream lg(g_log.empty() ? livetrade::self_dir() + std::string(1, (char)92) + "per-good-trade.log" : g_log, std::ios::app); lg << "  [steerbtn] button frame field reads " << cur << " at 0x" << std::hex << btn << std::dec << " (not 1/2)" << (char)10; } return; }
-    if (cur == want) { g_sb_same++; return; }
+    if (cur != 0 && cur != 1 && cur != 2) {
+        g_sb_curbad++;
+        if (g_sb_curbad_logged < 12) {
+            g_sb_curbad_logged++;
+            std::ofstream lg(g_log.empty() ? livetrade::self_dir() + std::string(1, (char)92) + "per-good-trade.log" : g_log, std::ios::app);
+            { static uint64_t sb=0; if ((sb++ % 2000) == 0) lg << "  [steerbtn] frame field reads " << cur << " on " << (ri ? "reverse" : "forward") << " panel " << node_key << " -> " << far_key
+               << " (want " << want << "); set anyway (1/2000 sampled)" << (char)10; }
+        }
+    } else if (cur == want) { g_sb_same++; return; }
     uintptr_t bvt = livetrade::fq(btn);
     if (!bvt || !livetrade::validate_region(bvt + BTN_SETFRAME, 8)) return;
     ((void (__fastcall*)(uintptr_t, int))livetrade::fq(bvt + BTN_SETFRAME))(btn, want);
@@ -256,7 +270,24 @@ inline void __fastcall update_hook(uintptr_t panel) {
             append2(bx, h, 0);
             added++;
         }
-        if (added) { relayout2(bx); g_rev_added += added; }
+        if (added) {
+            relayout2(bx); g_rev_added += added;
+            // THE HOVER TEXT. The engine's row builder ends with box->vt[0x118]("mapicon_traderoute")
+            // (0x13FDE1E -> 0x163DA20), which stores the key at box+0x38 AND pushes it into every child
+            // present at that moment (holder vt[0x48] -> window vt[0x118] -> the shield icon's +0x38).
+            // AddChild (0x163D9E0) does not propagate it, so shields appended here carried an empty key,
+            // the map-icon tooltip dispatcher's compare at 0xB8693D failed, and the panel's tooltip
+            // (0x13FBD30, which reads only icon+0x1E8 and the owner node's record) was never entered.
+            // Restoring the call is byte-for-byte what the engine does; the string is its own static.
+            // the engine string is a lazy magic static (0x1337C28 guard): before its first construction the
+            // object is all zeros and SetTooltip would assign an empty key -- guard on its size (reviewed)
+            if (livetrade::validate_region(bvt2 + BOX_SETTOOLTIP, 8) &&
+                livetrade::validate_region(livetrade::module_base() + STR_MAPICON_TRADEROUTE + 0x10, 8) &&
+                *(uint64_t*)(livetrade::module_base() + STR_MAPICON_TRADEROUTE + 0x10) == 18) {
+                auto set_tt = (void (__fastcall*)(uintptr_t, const void*))livetrade::fq(bvt2 + BOX_SETTOOLTIP);
+                if (set_tt) { set_tt(bx, (const void*)(livetrade::module_base() + STR_MAPICON_TRADEROUTE)); g_rev_tooltip_set++; }
+            }
+        }
         return;
     }
     // EVERY forward panel, not only ordinal 0. Measured: forward-#0 panels saw 104,066 shields and

@@ -28,6 +28,11 @@ namespace viewmode {
 // live-good list, meaning "show only this good".
 inline int g_selected = -1;
 inline std::string g_selected_name;
+// THE PROVINCE CLICK (spec 1.12 / test D1; user 2026-08-27): clicking a province selects its trade
+// good's view; closing the window (or clicking water) returns to the aggregate. clickview.h writes
+// this each frame from the engine's own province view; the pgt.VIEW marker (the test harness)
+// still takes precedence when present.
+inline std::string g_click_want;
 
 // Read the requested view from a marker file next to the DLL. `pgt.VIEW` holding a good name
 // selects that good; no marker (or an empty one) means the aggregate view. This is the test
@@ -41,6 +46,7 @@ inline void poll(const std::vector<std::string>& good_names, std::ofstream* log 
         while (!want.empty() && (want.back() == '\r' || want.back() == '\n' || want.back() == ' '))
             want.pop_back();
     }
+    if (want.empty()) want = g_click_want;
     int next = -1;
     if (!want.empty())
         for (int i = 0; i < (int)good_names.size(); i++)

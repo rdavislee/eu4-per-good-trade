@@ -16,6 +16,7 @@
 #include <windows.h>
 #include <atomic>
 #include <fstream>
+#include <algorithm>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -72,6 +73,35 @@ inline bool solve_once(Orientation& out, std::string* why = nullptr) {
     if (!g_st.ready) { if (why) *why = "statics not loaded"; return false; }
     liveworld::WorldRead w = liveworld::read_world();
     if (!w.ok) { if (why) *why = "live world read failed"; return false; }
+    {   // H1/INPUTS: the fingerprint of what the solve CONSUMED (spec 2.8 named this the next
+        // instrument). H1 compares orientations across a save/reload; the solver itself is
+        // deterministic (30/30 offline), so if two runs at the same date disagree, either the
+        // inputs differ -- which this hash proves -- or the model is at fault. Order-independent
+        // per province so vector order can never matter.
+        uint64_t h = 1469598103934665603ull;
+        auto mix = [&h](uint64_t v) { h ^= v; h *= 1099511628211ull; };
+        std::vector<uint64_t> per;
+        per.reserve(w.sd.provinces.size());
+        for (auto& pr : w.sd.provinces) {
+            uint64_t g2 = 1469598103934665603ull;
+            auto m2 = [&g2](uint64_t v) { g2 ^= v; g2 *= 1099511628211ull; };
+            m2((uint64_t)pr.id);
+            m2((uint64_t)llround(pr.base_tax * 1000.0));
+            m2((uint64_t)llround(pr.base_production * 1000.0));
+            m2((uint64_t)llround(pr.devastation * 1000.0));
+            for (unsigned char c : pr.trade_goods) m2(c);
+            per.push_back(g2);
+        }
+        std::sort(per.begin(), per.end());
+        for (uint64_t v : per) mix(v);
+        for (auto& [gname, price] : w.sd.current_prices) {
+            for (unsigned char c : gname) mix(c);
+            mix((uint64_t)llround(price * 1000.0));
+        }
+        std::ofstream lh(g_log, std::ios::app);
+        lh << "[H1/inputs] date=" << (livetrade::game_singleton() && livetrade::validate_region(livetrade::game_singleton() + 0x1DF0, 4) ? livetrade::fi(livetrade::game_singleton() + 0x1DF0) : -1) << " provinces=" << w.sd.provinces.size() << " prices=" << w.sd.current_prices.size()
+           << " hash=" << std::hex << h << std::dec << (char)10;
+    }
     field::Field f = field::build(g_st.tn, g_st.sm, w.sd, g_st.base_prices);
     out.graphs.clear(); out.slots.clear(); out.prices.clear(); out.reach.clear();
     out.good_names.clear();
@@ -151,7 +181,10 @@ inline void solver_thread() {
     }
 }
 
+inline bool g_started = false;
 inline void start(const std::string& logpath) {
+    if (g_started) return;            // one solver thread per process (reviewed)
+    g_started = true;
     g_log = logpath;
     CreateThread(nullptr, 0, [](LPVOID) -> DWORD { solver_thread(); return 0; }, nullptr, 0, nullptr);
 }

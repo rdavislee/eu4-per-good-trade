@@ -38,6 +38,54 @@ remains OFF: it corrupts the heap through the engine's own consumers (two deaths
 `ntdll` heap fault, with and without our AI acting). D3 additionally makes any merchant record's
 collector share 0, so the payment side never depends on the engine's type byte.
 
+**Extensions (user, 2026-08-26 evening).** (a) No country STARTS with its merchants collecting:
+vanilla parks ~570 merchants at their capitals at 1444 and the recall caps spread their
+re-placement over ~11 months; on the FIRST monthly tick the caps and the AI shard are lifted and
+the human's merchants are included once, so the opening state already follows the rule (from
+tick 2 the player keeps their own). (b) The node window: no "Collect from Trade" button on any
+node, a "Transfer Trade Power" button at END nodes too, and NO button at the player's home node
+(nothing can be placed there). (c) Display: a reverse-panel merchant shield carries the same
+hover text as a forward one; the node window's "We transfer X to <node>" names the table's
+target (the engine names forward link #0); the Outgoing hover lists reverse destinations and
+the trade-power hover shows the received power as "Transfers from traders downstream".
+
+**How (implementation notes, 2026-08-26 night).** (a) The mod sets up INSIDE THE LOADING SCREEN
+(earlyload.h): the engine's game-setup paths each make one trade call while loading -- the new-game
+path calls the monthly driver 0xB4BA90 at 0x774C3B, the savegame path the reachability rebuild
+0xB4DB00 at 0x775EEC -- and both call sites are repointed to a wrapper that lets the engine's call
+run, then does the whole install on the loading thread, solves the orientation synchronously
+(~120 ms) and runs the driver once more with income suppressed: our tick hook inside it is tick 1,
+so the map appears already re-oriented and re-placed (measured: the worker defers, 'orientation
+gen 1 solved in 120 ms', tick 1 done before the loading finished). The DLL must be in the process
+before the campaign loads (the version.dll proxy, or the runner injecting at the main menu); injected
+later, the frame poll runs the first tick at attach instead, holding the run's console commands
+until it is done. Merchants left standing at their own capital after the plan is served are
+returned to the pool through the engine's own recall (0x25BA70), not left collecting.
+Vanilla's own opening placement -- 0x773B20's last loop parks one idle merchant per country at its
+capital (0x774E05 -> PlaceMerchantAtNode, type 0), AFTER the loading-time tick -- is skipped (the
+call is repointed to a stub), so a campaign opens with the plan's merchants posted and the rest idle.
+PERSISTENCE: the table is written beside every save as <save>.eu4.pgt (the two save writers'
+`.tmp -> .eu4` renames are wrapped) and restored before the loading-time tick of a load; a save
+without a sidecar gets the opening rule once. The +10%/merchant home-node power bonus
+(TRADE_POWER_HOME_BONUS) needs no change: the engine counts every transferring merchant of the
+country gated by a reachability byte set for each merchant's own node, which the landing-triggered
+rebuild keeps current (static RE 2026-08-26).
+The engine's per-country x node reachability tables (CTradeManager+0x88/+0x90/+0x98, rebuilt by
+0xB4DB00 only monthly) gate the steer buttons, the steer command and SetTrader itself; they are
+rebuilt right after every relink and once per frame after any merchant lands, or every panel
+reads "You cannot direct trade after it has passed your home" until the next month. (b) The node
+window's buttons are runtime list items (CTradeNodeView::RebuildEnvoyItems 0x13D6120): four two-byte
+patches drop the collect item on both paths and ignore the definition's `end` flag, so a node with
+no merchant offers Transfer only (home: nothing -- the home gate stands, and the "Send Merchant"
+label is hidden there), a node with our merchant offers Recall. A transfer placed by the window
+(or by vanilla's AI) gets its table target set to the next link toward the country's home the
+moment SetTrader runs (homeward.h), so nothing points downstream by default; among equally short hops the
+one carrying the model's away-flow wins (bordeaux has no link to sevilla: its hop home is ivory_coast). (c) Texts: the
+node-window formatter call (0x13D0539) and the outliner's (0x12BEDFA) are repointed to substitute
+the table's target; at END nodes both builders bail before formatting, so the sentence is
+produced after they return (endtext.h). A reverse panel's shield row is given the engine's
+"mapicon_traderoute" tooltip key after it is rebuilt, which is all the hover text needed.
+
 ---
 
 ## D2. AI merchant assignment: the frontier model (2026-08-26)
@@ -53,6 +101,15 @@ one out; the merchant stands outside and steers inward) that the engine's own
 floor at every network node except home) x the share at home. A posted merchant standing off the
 plan is moved only when a planned node beats it by x1.5, with a three-month dwell. Cadence: the
 working default the spec reserved for the user -- it fires 1-3 recalls per tick world-wide.
+
+**Light ships (user, 2026-08-26; pgt_i26).** Vanilla's protect-trade AI scores nodes by (1 - share) x
+value with a home bias and a reach penalty read from the definition graph, so it never sends ships to a
+node where a merchant steers against Phi_w. The model owns that score now: the allocator (0x1B8340)
+splits each country's light-ship budget in proportion to a per-node score, and a prologue detour
+replaces the array with the tick's value -- at every node where the country has a table-owned
+placement, the gain of that placement (frontier::added_value, the merchants' own figure), plus at
+home the pool it does not yet own. Fleet choice, the surplus recall and the trade_mission command
+stay the engine's. Privateer and pirate-hunt reserves are untouched. `pgt.NOSHIPS` restores vanilla.
 
 **Measured.** TESTING.md G block: 25-35% of placements on Phi_w-incoming ends, zero target churn,
 recalled envoys still at their target one and three ticks later.
@@ -147,3 +204,105 @@ graphs equal Phi_w (identity test on the 1444 standings); (b) in game: E1 (engin
 model prediction with the written shares) stays at all countries, E4 clean, world collected
 income within the E3 null spread; (c) the number of AI placements on reverse ends and the flow on
 them, before and after.
+
+## The per-good view is a render overlay, never a tick (2026-08-27)
+
+The month tick always writes the FULL aggregate economy -- pools (+0xB0), power, shares, E1/E4 --
+whatever view is open; the active view is applied afterwards as a display overlay (link records,
+node display fields, arrows), which never writes the pool and never touches standings. A province
+click re-runs only that overlay from the last tick's cached model outputs, under the tick's own
+g_inside exclusion, so clicking is instant (~40 ms), works paused, and cannot move a merchant,
+deflate trade power (the i37 double-apply ratchet), or pay pass 10 on a single good's pool.
+The trade-route layer and the reachability matrices rebuild on EVERY orientation install: relink
+reports reversals against the FILE declaration, so '0 reversed' does not mean 'nothing changed'.
+
+## In-session reloads are detected by the trade manager's identity (2026-08-27)
+
+An in-game load (exit to menu -> load) reaches neither 0x5D00BC (the binary's only direct caller
+of InitSaveGame 0x7751B0) nor the inner 0x775EEC site: a different loader builds the world, and
+the mod used to keep running with the old world's plan and freed pointers (user: 'the game
+reverted to vanilla'). Both the tick hook and the frame poll now compare the live trade manager
+with the one the plan was set up for: a mismatch holds ticks and reruns the save setup from the
+frame poll (world reset incl. relink/arrows/colorview caches, sidecar restore, suppressed driver,
+solve), same as the loading-screen path.
+
+## Direction gates: matrix B only, and the treasure router is not built (2026-08-27)
+
+Spec 1.10 ("any mechanism gated on one nation being upstream or downstream of another evaluates
+TRUE") is now installed -- it never had a caller before this session; the attach log listed
+`direction_gates` as a pending seam. `gates::install` repoints the reach-matrix rebuild call and
+patches the two out-of-line predicates (treasure-fleet gate 0x3E1D30, IsNodeUpstreamOfCountry
+0xB4E020) to return true.
+
+It fills **matrix B only**, deliberately:
+- **C (mgr+0x98) belongs to the model.** `apply_matrix_c` writes the per-good reach there so
+  vanilla's own light-ship scorer and the +10%/merchant home bonus consume the model's network.
+  Filling it with 1 would erase that and tell the engine everything is reachable for everyone.
+- **A (mgr+0x88) is also the treasure fleet's routing BFS.** `treasure.h` -- the spec 1.11 route
+  ladder with privateer skimming -- does not exist. A router whose every hop test answers yes takes
+  the first outgoing link and dead-ends, so filling A would convert a missing feature into a broken
+  one. Treasure fleets are therefore **always granted** (spec 3.12, the claim the spec actually
+  makes, via the patched gate) while routing keeps the engine's real reachability.
+
+**Known residual:** the 1.11 route ladder / privateer skimming is unimplemented. Recorded as a gap,
+not silently absent.
+
+## The engine's reach matrices are allocated once, memset every rebuild (2026-08-27)
+
+0xB4DB00 allocates its three matrices on the FIRST call only (`jne` past the allocation when the
+pointer is non-null) but writes `countryCount x nodeCount` to mgr+0xA0 and memsets that many bytes
+on EVERY call. If the country count ever grew after the first rebuild, every later rebuild would
+overrun three engine-heap blocks.
+
+**Correction (2026-08-28, reviewed).** This section used to describe a `gates::guard_matrices` that
+tracked the allocated size. That guard was DELETED the same day this paragraph was written -- its
+country-count reader called the wrong global and returned garbage (-1157598207) in vanilla while
+looking plausible under a total conversion, and four of the six 0xB4DB00 call sites are outside our
+control and advance mgr+0xA0 without reallocating, so it could not observe growth anyway. The
+paragraph outlived the code it described; a review caught the mismatch. `matrix-resets` and
+`engine-countries` do not exist either.
+
+What is there instead is smaller and honest. The engine memsets mgr+0xA0 bytes over this same block
+on every rebuild, so our writing that many bytes is exactly as safe as the engine's own write --
+the hazard is shared, not one we create. `validate_region` cannot bound it (VirtualQuery reports the
+page region, not the heap-block boundary), so `gates::fill_b` watches the COUNT: it records the size
+at the pointer it first saw, re-baselines whenever the block is reallocated, and if the count ever
+grows while the pointer stays put it clamps to the baseline and increments `gate-size-growth=`, which
+rides the per-tick line. Measured 0 across the red/green gate runs on the 1635 world.
+
+## Treasure fleets: the engine already routes Phi_w; the mod supplies the ladder's fallbacks (2026-08-27)
+
+Disassembly of `CCountry::SendTreasureFleet` (0x3E1EC0..0x3E3939, one caller at 0x2F3E33 in the
+monthly country update) settled what spec 1.11 needs and what it does not:
+
+- The fleet **walks the trade graph hop by hop inside one call**. Loop head 0x3E2083: visited check,
+  push, stamp, then every privateering country skims a share proportional to its power AT THAT NODE,
+  then the arrival test. So the skim really is per node traversed, and it compounds.
+- Hop selection (0x3E2358..0x3E2403) walks the definition's OUTGOING links and takes the first whose
+  target satisfies matrix A. **Because the mod rewrites the definitions, that walk is already a
+  Phi_w path** -- rung 1 of the 1.10 ladder is free, and with the gate predicate 0x3E1D30 forced
+  true the overlord always receives (1.11's first sentence, 3.12).
+- When Phi_w does NOT connect, the link scan exhausts and 0x3E2418 sets the current node straight to
+  the destination: the fleet **teleports**. It still arrives -- nothing is destroyed -- but it skims
+  at two nodes instead of four or five. Measured on the 1444 field at alpha_phi = 2.0: **55 of 144**
+  (colonial node, European capital) pairs do not connect, and **mexico (11 gold provinces) and lima
+  (2, incl. Potosi) reach no European capital at all** -- the canonical Spanish silver fleet is
+  exactly the case that teleports. This is alpha-sensitive, not structural: at alpha_phi = 1.5 every
+  New World node connects.
+- The engine's denial branch (unreachable, gate not forced) simply leaves the gold with the colony:
+  `TREASURE_FLEET_TOOLTIP_CANT_REACH_DELAYED` = "They will keep their gold income instead." Nothing
+  is lost, which is why leaving matrix A real (see the gates note above) is safe.
+
+**What the mod adds (`treasure.h`).** A hook at the top of hop selection supplies the next hop from
+the full 1.10 ladder -- Phi_w, else one good's graph, else undirected -- so the fleet passes real
+nodes and privateers skim en route. Everything else (the skim loop, payouts, inflation, messages) is
+the engine's. Design constraints, all reviewed against the binary:
+- The ladder is **precomputed once per orientation** into a flat int16 next-hop table, so the hook
+  inside the money path is a table lookup plus bounds checks -- no allocation, no throw, no lock.
+- The hook **declines whenever it is not certain** (unknown node, no path, hop already visited), and
+  declining is exactly the engine's own behaviour, so the worst case is today's game.
+- It must never hand back a visited node: that reaches 0x3E248C ("Stuck processing trade nodes"),
+  the one branch that pays the privateers and then drops the overlord's gold.
+- The redirect must reload EDX from [rbp+0x174] before re-entering the loop head -- EDX is a
+  loop-carried live-in (the visited count) and all three engine backedges load it the same way.
+  Off with `pgt.NOTREASURE`.

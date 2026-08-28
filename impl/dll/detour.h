@@ -134,18 +134,31 @@ struct Freeze {
         HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
         if (snap == INVALID_HANDLE_VALUE) { ok = false; why = "snapshot failed"; return; }
         THREADENTRY32 te{}; te.dwSize = sizeof(te);
+        // TWO PASSES: open every handle (allocating freely) BEFORE suspending anything -- a thread
+        // suspended while holding the heap lock would deadlock the push_back (reviewed)
+        std::vector<HANDLE> opened; opened.reserve(64);
         for (BOOL more = Thread32First(snap, &te); more; more = Thread32Next(snap, &te)) {
             if (te.th32OwnerProcessID != pid || te.th32ThreadID == me) continue;
             HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, te.th32ThreadID);
-            if (!h) continue;
+            if (h) opened.push_back(h);
+        }
+        CloseHandle(snap);
+        // NOTHING ALLOCATES OR FREES PAST THIS LINE until every thread is resumed: `opened`'s buffer
+        // is handed to `threads` (so no destructor free either), suspended-but-failed handles are
+        // closed without vector surgery, and push_back never reallocates (capacity == size). A free
+        // while another thread holds the CRT heap lock deadlocks the process (reviewed).
+        threads.swap(opened);                            // threads now owns the buffer; opened is empty
+        size_t keep = 0;
+        for (size_t i = 0; i < threads.size(); i++) {
+            HANDLE h = threads[i];
             if (SuspendThread(h) == (DWORD)-1) { CloseHandle(h); continue; }
-            threads.push_back(h);
+            threads[keep++] = h;
             CONTEXT c{}; c.ContextFlags = CONTEXT_CONTROL;
             if (GetThreadContext(h, &c) && c.Rip >= lo && c.Rip < hi) {
                 ok = false; why = "a thread is executing inside the hook site";
             }
         }
-        CloseHandle(snap);
+        threads.resize(keep);                            // shrink only: no reallocation
     }
     ~Freeze() { for (HANDLE h : threads) { ResumeThread(h); CloseHandle(h); } }
 };

@@ -345,7 +345,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
         double weakest = 1e300;
         std::map<std::string, double> cur_val;   // stand node -> value of the placement there (-1: target off-network)
         for (auto& [key, tgt] : assign::g_table) {
-            if (key.first != c) continue;
+            if (key.first != livetrade::country_index_of(c)) continue;
             auto nf = std::find(names.begin(), names.end(), key.second);
             auto tf = std::find(names.begin(), names.end(), tgt);
             if (nf == names.end() || tf == names.end()) continue;
@@ -361,7 +361,7 @@ inline void step(const std::vector<livetrade::SimNode>& sim,
             g_evals++;
             if (!standing_at.count(pl.node)) { g_wants_move++; continue; }   // no merchant there yet
             if (end_by_name[names[pl.node]]) g_table_at_end++;   // D3: table entries at END nodes are allowed (the model owns the division; counted only)
-            auto key = std::make_pair(c, names[pl.node]);
+            auto key = std::make_pair(livetrade::country_index_of(c), names[pl.node]);   // index-keyed (assign.h)
             auto ex = assign::g_table.find(key);
             if (ex != assign::g_table.end()) {
                 if (ex->second == names[pl.target]) continue;                 // already there

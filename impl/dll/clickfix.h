@@ -24,7 +24,7 @@
 //
 // The country is the one the handler itself would use (0x13FD6B1..0x13FD6E1): [G+0x1E68] when
 // [G+0x1E66]==7 && [G+0x1E6F]!=0 (observer), else [G+0x1E60]. Both are 8-byte handles whose
-// bytes 4..5 are the country index; the table is keyed by the raw tag dword whose low 16 bits are
+// bytes 4..5 are the country index; the table is keyed by the bare country index (assign.h; set() masks) whose low 16 bits are
 // that index (livetrade::country_index_of), so the key is rebuilt from the index alone.
 #pragma once
 #include <windows.h>
@@ -115,6 +115,7 @@ inline void on_click(detour::Regs* r) {
 }
 
 inline bool install(const std::string& logpath, std::string* err) {
+    if (g_hook.active) return true;   // a second campaign re-runs the install: the live hook stays (reviewed)
     g_log = logpath;
     uintptr_t target = livetrade::module_base() + CLICK_HANDLER;
     std::vector<uint8_t> expected = {0x48,0x89,0x5C,0x24,0x10, 0x48,0x89,0x6C,0x24,0x18,

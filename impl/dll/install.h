@@ -73,7 +73,7 @@ inline std::vector<double> route_good(int N, const std::vector<std::pair<int, in
 inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
                              const std::vector<std::string>& field_names,
                              const std::vector<econ::NodeAggregate>& agg,
-                             bool write_local = false) {
+                             bool write_local = false, bool write_pool = true) {
     auto byname = live_by_name(sim);
     int wrote = 0;
     for (int fn = 0; fn < (int)field_names.size() && fn < (int)agg.size(); fn++) {
@@ -126,7 +126,9 @@ inline int install_aggregate(const std::vector<livetrade::SimNode>& sim,
         // +0xC0 == +0xBC; keep it.
         livetrade::write_fixed(node, 0xC0, out);
         // the collectible pool is what is NOT forwarded (spec 2.6): pass 10 divides this
-        bool a = livetrade::write_pool(node, held - out);
+        // a RENDER overlay never touches the pool: pass 10 must divide the full economy,
+        // whatever the display shows (the tick is the only pool writer)
+        bool a = write_pool ? livetrade::write_pool(node, held - out) : true;
         // In the AGGREGATE view local is never written: test B4 requires it to stay the engine's
         // own origination. In a PER-GOOD view spec 1.12 asks for all six fields to show the
         // selected good alone, so local becomes that good's inject.
@@ -254,7 +256,7 @@ inline std::vector<econ::NodeStandings> read_standings_field(
             // because the record then existed with val 0 and merge took the found branch.
             // Both are one rule: if the table has this (country, node), the table decides
             // the target and the standing carries at least MERCHANT_MAX_POWER_BONUS.
-            auto tab = assign::g_table.find({c.tag_index, field_names[fn]});
+            auto tab = assign::g_table.find({livetrade::country_index_of(c.tag_index), field_names[fn]});   // the table is index-keyed (assign.h)
             if (tab != assign::g_table.end()) {
                 auto tf = fidx_of.find(tab->second);
                 if (tf != fidx_of.end()) {
@@ -344,12 +346,26 @@ inline int write_power_to_records(const std::vector<livetrade::SimNode>& sim,
         if (!node || !livetrade::validate_region(node + 0x18, 16)) continue;
         uintptr_t rb = livetrade::fq(node + 0x18); int rc = livetrade::fi(node + 0x24);
         if (!rb || rc <= 0 || rc > 4096 || !livetrade::validate_region(rb, (size_t)rc * 0xC0)) continue;
+        // rec+0x40 is the "Transfers from traders downstream" figure the trade-power tooltip
+        // (0xB57890) shows when > 0 -- the engine's own propagated amount, which our val write
+        // replaced without updating, so a country whose whole standing was received (Tunis at
+        // genua) showed power with no line explaining it (user). Zero every live slot, then set
+        // the model's received amount on each standing; display only (val carries the power).
+        for (int i = 0; i < rc; i++) {
+            uintptr_t rec = rb + (uintptr_t)i * 0xC0;
+            if ((livetrade::fi(rec + 0x14) & 0xFFFF) != i) continue;
+            int32_t* pr = (int32_t*)(rec + 0x40); if (*pr != 0) *pr = 0;
+        }
         double node_total = 0, coll_total = 0;
         for (auto& e : st[fn].entries) {
             int idx = livetrade::country_index_of(e.country);
             if (idx < 0 || idx >= rc) { g_power_write_skipped++; continue; }
             uintptr_t rec = rb + (uintptr_t)idx * 0xC0;
             if ((livetrade::fi(rec + 0x14) & 0xFFFF) != idx) { g_power_write_skipped++; continue; }   // slot identity
+            {
+                int32_t rv = (int32_t)(e.received * 1000.0 + 0.5);
+                int32_t* pr = (int32_t*)(rec + 0x40); if (*pr != rv) *pr = rv;
+            }
             // val EXCLUDES the subject transfers: every engine reader adds (t_in - t_out) after the
             // min(val, cap) (0xB573FA.., 0xB52107..; reviewed) and s.power already holds them, so the
             // written val is P minus the transfers or they would count twice

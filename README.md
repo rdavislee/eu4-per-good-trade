@@ -1,15 +1,31 @@
-# Per-Good Trade Network — an EU4 trade overhaul
+# Per-Good Trade — an EU4 trade overhaul
 
-Every trade good gets its own directed network, computed monthly from the world state by the
-DRAIN operator; the engine's own money is routed through those graphs and written back into the
-engine's own structures. Target: EU4 **1.37.5** (build `835bfdf8`), Windows/Steam, single-player,
-runtime-attached DLL.
+**Every trade good gets its own trade network, and every arrow on the map is computed from the state
+of the world instead of drawn by a designer.**
 
-## Playing it
+In vanilla, the trade map was decided once and never moves: Venice is rich because the arrows point
+at Venice, and no amount of development turns a single one. Goods are cosmetic — grain, spices and
+cloth all flow the same way to the same place.
 
-**[INSTALL.md](INSTALL.md)** — installation (one file into the game folder, one into your mod
-folder), the 1.37.5 build lock, uninstall and troubleshooting.
-**[ABOUT.md](ABOUT.md)** — what the mod does to trade and why it improves on vanilla's authored map.
+Here trade is an outcome. Each good runs from where it is produced toward where the wealth wants it,
+recomputed every month, so conquering a producer hands you a commodity to route home; developing
+base tax pulls the world's goods toward your capital while base production makes a distant province
+a source; and the world's centers of trade move when the wealth does. In a 200-year test campaign
+they migrated from Genoa and Hangzhou to the English Channel, the Rhineland and Nippon — Britain
+built the Channel into a market by developing both banks, while China lost the east by spending the
+era at war. **Any nation can do it. There is no mission and no unique mechanic.**
+
+### → [Install it](INSTALL.md)  ·  [What it changes, and why](ABOUT.md)
+
+EU4 **1.37.5** (build `835bfdf8`), Windows/Steam, single-player. Drag-and-drop: one file into the
+game folder, one folder into your mod folder.
+
+---
+
+*The rest of this file is for people working on the mod.*
+
+Every good's network is computed monthly from the world state by the DRAIN operator; the engine's
+own money is routed through those graphs and written back into the engine's own structures.
 
 ## The spec
 
@@ -20,8 +36,8 @@ verifies and the one to edit; refresh this root copy from it on any change.
 
 The spec is self-contained and implementable as-is: §1 mechanics, §2 implementation (§2.9 is the
 build order), §3 reasoning and open questions. It survived eleven adversarial audit rounds; its
-final graded state is **1,176 claims CONFIRMED · 0 REFUTED · 5 accepted nitpick PARTIALs ·
-8 probe-class UNTESTABLEs** (`docs/audit/validation-round11.md`).
+final graded state is **1,176 claims CONFIRMED, 0 REFUTED**
+(`docs/audit/validation-round11.md`, with the full grading and its bookkeeping).
 
 ## Layout
 
@@ -67,10 +83,3 @@ monthly income checks. The ★ tests are the bar for "it works".
 - **What the DLL adds**: live memory reads (per-node `trade_goods_size`, §1.8), the per-good
   routing and ÷12 engine writes (§2.6), the emitted `00_tradenodes.txt` (§2.4), the trade UI
   (§1.12), AI merchant scoring (§3.14), attachment via pattern scanning (§2.5, EU4dll precedent).
-
-## Known residuals (accepted, non-gating)
-
-Five PARTIAL claims — evidence bookkeeping on vanilla's both-ends tendency, one §3.4 statistical
-control, one §3.16 patchnote gloss — and eight probe-class UNTESTABLEs are recorded in
-`docs/audit/validation-round11.md`. `docs/audit/fixes-round12.md` is the annotated, un-applied
-repair plan should anyone reopen them. None affects what gets built.

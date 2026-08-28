@@ -1,95 +1,149 @@
-# Per-Good Trade — what it is, and why
+# Per-Good Trade
 
-## The problem with vanilla trade
+**Every trade good gets its own trade network, and every arrow on the map is computed from the state
+of the world instead of drawn by a designer.** Trade stops being scenery you compete over and becomes
+a system you can move.
 
-Open the trade map in vanilla EU4 and you are looking at a decision somebody made in 2013. Every
-arrow on that map is hand-authored. Novgorod flows to Lübeck; the Ivory Coast flows to Sevilla; the
-Caribbean flows to Sevilla. It flowed that way in 1444 and it will flow that way in 1821 — whether
-the Caribbean is Spanish or Dutch or empty, whether Sevilla is a metropolis or a devastated ruin,
-whether anyone is producing anything at all.
+## What is wrong with vanilla trade
 
-The map is a river system with the water already drawn in.
+Every arrow in vanilla was decided once, years ago, and never moves again. Novgorod flows to Lübeck.
+The Ivory Coast flows to Sevilla. It flowed that way in 1444 and it will flow that way in 1821 —
+whether the Caribbean is Spanish or Dutch or empty, whether Sevilla is a metropolis or a burnt-out
+ruin, whether anybody is producing anything at all.
 
-This has a consequence that is easy to miss because it is everywhere: **your trade goods do not
-matter.** Not really. A node's value is one number — a pile of ducats with no contents. Grain,
-spices and cloth are identical once they enter the network; they flow the same direction, at the
-same time, to the same place. Your province produces "value". The tooltip names a good, and the name
-is decoration. There is no market for spices, no place where cloth is scarce and grain abundant. The
-trade good on your province is a modifier attached to a number, and the number goes downstream.
+Two things follow, and both are bigger than they look.
 
-Because the arrows are fixed, so is the strategy. The trade powers of 1444 are the trade powers of
-1700, because the map that makes them powerful cannot change. Conquering the source of a good does
-not redirect it — it was always going to arrive in the same place. Devastating a region reroutes
-nothing. Trade in vanilla is a fixed board you compete on, not a system you can alter.
+**Your trade goods do not matter.** A node's value is a single number — a pile of ducats with no
+contents. Grain, spices and cloth are identical the moment they enter the network: same direction,
+same speed, same destination. Your province produces "value"; the tooltip names a good, and the name
+is decoration. There is no market for spices, nowhere that cloth is scarce and grain abundant.
 
-## What this mod does
+**And the trade powers of 1444 are the trade powers of 1821.** Venice is rich because the arrows
+point at Venice. You cannot make Lübeck into a world market by building one, because no amount of
+development moves a single arrow. You can take a bigger share of a fixed flow; you cannot change
+where the flow goes.
 
-**Every trade good gets its own directed network, and every direction is computed from the world
-rather than authored.**
+## What replaces it
 
-Not thirty copies of the same map. Thirty *different* maps, each recomputed every month from what is
-actually happening in your game.
+Thirty-odd separate networks, one per good, each re-derived every month from what is actually
+happening in your game.
 
-Each month the mod reads the live world — every province's production, wealth, development and
-devastation, and the current price of every good — and for each good forms a balance: where it is
-produced, where it is wanted. Then it orients that good's network by asking a physical question
-rather than a design one: *given this pattern of surplus and demand, which way must this good flow?*
-The answer follows from conservation. Goods move from where they accumulate toward where they are
-consumed, and the direction of every link falls out of the arithmetic.
+For each good the model reads where it is physically produced and where the wealth is that wants it,
+then orients every link so the good runs from surplus toward demand. Nobody chose those directions —
+they fall out of the arithmetic, and they change when the world changes.
 
-The consequences are the point:
+The **aggregate map**, the one in the trade map mode, is that same operator run over *wealth itself*.
+Its endpoints are the world's centers of trade: the places everything ultimately drains toward. They
+are an output, not a setting.
 
-**Goods become real.** Spices flow toward the markets that want spices. Grain flows toward
-population. Two goods produced in the same province can leave it in opposite directions, because
-they are wanted in opposite places. Click a province and the map shows *that good's* network — its
-own arrows, its own sinks, its own economy — and the numbers in the node window are that good's
-numbers, not an undifferentiated pile.
+## The new calculus
 
-**The map answers to the world.** Conquer the region that consumes a good and you move the market
-that pulls it. Devastate a province and demand there falls, and routes toward it weaken. Let a price
-collapse and that good's market spreads out instead of concentrating on the wealthiest nodes.
-Colonise the New World and watch new sinks appear. In vanilla, none of these change a single arrow.
+### Conquest is about supply, not about the arrows
 
-**Merchants gain a real decision.** Vanilla lets you push trade one way: downstream, along the drawn
-arrow. Here every link has two ends and both can be worked, so a merchant can push *against* the
-prevailing flow of a good to hold a market open. The AI understands this too — measured across a
-200-year run, roughly a quarter of AI merchant placements sit on links vanilla could not express at
-all, and about 30% of protective light-ship power ends up at nodes vanilla would never have sent a
-fleet to.
+Wealth here is **owner-agnostic** — a property of the place, not its owner. Development, trade good,
+and the province's condition; nothing else. No autonomy, no ideas, no government modifiers. **A
+province is worth exactly the same the day after you conquer it as the day before.**
 
-**Trade becomes contestable.** This is the real change. Vanilla's trade map is scenery: you compete
-for shares of a flow whose shape is permanent. Here the shape is an outcome. It reflects who is
-producing, who is consuming, who has been burned, who has grown. Change the world and you change the
-map — which means trade is something you can *win*, not merely something you can collect from.
+So conquest does not bend trade toward you by fiat. What it gives you is *supply*: take the region
+that grows the spices and you hold the source of the spice network. From there the good moves along
+its own graph toward demand — and when that demand is at home, your conquest feeds your home node
+directly. You are not capturing a node's share any more. You are capturing a **commodity**, and then
+routing it.
 
-## What it does not change
+That is a different war aim. In vanilla you conquer trade nodes. Here you conquer *producers*, and
+the map does the delivery.
 
-Deliberately conservative where the game is already good:
+### Base tax and base production now pull in opposite directions
 
-- **Your income is still the engine's.** The mod computes where goods flow and writes the resulting
-  node values into the game's own structures; EU4 then divides money among countries by its own
-  rules, unmodified. Trade power, merchants, trade companies and privateers work as you know them.
-- **Placement, range, and collect-or-steer remain vanilla's.** What changes is which choices exist.
-- **The world total tracks vanilla.** Measured against unmodded control runs from the same start, the
-  world's trade value stays within a few percent — comparable to vanilla's own run-to-run variation.
-  This is a redistribution of trade, not an inflation of it.
+The sharpest change, and it falls straight out of the formulas:
+
+```
+goods_produced(p) = GP_COEFF · base_production(p) · (1 + goods modifiers)   ->  SUPPLY
+tax_value(p)      = TAX_COEFF · base_tax(p)                                 ->  DEMAND (wealth)
+```
+
+- **Base tax is almost pure demand.** Developing tax at home makes home hungrier, and goods orient
+  toward hunger. It is how you pull the world's commodities to your capital.
+- **Base production is supply.** Developing production in a far-off province makes that place a
+  *source*, and what it makes flows outward, toward whoever wants it most.
+
+Develop production where your best goods are; develop tax where you want them to arrive. In vanilla,
+development is development — more of either is more ducats and the map is unmoved. Here the two dev
+buttons are different strategic instruments, and pressing the wrong one in the wrong province pushes
+trade away from you.
+
+### Centers of trade move, and you can build one
+
+Because the aggregate map is wealth draining downhill, the world's trade centers sit wherever
+concentrated wealth outweighs its neighbours. Shift the wealth, shift the center. Across a 200-year
+test campaign the endpoints migrated from **Genoa and Hangzhou** to the **English Channel, the
+Rhineland and Nippon** — and every move had a cause you could watch happening:
+
+- Britain held both banks of the Channel and developed relentlessly. The Channel did not inherit its
+  status; it was *built* into a world market.
+- Korea and Japan became development juggernauts and pulled the eastern terminus to Nippon.
+- China spent the era at war. **Devastation cuts both what a province produces and what it is
+  worth**, so a country that is permanently a battlefield watches trade drain away from it. Hangzhou
+  lost the east by being fought over.
+
+The threshold is knife-edge — a couple of percent of relative wealth can move a world terminus. That
+is not instability, it is leverage: **any nation can become the center of the world's trade**, with
+no unique mechanic, no mission and no decision. Develop your home node hard enough and the arrows
+turn around and point at you. Nothing in vanilla lets a Ming, a Vijayanagar or a Kilwa do that.
+
+### Cheap goods spread, expensive goods concentrate
+
+Price feeds a concentration exponent. While a good is expensive, demand for it concentrates on the
+richest markets; when its price collapses the curve flattens, and poorer but more populous regions
+carry relatively more of the demand — so the good's market *spreads out*.
+
+Bulk goods behave like bulk goods, luxuries like luxuries. Crash the price of grain and its market
+visibly de-concentrates. In vanilla a price change is a number on your income and nothing else.
+
+### Merchants get a second option: push against the current
+
+Every link has two ends and both can be worked. A merchant can push a good **against** the prevailing
+flow to hold a market open — a move vanilla cannot express, because it only lets you send trade
+downstream along a fixed arrow.
+
+This is what finally makes colonial trade behave the way it actually did: a colonial nation can steer
+**cloth from Europe back to the Americas**, because that is where the demand is, and that is what
+happened. Vanilla can only drain the New World toward Europe, forever.
+
+The AI plays this too — across a full-length run about a quarter of its merchant placements sit on
+reversed ends.
+
+### The map moves; your setup does not break
+
+The obvious worry: if the arrows change every month, is managing merchants a nightmare? No.
+Assignments attach to a **link end**, not to a direction. When a link flips, your merchant stays
+where it is and works the other side; only the set of goods moving through it changes. And the links
+that flip most often are the ones carrying almost no value — a link with real flow has a strong
+reason to point the way it does.
+
+## What deliberately does not change
+
+- **Your income is still the engine's.** The mod decides where goods flow and writes the resulting
+  node values into the game's own structures; EU4 divides the money by its own rules. Trade power,
+  trade companies, privateers and light ships all behave as you know them.
+- **Merchant placement, range and collect-vs-steer are vanilla's.** What changes is which choices
+  exist.
+- **The world total tracks vanilla.** Against unmodded control runs from the same start, world trade
+  value stays within a few percent. This redistributes trade; it does not inflate it.
 
 ## On the evidence
 
-This mod is unusual in how it was built, and that is worth a paragraph, because it should affect how
-much you trust it.
+The design was written as a specification before any of it was implemented, then attacked over
+eleven adversarial audit rounds until every quantitative claim in it was backed by a measurement
+against the real game: 1,176 claims confirmed, none refuted. The implementation was held to the same
+standard by a 47-test suite run in the live game — a 201-year hands-off campaign, country-by-country
+income agreement checked every month, determinism across save and reload, and compatibility with
+total conversions including Anbennar and Extended Timeline.
 
-The design was specified before it was implemented, and the specification was attacked in eleven
-adversarial audit rounds until every quantitative claim in it was backed by a measurement against the
-real game — 1,176 confirmed claims, none refuted. The implementation was then checked the same way
-against a 47-test acceptance suite run in the live game: a 201-year hands-off campaign, income
-agreement checked country by country every month, determinism across save and reload, and
-compatibility with total conversions.
-
-More to the point, the checks themselves were built to fail on purpose before their passing was
-believed — a check that has only ever been seen passing is an assertion, not a measurement. The
-direction gates, for instance, are verified by deliberately breaking them and confirming the
-instrument reports it, then restoring them and confirming it reports that too.
+The checks are built to fail on purpose before their passing is believed: a check that has only ever
+been seen passing is an assertion, not a measurement. The direction gates, for instance, are verified
+by deliberately breaking them and confirming the instrument notices, then restoring them and
+confirming that it notices that too.
 
 The specification is `per-good-trade-spec.md` — §1 is the mechanics, §3 the reasoning, including the
 arguments that did not survive.

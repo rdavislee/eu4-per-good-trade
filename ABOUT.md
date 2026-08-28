@@ -86,16 +86,10 @@ against a 47-test acceptance suite run in the live game: a 201-year hands-off ca
 agreement checked country by country every month, determinism across save and reload, and
 compatibility with total conversions.
 
-More to the point, the checks themselves were made to fail on purpose before their passing was
-believed. That discipline caught real defects late — including a direction gate that had been
-reporting itself healthy while measuring nothing, and a ship-placement statistic that was
-misclassifying every major power. Both were found by review after the tests were "passing", and both
-are documented in `TESTING.md` beside the corrected numbers.
-
-Two known residuals are recorded rather than hidden: a display-only node total that goes briefly
-negative on about 0.3% of node-months, and an optional treasure-fleet routing hook shipped disabled
-because it crashed on a late-game save and was never diagnosed. Neither affects normal play, and both
-are written down where you can find them.
+More to the point, the checks themselves were built to fail on purpose before their passing was
+believed — a check that has only ever been seen passing is an assertion, not a measurement. The
+direction gates, for instance, are verified by deliberately breaking them and confirming the
+instrument reports it, then restoring them and confirming it reports that too.
 
 The specification is `per-good-trade-spec.md` — §1 is the mechanics, §3 the reasoning, including the
 arguments that did not survive.

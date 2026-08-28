@@ -72,10 +72,8 @@ trade simply reverts to vanilla's rules).
 ## Troubleshooting
 
 **The game never opens — no window, no loading screen.** The `version.dll` you installed is not this
-mod, or it is a 32-bit or corrupted copy. Replace it. (For the curious: an earlier build could do
-this to itself, because the copy of the real DLL it loaded resolved back to the mod and every
-forwarded call recursed until the process died. Fixed — the log now reports `17/17 exports resolved`
-so this failure can never again be silent.)
+mod, or it is a 32-bit or corrupted copy. Replace it; the log's first line reports
+`17/17 exports resolved` when the file is good.
 
 **Trade looks exactly like vanilla.** The mod is not enabled in the launcher, or the build check
 refused. The log says which.

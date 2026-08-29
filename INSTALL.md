@@ -17,12 +17,20 @@ drops and a checkbox:
    `impl/dll/per-good-trade.dll` renamed, or build it yourself, below.)*
 3. Enable **Mare Liberum** in the launcher and play.
 
+**The launcher checkbox is the whole on/off switch.** The mod runs only when Mare Liberum is
+enabled in the launcher; with it disabled (or not in your playset), the DLL notices and stays
+completely dormant, and the game runs plain vanilla. So the mod can sit installed while you
+play other things, vanilla or other mods, with zero effect. Turning it on is enabling the mod,
+nothing else.
+
 *Your antivirus may flag `version.dll`. That's expected for this kind of mod, not a sign of
 tampering; see [Antivirus](#troubleshooting) below, including how to verify the file instead
 of trusting it.*
 
 No injector, no separate launcher, no configuration files. Steam's launch options are
-untouched: the mod loads with the game however you start it.
+untouched: the DLL loads with the game however you start it, checks whether Mare Liberum is in
+your enabled mod list (the same `dlc_load.json` the game itself reads), and either runs the
+mod or goes dormant for that launch.
 
 | | |
 |---|---|
@@ -128,7 +136,9 @@ Worth knowing before your file monitor tells you:
 
 ## Uninstall
 
-Delete `version.dll` from the game folder and disable the mod in the launcher. Nothing is
+Disabling the mod in the launcher is already a complete off switch: the DLL stays dormant and
+the game runs plain vanilla. To remove it, delete `version.dll` from the game folder and
+disable the mod in the launcher. Nothing is
 patched on disk and the executable is never modified. Saves made with the mod are expected to
 load fine without it; trade reverts to vanilla's rules (merchants you'd placed on reverse
 ends come back steering vanilla's first outgoing link).
@@ -160,10 +170,11 @@ dev machine.)*
 not this mod, or it is a 32-bit or corrupted copy. Replace it; the log's first line reports
 `17/17 exports resolved` when the file is good.
 
-**Trade looks exactly like vanilla.** Either `version.dll` isn't in the game folder or wasn't
-loaded (then there is no `per-good-trade.log` at all), or the build check refused a patched
-executable (the log says so). The launcher checkbox only controls the small data half; the
-model itself lives in the DLL.
+**Trade looks exactly like vanilla.** In likeliest order: the mod isn't enabled in the
+launcher (the log ends with `DORMANT` and says so: that is the off switch working, not a
+fault); `version.dll` isn't in the game folder or wasn't loaded (then there is no
+`per-good-trade.log` at all); or the build check refused a patched executable (the log says
+so).
 
 **It stopped working after a Steam update.** The build check is refusing a patched
 executable. Roll back to 1.37.5 through Steam's beta branches (steps under Requirements).
@@ -191,7 +202,7 @@ DLL, so you can verify a release binary instead of trusting it. The release hash
 
 | file | SHA-256 |
 |---|---|
-| `version.dll` (this release) | `1fb889fd3677a75be67399ccba4d4e12c2822a9836af2b389edb1b91fa4d385f` |
+| `version.dll` (this release) | `d6ec3a41306d22ca113781daa20607999605f92b07e39e01dbb8f39221987860` |
 | `eu4.exe` 1.37.5 (what the gate pins) | `9ad3efe1af169f40ee577f9dae5debbc87af6fb8b5450fb345ebf110dc4d771a` |
 
 Hash what you installed, then build your own and compare:
@@ -232,8 +243,10 @@ Feature switches: `pgt.NOAI`, `pgt.NOARROWS`, `pgt.NOTICKHOOK`, `pgt.NOINSTALL`,
 Finer-grained markers: `pgt.NOGATES`, `pgt.NOSHIPS` (vanilla light-ship placement),
 `pgt.NOWRITE` (solve but write nothing: the control-run switch), `pgt.NOCOLOR`,
 `pgt.NOOUTTIP`, `pgt.NOBUTTONS`, `pgt.NOTRANSFERTEXT`, `pgt.NOGATEFILL`, `pgt.NOFIRSTTICK`,
-`pgt.NOREACHC`, `pgt.NOSHARE`. One is opt-*in*: `pgt.TREASURE` (the unfinished §1.11 fleet
-router: it has crashed on a late-game save; leave it off). Bisecting by disabling one hook
+`pgt.NOREACHC`, `pgt.NOSHARE`. Two are opt-*in*: `pgt.TREASURE` (the unfinished §1.11 fleet
+router: it has crashed on a late-game save; leave it off) and `pgt.FORCEDLL` (arm the DLL even
+when Mare Liberum is not in the enabled mod list, for probe sessions that run without the data
+mod). Bisecting by disabling one hook
 at a time is how most of this mod's hard bugs were found.
 
 ---

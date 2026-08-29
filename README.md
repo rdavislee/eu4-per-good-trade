@@ -9,7 +9,9 @@ state of the world, not drawn by a designer.*
 Liberum recomputes the whole trade map every in-game month, one network per trade good, from
 where things are made and where the wealth is, so trade can flow in any direction and the
 world's trade capitals are earned, not scripted. The controls stay vanilla's, with one
-decision fewer. Installing is two drops and a checkbox.
+decision fewer. Installing is two drops and a checkbox, and the checkbox is a true off
+switch: with Mare Liberum disabled in the launcher the game runs plain vanilla, so the mod can
+stay installed while you play anything else.
 
 What if the trade map answered to the world?
 

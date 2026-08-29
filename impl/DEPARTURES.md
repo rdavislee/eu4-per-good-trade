@@ -306,3 +306,16 @@ the engine's. Design constraints, all reviewed against the binary:
 - The redirect must reload EDX from [rbp+0x174] before re-entering the loop head -- EDX is a
   loop-carried live-in (the visited count) and all three engine backedges load it the same way.
   Off with `pgt.NOTREASURE`.
+
+## Launcher gate (2026-08-28, user-directed)
+
+Spec §2.5 has the DLL verify the build and attach unconditionally. The shipped DLL adds one
+precondition ahead of the build gate: at attach it reads `dlc_load.json` (the engine's own
+record of the enabled mod list, via the same modfs reader the solver uses) and arms only when
+the data half is enabled -- the entry `mod/pgt.mod`, or any enabled descriptor named
+"Mare Liberum". Otherwise it logs `DORMANT` and remains a pure version.dll proxy: no build
+gate, no patches, no worker thread, a bit-vanilla game. Rationale: the launcher checkbox
+becomes a true off switch, so the mod can stay installed while other playsets run. The empty
+marker `pgt.FORCEDLL` beside the DLL arms it regardless, for probe sessions that run without
+the data mod. Verified live both ways (dormant under an Anbennar-only playset; armed with
+`mod/pgt.mod` enabled).

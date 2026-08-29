@@ -623,6 +623,22 @@ static bool run_install(const std::string& logpath) {
     return ticklive::g_plan.ready;
 }
 
+// True when the enabled mod list carries the mod's data half: the entry the launcher writes
+// ("mod/pgt.mod"), or -- surviving a renamed .mod file -- any enabled descriptor whose name is
+// "Mare Liberum". This is the same dlc_load.json the engine itself mounts from, read the same
+// way (modfs.h), so the DLL's answer cannot disagree with what the game actually loaded.
+static bool pgt_mod_enabled() {
+    std::string ud = savegame::userdir_root();
+    if (ud.empty()) return false;
+    for (const std::string& rel : modfs::enabled_mods(ud)) {
+        if (rel == "mod/pgt.mod") return true;
+        std::string desc = ud + "\\" + rel;
+        for (auto& c : desc) if (c == '/') c = '\\';
+        if (modfs::mod_field(modfs::read_all(desc), "name") == "Mare Liberum") return true;
+    }
+    return false;
+}
+
 static void attach_main() {
     // PGT_ROOT lets a test host point the file checks + solver self-test at the real install
     // without the DLL sitting in Program Files; unset in normal use (root = the exe's own dir).
@@ -658,6 +674,21 @@ static void attach_main() {
     L("=== per-good-trade.dll attach ===");
     L("pid: " + std::to_string(GetCurrentProcessId()) + " (the process these patches live in)");
     L("install dir: " + root);
+
+    // 0. launcher gate (user, 2026-08-28: "only active when the mod is enabled from the
+    // launcher"). dlc_load.json is the engine's own record of the enabled mod list (the
+    // launcher rewrites it on every Play; a direct eu4.exe launch reads it as-is), so the
+    // checkbox that mounts mod/pgt is also the switch that arms this DLL. Unchecked means the
+    // engine mounts no pgt files and this DLL stays a pure version.dll proxy: no build gate,
+    // no patches, no worker -- a bit-vanilla game with the mod merely sitting in the folder.
+    // pgt.FORCEDLL (empty marker beside the DLL) arms it anyway, for probe sessions that run
+    // without the data mod.
+    if (!pgt_mod_enabled() && !livetrade::marker_present("FORCEDLL")) {
+        L("Mare Liberum is not enabled in the launcher (no mod/pgt.mod in dlc_load.json): DORMANT");
+        L("the game runs plain vanilla; enable the mod in the launcher to activate it (developers: pgt.FORCEDLL overrides)");
+        L("=== attach complete (dormant: pure version.dll proxy, nothing installed) ===");
+        return;
+    }
 
     // 1. build gate -- in-memory version string first (EU4dll's method), then file identity
     pat::Module m = pat::main_module();

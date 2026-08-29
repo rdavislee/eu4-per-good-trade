@@ -1,11 +1,11 @@
 # Solver-track acceptance: every check the reference side can run without the engine.
 # Fails loudly if any step regresses. The engine-side (★) tests in TESTING.md need the DLL
 # attached to a running game and are not run here.
-$ErrorActionPreference = "Stop"
 # TOOLCHAIN: llvm-mingw UCRT x86_64 (verified with llvm-mingw-20260421-ucrt-x86_64, clang 22.1.4).
 #   winget install MartinStorsjo.LLVM-MinGW.UCRT      -- or pass -Mingw <toolchain>\bin
 # Scratch defaults to $env:TEMP; -Scratch overrides. Both were hardcoded to one machine.
 param([string]$Mingw = "", [string]$Scratch = "")
+$ErrorActionPreference = "Stop"
 if (-not $Mingw -and -not (Get-Command g++ -ErrorAction SilentlyContinue)) {
   $glob = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\MartinStorsjo.LLVM-MinGW.UCRT_*\llvm-mingw-*-ucrt-x86_64\bin"
   $f = Get-ChildItem -Path $glob -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
@@ -14,6 +14,8 @@ if (-not $Mingw -and -not (Get-Command g++ -ErrorAction SilentlyContinue)) {
 if ($Mingw) { $env:PATH = "$Mingw;" + $env:PATH }
 if (-not $Scratch) { $Scratch = Join-Path $env:TEMP "per-good-trade-build" }
 New-Item -ItemType Directory -Force $Scratch | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $Scratch "dllbuild") | Out-Null
+$env:PYTHONPATH = Join-Path (Split-Path $PSScriptRoot -Parent) "docs\v6-owner-agnostic\scripts"   # refdump.py imports the reference solver
 $impl = $PSScriptRoot
 $exe  = "$impl\impl.exe"
 $eu4  = "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV"
@@ -48,7 +50,7 @@ Step "razed China (F2 / 2.8)" { & $exe shock $eu4 $save hangzhou | Out-Host }
 Step "emit 00_tradenodes.txt (A2/A3)" { & $exe emit $eu4 $save "$impl\out\00_tradenodes.txt" | Out-Host }
 Step "attach build gate (A4)" { & $exe "verify-build" $eu4 | Out-Host }
 Step "reference harness verify6 (0 failed)" {
-  Push-Location "$impl\..\v6-owner-agnostic\scripts"
+  Push-Location "$impl\..\docs\v6-owner-agnostic\scripts"
   (python verify6.py ../per-good-trade-spec.md | Select-String "RESULT") | Out-Host
   Pop-Location
 }

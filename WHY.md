@@ -11,9 +11,10 @@ stay vanilla's, with one decision fewer. Single-player, installs in two drops an
 Download and docs:
 [github.com/rdavislee/eu4-per-good-trade/releases](https://github.com/rdavislee/eu4-per-good-trade/releases/latest).
 
-I've been playing Europa Universalis since sixth grade (EU3 first, because EU3 was cheaper
-and I was a sixth grader), and I have about two thousand hours in EU4. This mod exists
-because of the campaigns those hours taught me not to start.
+One sentence of backstory, since this is the internet: I've played EU since sixth grade, I
+study computer science and economics at MIT, and I built this in the two weeks of August 2026
+before my senior year. This mod exists because of the campaigns two thousand hours taught me
+not to start.
 
 I never wanted to play the Aztecs. Not because surviving Europe is hard (that's the fun
 part), but because of what winning looked like. Say you do it: you reform, you hold, you
@@ -38,20 +39,14 @@ meant a Ming or a Vijayanagar could keep pace with Europe at home; reform tracks
 Aztecs and the Inca a fighting chance. Trade never got that patch, and it couldn't: the
 arrows aren't a balance number you can tune, they're the architecture.
 
-In college the itch got worse, because trade networks turned out to be my actual coursework.
-I'm a CS major and econ minor at MIT: the algorithms classes (6.1210, 6.1220) taught flows
-and min-cost routing as things you *build*, the econ side (14.01, and especially 14.15,
-networks) taught markets as structure, and 6.106, performance engineering, taught the C it
-takes to run inside a game's frame budget. The thought I kept circling back to was the
+The thought I kept circling back to was the
 Atlantic. Cloth crossed it westward while sugar crossed it eastward, on the same water, at
 the same time. One directed graph cannot say that sentence. Twenty-nine can. **That's the
 whole mod: a separate network for every trade good, re-derived every in-game month from two
 facts about the actual world, where each good is made and where the wealth is.** The same
 strait can carry cloth east and furs west at the same time.
 
-I assumed EU5 would be this. When it launched I watched the streams, saw a dynamic market
-system whose winning move (per the reviews and half the forum) was to automate it and stop
-looking, and never bought the game. So Mare Liberum has a second design rule: react to the
+The second design rule: react to the
 world, but play at vanilla's click budget. **Nothing is ever ordered per good.** Merchant
 placement covers every good on that link end at once. The collect-or-steer choice is gone
 entirely: your capital collects, merchants steer. Collecting abroad was only ever vanilla's
@@ -59,7 +54,7 @@ workaround for a one-way map that stranded value downstream of your home, and th
 more downstream. You steer trade home from anywhere in reach instead. If you can play
 vanilla trade, you already know the controls.
 
-I built it in August 2026, in the two weeks before my senior year. Design spec first, attacked
+It went design spec first, attacked
 until nearly every number in it was measured against the real game. The algorithm is a supply
 and demand flow model: every month, each good is routed as a flow from the provinces that
 produce it to the wealth that can pay for it, and the direction of every link on the map falls

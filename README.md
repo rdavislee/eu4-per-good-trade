@@ -13,6 +13,10 @@ decision fewer. Installing is two drops and a checkbox, and the checkbox is a tr
 switch: with Mare Liberum disabled in the launcher the game runs plain vanilla, so the mod can
 stay installed while you play anything else.
 
+![The trade mapmode in 1444, every arrow computed](media/trade-map-1444.jpg)
+*11 November 1444, trade mapmode: every arrow on this map was computed this month from where
+goods are made and where the wealth sits. None of it is hand-drawn.*
+
 What if the trade map answered to the world?
 
 In vanilla EU4 the arrows between trade nodes (the routes trade value travels on the map)
@@ -59,6 +63,18 @@ are an output of *your* campaign, not a line in a data file.
   capital's job now, and merchants exist to steer. Collecting abroad was only ever vanilla's
   workaround for a one-way map that stranded value downstream of your home; with goods
   flowing in every direction, nothing is stranded. You steer it home instead.
+
+![The per-good view: cloth in 1635](media/cloth-view-1635.jpg)
+*Click a province and the whole trade UI switches to that good's network: cloth in 1635,
+producers lit, everyone else dimmed.*
+
+| ![Hangzhou, 1444](media/hangzhou-1444.jpg) | ![Nippon, 1635](media/nippon-1635.jpg) |
+|---|---|
+| *1444: the East's flows converge on Hangzhou.* | *The same region in 1635, hands-off: the terminus has moved to Nippon.* |
+
+| ![Anbennar, 1444](media/anbennar-1444.jpg) | ![Voltaire's Nightmare, 1054](media/vn-silk-1054.jpg) |
+|---|---|
+| *Anbennar, 1444: the map is Halann's, the arrows are still computed.* | *Voltaire's Nightmare, 1054: the silk network around Constantinople.* |
 
 ### → [Install it](INSTALL.md): two drops and a checkbox. · [What it changes, and why](ABOUT.md) · [The story](WHY.md)
 

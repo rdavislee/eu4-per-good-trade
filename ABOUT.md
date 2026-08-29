@@ -64,7 +64,10 @@ has to out-pull everything around it.
 
 ## The new calculus
 
-
+![The English Channel exporting onward, 1635](media/channel-outgoing-1635.jpg)
+*1635: the English Channel's outgoing values, passing trade onward to Chesapeake Bay, the
+North Sea, Lübeck and Champagne. In vanilla the Channel is a terminal sink by fiat; here it
+keeps only what its pull earns.*
 
 ### Conquest buys supply, not arrows
 

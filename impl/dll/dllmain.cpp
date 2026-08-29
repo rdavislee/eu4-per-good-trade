@@ -639,6 +639,58 @@ static bool pgt_mod_enabled() {
     return false;
 }
 
+// NODE-FILE SYNC (user, 2026-08-28: Anbennar + Mare Liberum broke the trade map). The engine
+// resolves same-named files by DESCRIPTOR FILENAME, alphabetically first wins -- it ignores
+// the launcher's playset order entirely (measured: three orders and a name= rename all left
+// pgt.mod's vanilla 00_tradenodes.txt beating ugc_1385440355.mod's; the Aug-27 compat run
+// worked only because Anbennar was registered as anbennar.mod, which sorts before pgt.mod).
+// Rather than fight the sort, make the content identical: at attach, if any OTHER enabled mod
+// ships common/tradenodes/*.txt, write THEIR content into our 00_tradenodes.txt, so whichever
+// copy the engine picks the bytes are the conversion's. With no such mod enabled, restore the
+// shipped Phi_w baseline (phiw.baseline beside the file). Runs before the engine reads any
+// game files; writes only inside the mod's own folder, and only when the bytes differ.
+static void sync_tradenodes() {
+    std::string ud = savegame::userdir_root();
+    if (ud.empty()) { L("[nodesync] no user dir: left alone"); return; }
+    std::string self_path, donors_text, donor_names;
+    for (const std::string& rel : modfs::enabled_mods(ud)) {
+        std::string desc = ud + "\\" + rel;
+        for (auto& c : desc) if (c == '/') c = '\\';
+        std::string text = modfs::read_all(desc);
+        std::string name = modfs::mod_field(text, "name");
+        std::string path = modfs::mod_field(text, "path");
+        if (path.empty()) continue;
+        for (auto& c : path) if (c == '/') c = '\\';
+        std::string full = (path.size() > 1 && (path[1] == ':' || path[0] == '\\')) ? path : ud + "\\" + path;
+        if (rel == "mod/pgt.mod" || name == "Mare Liberum") { self_path = full; continue; }
+        std::error_code ec;
+        std::filesystem::path dir = std::filesystem::path(full) / "common" / "tradenodes";
+        if (!std::filesystem::is_directory(dir, ec)) continue;
+        std::map<std::string, std::string> files;   // filename-sorted, the engine's read order
+        for (auto& e : std::filesystem::directory_iterator(dir, ec)) {
+            if (!e.is_regular_file()) continue;
+            std::string fn = e.path().filename().string();
+            if (fn.size() < 4 || _stricmp(fn.c_str() + fn.size() - 4, ".txt") != 0) continue;
+            files[fn] = e.path().string();
+        }
+        for (auto& [fn, fp] : files) donors_text += modfs::read_all(fp) + "\n";
+        if (!files.empty()) donor_names += (donor_names.empty() ? "" : ", ") + name;
+    }
+    if (self_path.empty()) { L("[nodesync] own data mod path not found in dlc_load.json: left alone"); return; }
+    std::string ours = self_path + "\\common\\tradenodes\\00_tradenodes.txt";
+    std::string desired = donors_text;
+    if (desired.empty()) {
+        desired = modfs::read_all(self_path + "\\common\\tradenodes\\phiw.baseline");
+        if (desired.empty()) { L("[nodesync] no donor mod and no phiw.baseline: left alone"); return; }
+        donor_names = "Phi_w baseline (no other mod ships trade nodes)";
+    }
+    if (modfs::read_all(ours) == desired) { L("[nodesync] 00_tradenodes.txt already in sync with: " + donor_names); return; }
+    std::ofstream f(ours, std::ios::binary | std::ios::trunc);
+    if (!f) { L("[nodesync] FAILED to write " + ours + " -- the trade map may mismatch the loaded mods"); return; }
+    f << desired;
+    L("[nodesync] wrote 00_tradenodes.txt (" + std::to_string(desired.size()) + " bytes) from: " + donor_names);
+}
+
 static void attach_main() {
     // PGT_ROOT lets a test host point the file checks + solver self-test at the real install
     // without the DLL sitting in Program Files; unset in normal use (root = the exe's own dir).
@@ -707,6 +759,10 @@ static void attach_main() {
     L("build gate PASS: " + v.message +
       (vs ? ("; in-memory '" + std::string(attach::TARGET_BRANCH) + "' @ " + std::to_string(vs))
           : "; (in-memory string not paged in -- file identity is authoritative)"));
+
+    // 1b. node-file sync -- before the engine reads game files (it has not left the DllMain
+    // era yet), so the trade-node content is consistent no matter which mod's copy wins.
+    sync_tradenodes();
 
     // 2. embedded solver self-test
     solver_self_test(root);

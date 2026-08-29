@@ -63,11 +63,14 @@ is actually loaded rather than assuming vanilla's. It was developed and debugged
 
 Two things to know:
 
-- Mare Liberum ships two data files of its own: a re-declared `common/tradenodes/`
-  file and a small `interface/countrytradeview.gui` tweak. With a total conversion, put the
-  conversion **below** Mare Liberum in the load order so the conversion's map wins; the DLL
-  re-orients whatever map actually loads. Another mod that also edits the trade UI, or
-  another trade mod, will fight over those files: later one wins, results unsupported.
+- Mare Liberum ships two data files of its own: a re-declared `common/tradenodes/` file and a
+  small `interface/countrytradeview.gui` tweak. The trade-node file is inherently a
+  vanilla-map file, and EU4 resolves file conflicts by its own fixed rule while **ignoring the
+  launcher's load order entirely** (measured; reordering the playset changes nothing). So the
+  mod does not fight: at every launch the DLL checks the enabled mod list, and if any other
+  mod ships trade-node files it copies that content over its own before the game reads
+  anything, restoring its own map when no such mod is enabled. Load order does not matter.
+  The one remaining fight is another mod that edits the trade UI file itself: unsupported.
 - A mod that sits in your mod folder as a `.zip` is skipped (the log names it). Workshop
   mods arrive unpacked; if one of yours is still zipped, unzip it in place.
 
@@ -122,6 +125,11 @@ else changes.
 Worth knowing before your file monitor tells you:
 
 - **`per-good-trade.log`** (and `pgt_crash.log` if something goes wrong) in the game folder.
+- **Its own `mod\pgt\common\tradenodes\00_tradenodes.txt`**, rewritten at launch when your
+  enabled mods change what the trade map should be (see *Other mods* above): it becomes a copy
+  of the enabled conversion's trade-node files, or of the shipped `phiw.baseline` beside it
+  when no such mod is enabled. Only inside the mod's own folder, and only when the bytes
+  differ; the log line starts with `[nodesync]`.
 - **A small sidecar next to each save**: `<savename>.eu4.pgt`, plain text. It holds your
   merchant assignments, because the engine's save format can't express a merchant on a
   reverse link end. Deleting one costs you nothing but those placements.
@@ -202,7 +210,7 @@ DLL, so you can verify a release binary instead of trusting it. The release hash
 
 | file | SHA-256 |
 |---|---|
-| `version.dll` (this release) | `d6ec3a41306d22ca113781daa20607999605f92b07e39e01dbb8f39221987860` |
+| `version.dll` (this release) | `ce1e948ab357b7e8a69e2f37ca3160dbaa9286857a9f6ae86f316c0883ed7716` |
 | `eu4.exe` 1.37.5 (what the gate pins) | `9ad3efe1af169f40ee577f9dae5debbc87af6fb8b5450fb345ebf110dc4d771a` |
 
 Hash what you installed, then build your own and compare:

@@ -9,7 +9,8 @@ INSTALL.md's steps can actually be followed:
 
 | file here | source of truth |
 |---|---|
-| `pgt/common/tradenodes/00_tradenodes.txt` | `impl/out/00_tradenodes.txt` |
+| `pgt/common/tradenodes/00_tradenodes.txt` | `impl/out/00_tradenodes.txt` (the DLL rewrites the installed copy per the enabled mod list; see INSTALL.md) |
+| `pgt/common/tradenodes/phiw.baseline` | `impl/out/00_tradenodes.txt` (the DLL's restore copy) |
 | `pgt/interface/countrytradeview.gui` | `impl/mod/interface/countrytradeview.gui` |
 | `pgt.mod`, `pgt/descriptor.mod` | written here |
 | `pgt/thumbnail.png` | written here (generated art; the launcher ignores it for local mods, see below) |

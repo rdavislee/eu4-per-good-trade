@@ -319,3 +319,17 @@ becomes a true off switch, so the mod can stay installed while other playsets ru
 marker `pgt.FORCEDLL` beside the DLL arms it regardless, for probe sessions that run without
 the data mod. Verified live both ways (dormant under an Anbennar-only playset; armed with
 `mod/pgt.mod` enabled).
+
+## Node-file sync (2026-08-28, user-found defect: Anbennar + Mare Liberum broke the trade map)
+
+The shipped `00_tradenodes.txt` re-declares the VANILLA map, and the engine resolves same-named
+files by descriptor filename, alphabetically first wins, ignoring the launcher's playset order
+(measured: three playset orders and a `name=` change all left `pgt.mod`'s copy beating
+`ugc_1385440355.mod`'s; the Aug-27 compat run only worked because Anbennar was then registered
+as `anbennar.mod`, which sorts before `pgt.mod`). Rather than fight the sort, the DLL makes the
+content identical: at attach (armed, after the build gate, before the engine reads game files)
+it scans the enabled mods, and if any OTHER mod ships `common/tradenodes/*.txt` it writes that
+content into the mod's own `00_tradenodes.txt`; with no such mod it restores `phiw.baseline`
+(shipped beside the file; `dist/build-mod.ps1` emits both from `impl/out/00_tradenodes.txt`).
+Whichever copy the engine picks, the bytes agree. Verified: menu probes show the file flipping
+to Anbennar's bytes and back to baseline, byte-exact, per enabled list.

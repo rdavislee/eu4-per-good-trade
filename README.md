@@ -74,7 +74,7 @@ included, is [`TESTING.md`](TESTING.md).
 | Game | EU4 **1.37.5**, Steam, Windows 64-bit. The mod verifies the game binary at startup and refuses any other build |
 | Mode | Single-player, non-ironman (achievements off, as with any mod) |
 | DLC | None required. *Wealth of Nations* is worth having: it lets you move your trade capital, which is now your only collection point |
-| Other mods | Total conversions supported by design; developed and debugged against Anbennar and Extended Timeline ([notes](INSTALL.md)) |
+| Other mods | Total conversions supported by design, in any load order; developed and debugged against Anbennar and Extended Timeline, also tested with Voltaire's Nightmare ([notes](INSTALL.md#other-mods-including-total-conversions)) |
 | Distribution | [GitHub releases](https://github.com/rdavislee/eu4-per-good-trade/releases): half the mod is a native plug-in (`version.dll`) that Steam Workshop can't host. Nothing on disk is patched, the game's exe is never modified, the DLL makes no network connections, and the build is bit-reproducible so you can build it yourself and check the hash ([how](INSTALL.md#build-it-yourself)) |
 
 ---

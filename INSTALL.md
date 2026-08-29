@@ -59,7 +59,8 @@ Steam re-download.
 The mod reads trade nodes, goods, prices and modifiers the way the engine does (through your
 enabled mod list, later mods winning, `replace_path` honoured), so it adapts to whatever map
 is actually loaded rather than assuming vanilla's. It was developed and debugged against
-**Anbennar** (129 trade nodes, 255 links; it adapts and runs) and **Extended Timeline**.
+**Anbennar** (129 trade nodes, 255 links; it adapts and runs) and **Extended Timeline**, and
+also tested with **Voltaire's Nightmare**.
 
 Two things to know:
 
@@ -137,9 +138,11 @@ Worth knowing before your file monitor tells you:
   refreshed each launch, loaded by absolute path; that's how the proxy forwards the game's
   version-API calls. Safe to delete any time.
 - At startup the DLL also looks for a developer test save (`VANILLA_start.eu4`) for a
-  self-test; if it isn't there, it logs that and moves on.
+  self-test; if it isn't there, it logs that and moves on. (If you run `strings` on the DLL
+  you will find that save's path from the development machine embedded; the lookup is
+  read-only and skips silently on yours.)
 - **No network activity, ever.** The DLL opens no sockets and makes no HTTP calls. The
-  source is in `impl/dll/`; grep it for `WinHttp`, `InternetOpen` or `WSAStartup` and find
+  source is in `impl/`; grep it for `WinHttp`, `InternetOpen` or `WSAStartup` and find
   nothing.
 
 ## Uninstall
@@ -243,7 +246,12 @@ only bytes that ever differed between builds, four of them, measured.)
 .\install-proxy.ps1 -Uninstall                  # remove
 ```
 
-The solver-side acceptance suite, which needs no running game, is `impl\accept.ps1`.
+The solver-side acceptance suite, which needs no running game, is `impl\accept.ps1`. One known
+red if you run it: the economy fixture block reports 13 of 24 checks failed. That red is
+present in the approved release source (recorded in commit `6e519df`) and is under
+investigation as a stale-fixture issue; the live-game record in `TESTING.md`, which reconciles
+the model against the engine's own ledger monthly for two centuries, is the acceptance
+evidence for the shipped behavior.
 
 Features default on; an empty marker file in the game folder (next to the DLL) turns one off.
 Feature switches: `pgt.NOAI`, `pgt.NOARROWS`, `pgt.NOTICKHOOK`, `pgt.NOINSTALL`,

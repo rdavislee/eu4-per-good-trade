@@ -3,8 +3,8 @@ __pycache__/
 *.pyc
 
 # Bulk save extracts (reproducible from the saves; ~35 MB each)
-v6-owner-agnostic/scripts/r7/w14/gamestate*.txt
-v6-owner-agnostic/scripts/r8/S18w/gamestate.txt
+docs/v6-owner-agnostic/scripts/r7/w14/gamestate*.txt
+docs/v6-owner-agnostic/scripts/r8/S18w/gamestate.txt
 
 # Local scratch
 nul
@@ -13,3 +13,6 @@ impl/*.exe
 impl/dll/*.dll
 impl/dll/*.exe
 *.o
+
+# Claude Code session markers (local tooling state)
+.claude/hooks/_rules_shown_*

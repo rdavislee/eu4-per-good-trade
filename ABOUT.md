@@ -225,8 +225,8 @@ inside the engine's own payment code: the worst disagreement across two centurie
 three hundredths of a ducat, while the world economy doubled. Treasury bookings matched to
 the cent. Save and reload, and the map comes back exactly as it was (not approximately,
 exactly). The full live-game test record, results, retractions and residuals included, is
-`[TESTING.md](TESTING.md)`, and the design document behind it is
-`[per-good-trade-spec.md](per-good-trade-spec.md)`, including the arguments that lost.
+[TESTING.md](TESTING.md), and the design document behind it is
+[per-good-trade-spec.md](per-good-trade-spec.md), including the arguments that lost.
 
 ## Known limits
 

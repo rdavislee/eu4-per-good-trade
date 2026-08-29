@@ -9,7 +9,7 @@ are earned, not scripted. Conquest captures producers, development pulls and pus
 merchants can work either end of a link, and your capital does the collecting. The controls
 stay vanilla's, with one decision fewer. Single-player, installs in two drops and a checkbox.
 Download and docs:
-[github.com/rdavislee/eu4-per-good-trade](https://github.com/rdavislee/eu4-per-good-trade).
+[github.com/rdavislee/eu4-per-good-trade/releases](https://github.com/rdavislee/eu4-per-good-trade/releases/latest).
 
 I've been playing Europa Universalis since sixth grade (EU3 first, because EU3 was cheaper
 and I was a sixth grader), and I have about two thousand hours in EU4. This mod exists

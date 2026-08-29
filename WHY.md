@@ -31,10 +31,12 @@ genuinely terminate there. No mission, no mercy from a designer.
   orient toward hunger. Base production is supply: it makes the province a source. Develop
   your capital region hard enough and the networks bend toward you.
 - **Merchants work both ends of a link.** Your capital collects; merchants steer, including
-  against the prevailing current. In one test run Portugal steered sugar toward Sevilla while
-  Caraíbas, its own colonial nation, steered cloth back across the same link to the
-  Caribbean. The AI plays the reverse board unprompted: half its merchant placements sit on
-  ends that in vanilla do not exist at all.
+  against the prevailing current. In one test run, Portugal had a merchant placed in the
+  Caribbean steering sugar down the link to Sevilla, while Caraíbas, its own colonial nation,
+  had a merchant placed in Sevilla steering cloth back up the same link to the Caribbean: one
+  link, a merchant standing on each end of it, goods moving both directions at once. The AI
+  plays the reverse board unprompted: half its merchant placements sit on ends that in
+  vanilla do not exist at all.
 - **Nothing is ever ordered per good.** A merchant covers every good on its link end at once.
   If you can play vanilla trade, you already know the controls.
 

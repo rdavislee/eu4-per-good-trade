@@ -13,9 +13,10 @@ decision fewer. Installing is two drops and a checkbox, and the checkbox is a tr
 switch: with Mare Liberum disabled in the launcher the game runs plain vanilla, so the mod can
 stay installed while you play anything else.
 
-![The trade mapmode in 1444, every arrow computed](media/trade-map-1444.jpg)
-*11 November 1444, trade mapmode: every arrow on this map was computed this month from where
-goods are made and where the wealth sits. None of it is hand-drawn.*
+![The English Channel in 1635: computed arrows, merchants on both ends of a link](media/channel-reverse-1635.jpg)
+*Around the English Channel, 1635: every arrow computed from production and wealth, and a
+merchant panel on each end of a link. Working the far end pushes goods against the current,
+which vanilla's one-way map cannot express.*
 
 What if the trade map answered to the world?
 

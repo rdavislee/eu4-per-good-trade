@@ -190,6 +190,12 @@ so).
 **It stopped working after a Steam update.** The build check is refusing a patched
 executable. Roll back to 1.37.5 through Steam's beta branches (steps under Requirements).
 
+**The log mentions `VANILLA_start.eu4` or a OneDrive path that doesn't exist.** Harmless and
+expected on every machine but the developer's: at startup the DLL looks for an optional
+developer test save to run a self-test against, logs that it isn't there, and moves on. The
+OneDrive path is baked in from the development machine. It is never the reason an install
+fails; keep reading the log for the actual cause.
+
 **The game crashes.** The mod writes `pgt_crash.log` in the game folder saying where. The
 fastest diagnosis is bisection: the `pgt.NO*` switches under *For developers* turn the mod's
 pieces off one at a time. Report it, with both logs, at the

@@ -107,8 +107,7 @@ this time nobody scripted it. And out on the Atlantic, sugar sailed east while c
 west, on the same water, at the same time. The sentence vanilla couldn't say, spoken by the
 AI on its own.
 
-The money stays honest through all of it: your income is booked by the engine's own
-accounting, and the world total tracks vanilla within a few percent, flat.
+The world total tracks vanilla.
 
 The fine print: EU4 **1.37.5** exactly (Steam, Windows, single-player). The model lives in a
 `version.dll` that sits next to `eu4.exe`, which is why it can't be uploaded to the Steam

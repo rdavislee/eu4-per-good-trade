@@ -190,14 +190,15 @@ so).
 **It stopped working after a Steam update.** The build check is refusing a patched
 executable. Roll back to 1.37.5 through Steam's beta branches (steps under Requirements).
 
-**The log says `solver self-test FAILED: cannot open ...VANILLA_start.eu4`** (with a OneDrive
-path that doesn't exist on your machine). Harmless and expected on every machine but the
-developer's, despite the wording: at startup the DLL looks for an optional developer test
-save to run a self-test against, and when it isn't there it logs this line and moves on; the
-attach continues and every hook still installs (verified: the very next lines are the normal
-ones through `=== attach complete ===`). The OneDrive path is baked in from the development
-machine. It is never the reason an install fails; keep reading the log for the actual cause.
-The wording will change in the next build.
+**The log mentions the developer save `VANILLA_start.eu4`.** At startup the DLL looks for an
+optional developer baseline save to self-test against; on every machine but the developer's
+it isn't there, the test is skipped, and the attach continues with every hook installing
+(verified: the next lines run through `=== attach complete ===` normally). Since v1.0.1 the
+line says so plainly: `solver self-test skipped: no developer baseline save on this machine
+(normal; nothing is wrong)`. The original v1.0 build logged the same harmless situation as
+`solver self-test FAILED: cannot open ...` with a OneDrive path from the development machine;
+despite the wording it was never the reason an install fails. Either way, keep reading the
+log for the actual cause.
 
 **The game crashes.** The mod writes `pgt_crash.log` in the game folder saying where. The
 fastest diagnosis is bisection: the `pgt.NO*` switches under *For developers* turn the mod's
@@ -222,7 +223,8 @@ DLL, so you can verify a release binary instead of trusting it. The release hash
 
 | file | SHA-256 |
 |---|---|
-| `version.dll` (this release) | `ce1e948ab357b7e8a69e2f37ca3160dbaa9286857a9f6ae86f316c0883ed7716` |
+| `version.dll` (this release, v1.0.1) | `bb8e83d0de2c8599fd80dc09eb7c23d49275a47db5d9bb109c0e9b3581315415` |
+| `version.dll` (v1.0) | `ce1e948ab357b7e8a69e2f37ca3160dbaa9286857a9f6ae86f316c0883ed7716` |
 | `eu4.exe` 1.37.5 (what the gate pins) | `9ad3efe1af169f40ee577f9dae5debbc87af6fb8b5450fb345ebf110dc4d771a` |
 
 Hash what you installed, then build your own and compare:

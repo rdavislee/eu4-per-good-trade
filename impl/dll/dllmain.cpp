@@ -79,9 +79,22 @@ static std::string install_dir() {
 // in-process. (The LIVE-memory equivalent -- reading inject/trade_goods_size from engine memory
 // each tick -- is the trade_tick + node_trade_goods_size seams, pending the debugger session.)
 static void solver_self_test(const std::string& root) {
+    // The baseline save is a developer artifact: resolved from the game's own user dir (the
+    // registry Documents path), with the dev machine's literal layout as the fallback. It is
+    // absent on every machine but the dev's, and that is a SKIP, not a failure -- v1.0 logged
+    // it as "FAILED: cannot open <path>", which a player reasonably read as the install
+    // failing (field report, 2026-08-29). FAILED is reserved for a save that is present but
+    // cannot be solved.
+    std::string ud = savegame::userdir_root();
+    std::string save = !ud.empty()
+        ? ud + "save games\\VANILLA_start.eu4"
+        : std::string(getenv("USERPROFILE") ? getenv("USERPROFILE") : "") +
+          "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV\\save games\\VANILLA_start.eu4";
+    if (GetFileAttributesA(save.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        L("solver self-test skipped: no developer baseline save on this machine (normal; nothing is wrong)");
+        return;
+    }
     try {
-        std::string save = std::string(getenv("USERPROFILE") ? getenv("USERPROFILE") : "") +
-            "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV\\save games\\VANILLA_start.eu4";
         gamedata::TradeNodes tn = gamedata::load_tradenodes(root + "/common/tradenodes/00_tradenodes.txt");
         gamedata::StaticMods sm = gamedata::load_static_mods(root);
         auto prices = gamedata::load_prices(root);

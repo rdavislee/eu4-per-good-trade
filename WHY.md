@@ -46,6 +46,21 @@ whole mod: a separate network for every trade good, re-derived every in-game mon
 facts about the actual world, where each good is made and where the wealth is.** The same
 strait can carry cloth east and furs west at the same time.
 
+Here is what that changes about how you play. **War changes meaning first.** In vanilla,
+taking the spice province hands you its trade value and the arrows stay put. Here the arrows
+answer to production: take the region that grows the spices and you hold the source of the
+spice network itself, and the map carries that good toward whoever wants it most. Make sure
+that's you. Painting the map bigger does nothing by itself, because a province's pull comes
+from its development and land, not its flag. Conquest buys supply.
+
+**Development is the other instrument, and it splits in two.** Base tax is pure demand: it
+makes a place hungrier, and goods orient toward hunger. Base production is supply: it makes
+the province a source, with some pull of its own, since goods are worth money. Same monarch
+points as always, but the two buttons are now two different levers on the world's arrows.
+Develop your capital region hard enough and the networks genuinely bend toward you; that is
+how the English Channel earns terminus status in our test campaigns instead of being handed
+it.
+
 The second design rule: react to the
 world, but play at vanilla's click budget. **Nothing is ever ordered per good.** Merchant
 placement covers every good on that link end at once. The collect-or-steer choice is gone
@@ -53,6 +68,21 @@ entirely: your capital collects, merchants steer. Collecting abroad was only eve
 workaround for a one-way map that stranded value downstream of your home, and there is no
 more downstream. You steer trade home from anywhere in reach instead. If you can play
 vanilla trade, you already know the controls.
+
+The AI plays the same board. On the Caribbean-Sevilla link in one test campaign, Portugal
+steered goods like sugar toward Sevilla while Caraíbas, Portugal's own colonial nation,
+steered goods like cloth from Sevilla back to the Caribbean. One link, two merchants,
+opposite directions, a colonial economy running both ways with nobody scripting it. Across
+the full run, half of the AI's merchant placements sat on reverse ends.
+
+![The per-good view: cloth in 1635](media/cloth-view-1635.jpg)
+*The cloth network in 1635: producers lit, everyone else dimmed.*
+
+**And the map shows you all of it.** Click a province in the trade mapmode and the entire
+trade UI becomes that good's map: its own arrows, its own numbers, its own sinks. That view
+is where the strategy comes from. You see where your good actually goes, who is pulling it,
+and which end of which link a merchant should work; the good you are about to go to war for
+stops being a line in a tooltip and becomes a network you can read.
 
 It went design spec first, attacked
 until nearly every number in it was measured against the real game. The algorithm is a supply
@@ -63,31 +93,22 @@ memory once a month, solves every network, and writes the answers back into the 
 structures, so the ledger, the tooltips and the AI all see the real economy, not a shadow of
 one.
 
-What that looks like in game:
+The proof is a campaign nobody played: 1444 into the 1600s, hands-off, AI only.
 
-- **The trade mapmode is computed.** At the 1444 start the world drains to Genoa and
-Hangzhou. In one of our test campaigns, the ends had moved to the English Channel, the
-Rhineland and Nippon by the 1600s. They are yours to fight over.
-- **Click a province in the trade map mode and the entire trade UI becomes that good's
-map**: its own arrows, its own numbers, its own sinks.
-- **The map answers to the world.** In that campaign, when China split and Wu, Shun and Yue
-were all at war, the east lost its sink to the fighting. And as Great Britain developed
-extensively, the English Channel became one.
-- **Merchants work both directions.** On the Caribbean-Sevilla link we watched Portugal
-steering goods like sugar toward Sevilla while Caraíbas, Portugal's own colonial nation,
-steered goods like cloth from Sevilla back to the Caribbean: one link, two merchants,
-opposite directions. The AI leans into this half of the board; across the full run, half of
-all its merchant placements sat on reverse ends, and Ming's first picks steer Hangzhou and
-Xi'an inland toward Beijing.
-- **The money stays honest.** Your income is booked by the engine's own accounting; across
-two test centuries the worst disagreement was about three hundredths of a ducat, and the
-world total tracked vanilla within a few percent, flat.
+| ![Hangzhou, 1444](media/hangzhou-1444.jpg) | ![Nippon, 1635](media/nippon-1635.jpg) |
+|---|---|
+| *1444: the East's flows converge on Hangzhou.* | *The same region in 1635: the terminus has moved to Nippon.* |
 
-The payoff was watching all of that happen in one hands-off campaign, 1444 into the 1600s,
-with no player at the wheel. The Channel, already the richest stretch of water on the map,
-became what vanilla always scripted it to be, except this time nobody scripted it. And out on
-the Atlantic, sugar sailed east while cloth sailed west, on the same water, at the same time.
-The sentence vanilla couldn't say, spoken by the AI on its own.
+At the start the world drains to Genoa and Hangzhou. By the 1600s the ends had moved to the
+English Channel, the Rhineland and Nippon: Britain developed until the Channel out-pulled
+everything around it, and when China split and Wu, Shun and Yue went to war, the east lost
+its sink to the fighting. The Channel became what vanilla always scripted it to be, except
+this time nobody scripted it. And out on the Atlantic, sugar sailed east while cloth sailed
+west, on the same water, at the same time. The sentence vanilla couldn't say, spoken by the
+AI on its own.
+
+The money stays honest through all of it: your income is booked by the engine's own
+accounting, and the world total tracks vanilla within a few percent, flat.
 
 The fine print: EU4 **1.37.5** exactly (Steam, Windows, single-player). The model lives in a
 `version.dll` that sits next to `eu4.exe`, which is why it can't be uploaded to the Steam

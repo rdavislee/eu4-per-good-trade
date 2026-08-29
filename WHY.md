@@ -11,11 +11,6 @@ stay vanilla's, with one decision fewer. Single-player, installs in two drops an
 Download and docs:
 [github.com/rdavislee/eu4-per-good-trade/releases](https://github.com/rdavislee/eu4-per-good-trade/releases/latest).
 
-One sentence of backstory, since this is the internet: I've played EU since sixth grade, I
-study computer science and economics at MIT, and I built this in the two weeks of August 2026
-before my senior year. This mod exists because of the campaigns two thousand hours taught me
-not to start.
-
 I never wanted to play the Aztecs. Not because surviving Europe is hard (that's the fun
 part), but because of what winning looked like. Say you do it: you reform, you hold, you
 reconquer the New World. Now open the trade map. Mexico has outgoing arrows, and it will have

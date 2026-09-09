@@ -775,8 +775,23 @@ renamed away.
 
 **Open.** The full ★ suite above has not been re-run on the d3dx9_43 slot (those sessions ran on the
 version.dll slot or through `run.sh` injection); this session measured the install path and the
-first monthly tick. Running beside EU4DLL is reported by the contributor and has not been
-reproduced here.
+first monthly tick.
+
+**Beside EU4DLL, and alone (user, 2026-09-09).** Two seated runs of the v1.0.2 release binary
+(`42c9e054...`) as `d3dx9_43.dll`, both with Mare Liberum enabled in the launcher. Run one: EU4DLL
+release 93 (matanki-saito/EU4dll, dated 2026-03-30; its `version.dll`, `d3d9.dll`, `.dist.v1.json`
+and `plugins` folder installed as shipped, `autoupdate64.bat` left out so the plugin could not change
+between runs) with the Workshop mod *Chinese Language Mod for 1.37* (id 2976470733, version 3.11.6)
+enabled as well. PASS: the start screen came up with Chinese text rendered and the reverse panels on
+the trade map, both at once. The mod's log carried the normal attach (`d3dx9_43 proxy: 8/8 exports
+resolved`, `build gate PASS`, `=== attach complete (livetrade worker spawned) ===`) and no `STALE
+INSTALL` line; EU4DLL's own `pattern_eu4_jps_2.log` appeared beside the exe with `DLL [MATCH
+VERSION]`, so its `version.dll` attached in the same process. An unattended attach-only probe of the
+same pair beforehand showed the same log lines with the process alive at the main menu. Run two, the
+same folder with all seven EU4DLL files removed (each byte-compared against the release archive
+first) and the language mod disabled: PASS, same checks. The stale guard's parser was also run on
+EU4DLL's three DLLs before they were installed: export names `version.dll`, `d3d9.dll` and none, so
+none of them can trip it.
 
 **Refusal path, live (2026-09-09), two red cases.** (1) The private copy made unusable: a 4 KB garbage
 file at `%TEMP%\pgt_d3dx9_orig.dll`, held open with share mode 0 so `CopyFileA` could not replace it and

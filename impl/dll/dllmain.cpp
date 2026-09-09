@@ -2,9 +2,9 @@
 // 835bfdf8) via the d3dx9_43.dll proxy (proxy.h + d3dx9_43.def), following the EU4dll precedent.
 // The proxy slot is d3dx9_43.dll since v1.0.2 (v1.0 and v1.0.1 used version.dll), NOT
 // version.dll/d3d9.dll, which belong to the double-byte (CJK font) patches -- so the two proxies
-// take different names and should coexist in one game directory (reported by the contributor,
-// not reproduced here; INSTALL.md). stalecheck.h warns when an old version.dll build is still
-// present, because it would load first and own the process.
+// take different names and coexist in one game directory (measured 2026-09-09 beside EU4DLL
+// release 93; TESTING.md). stalecheck.h warns when an old version.dll build is still present,
+// because it would load first and own the process.
 //
 // On attach, in order:
 //   1. Build gate (spec 2.5): verify this is the frozen 1.37.5 build via BOTH the in-memory

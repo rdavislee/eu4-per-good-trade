@@ -75,16 +75,19 @@ Two things to know:
 - A mod that sits in your mod folder as a `.zip` is skipped (the log names it). Workshop
   mods arrive unpacked; if one of yours is still zipped, unzip it in place.
 
-### Double-byte (CJK font) patches, e.g. EU4DLL — designed to coexist
+### Double-byte (CJK font) patches, e.g. EU4DLL — tested together
 
 The mod deliberately does **not** use the `version.dll` or `d3d9.dll` file names. Those two
 slots are how the double-byte font patches (EU4DLL and its kin) load themselves. This mod
 instead stands in as **`d3dx9_43.dll`**, which `eu4.exe` also imports at startup (eight
 functions, on the Steam 1.37.5 build), which no font patch claims, and which Windows resolves
 from the game folder before the System32 copy. So the two proxies take different names and
-should load in the same process without contending for one. That is the design; the running
-pair is **reported by the contributor who moved the mod to this slot, and not yet reproduced
-by the maintainer**, so treat coexistence as reported rather than measured. To try it:
+load in the same process without contending for one. Tested by the maintainer on 2026-09-09:
+EU4DLL release 93 plus this mod's v1.0.2 as `d3dx9_43.dll`, with the Workshop mod *Chinese
+Language Mod for 1.37* (id 2976470733, version 3.11.6) enabled beside Mare Liberum. The game
+reached the start screen with Chinese text rendered and the mod's reverse panels on the trade
+map, both at once; both DLLs' logs show a normal attach. The contributor who moved the mod to
+this slot reported the same. To install the pair:
 
 - keep whatever `version.dll` / `d3d9.dll` your font patch installed (never overwrite them
   with this mod's file);

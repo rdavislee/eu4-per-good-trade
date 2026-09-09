@@ -347,8 +347,10 @@ proxy is incomplete.
 v1.0 and v1.0.1 shipped the DLL as `version.dll`. The double-byte (CJK font) patches, EU4DLL among
 them, install themselves as `version.dll` and `d3d9.dll` in the game folder, and two files named
 `version.dll` cannot coexist, so v1.0.x could not run beside EU4DLL. v1.0.2 moves to
-`d3dx9_43.dll`, a slot no font patch claims. The contributor reports running v1.0.2 beside EU4DLL;
-the maintainer has not reproduced that.
+`d3dx9_43.dll`, a slot no font patch claims. Measured 2026-09-09 (TESTING.md): EU4DLL release 93
+plus v1.0.2, with the Workshop mod *Chinese Language Mod for 1.37* enabled, reached the start screen
+with Chinese text and the mod's reverse panels rendered together, both DLLs attached; the same
+build then passed alone with EU4DLL removed. The contributor had reported the same pair.
 
 The slot choice is verified, not assumed. `eu4.exe` (1.37.5, build 835bfdf8, Steam, Windows x64) imports
 `d3dx9_43.dll` with exactly eight functions, read from the import table with llvm-objdump:
@@ -395,8 +397,9 @@ the refusal: a scratch build declaring a ninth, nonexistent export was refused w
 0xC0000142 and the `REFUSING TO LOAD` line (TESTING.md). With the private copy locked and
 unreadable, the direct load of the System32 file succeeded and the game ran, so the base-name
 collision seen on the version.dll slot does not reproduce here; the copy stays as first choice.
-The full ★ suite of TESTING.md has NOT been re-run on it, and coexistence with EU4DLL is reported by the
-contributor, not reproduced by the maintainer.
+Coexistence with EU4DLL (release 93, with the Chinese language mod) is measured, seated, by the
+maintainer, and so is the mod alone on this slot. The full ★ suite of TESTING.md has NOT been re-run
+on it.
 
 ## The install reads the live world when the developer save is absent (2026-09-09, PR #1, contributed)
 

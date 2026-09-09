@@ -1,5 +1,8 @@
 // per-good-trade.dll -- the runtime-attached mod (spec 2.1, 2.5). Loaded into eu4.exe (build
-// 835bfdf8) via the version.dll proxy (loader.cpp), following the EU4dll precedent.
+// 835bfdf8) via the d3dx9_43.dll proxy (proxy.h + d3dx9_43.def), following the EU4dll precedent.
+// The proxy slot is d3dx9_43.dll -- NOT version.dll/d3d9.dll, which belong to the double-byte
+// (CJK font) patches -- so both families of proxy DLLs coexist in one game directory (the same
+// arrangement the Epic-store build uses; see INSTALL.md).
 //
 // On attach, in order:
 //   1. Build gate (spec 2.5): verify this is the frozen 1.37.5 build via BOTH the in-memory
@@ -169,9 +172,19 @@ static bool run_install(const std::string& logpath) {
         << " (monthly), " << named << " named from memory\n";
 
     std::string root = install_dir();
-    std::string save = std::string(getenv("USERPROFILE") ? getenv("USERPROFILE") : "") +
-        "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV"
-        "\\save games\\VANILLA_start.eu4";
+    // The baseline start save (developer artifact used for field cross-checks and the goods-
+    // signature naming cross-check) lives in the user-documents save folder. Resolve it the way
+    // the engine does -- the registry Documents ("Personal") shell folder -- with the dev
+    // machine's OneDrive layout as the fallback. A machine WITHOUT the baseline file still
+    // installs: node NAMES come from the engine's own definition keys (nodemap.h) and the field
+    // from the LIVE world read below, exactly as the docs promise ("on every machine but the
+    // developer's it isn't there ... the attach continues with every hook installing").
+    std::string ud = savegame::userdir_root();
+    std::string save = !ud.empty()
+        ? ud + "save games\\VANILLA_start.eu4"
+        : std::string(getenv("USERPROFILE") ? getenv("USERPROFILE") : "") +
+          "\\OneDrive\\Documents\\Paradox Interactive\\Europa Universalis IV"
+          "\\save games\\VANILLA_start.eu4";
     try {
         // CONTENT COMES FROM WHAT THE ENGINE LOADED (user, 2026-08-27: Anbennar/Extended Timeline).
         // Under a total conversion the install's files describe a world the engine is not
@@ -190,20 +203,35 @@ static bool run_install(const std::string& logpath) {
             modfs::resolve_dir("common/tradegoods", ".txt"));   // slot k <-> goods_order[k-1] (1-based)
         std::map<std::string, int> good_slot;                  // good name -> engine tgs slot
         for (int k = 0; k < (int)goods_order.size(); k++) good_slot[goods_order[k]] = k + 1;
-        save::SaveData sd = save::load(save);
+        // Load the baseline save only when it exists; its consumers all have a live fallback
+        // (field -> live world read; node names -> engine definition keys; prices -> live table).
+        save::SaveData sd;                   // empty when no baseline file is present
+        bool have_save = !save.empty() && GetFileAttributesA(save.c_str()) != INVALID_FILE_ATTRIBUTES;
+        if (have_save) {
+            sd = save::load(save);
+            log << "  baseline save loaded: " << save << "\n";
+        } else {
+            log << "  no developer baseline save at " << save
+                << ": installing from the LIVE world read (naming via the engine's own "
+                   "definition keys; save-based cross-checks skipped)\n";
+        }
         field::Field f = field::build(tn, sm, sd, prices);
         drain::Graph g; g.N = f.N; g.und = tn.und; g.edges_und = tn.edges_und;
 
         // ---- LIVE WORLD READ (spec 2.2: the DLL reads live memory, never a save) ----
         // Build the same field from the running game's province table and compare. At the 1444
         // start the two must agree; from then on only the LIVE field tracks the campaign, which
-        // is what lets the orientation move month to month (F1/F3/F4/F5).
+        // is what lets the orientation move month to month (F1/F3/F4/F5). Without a baseline
+        // save the live field IS the field (no cross-check to compare against).
+        std::map<std::string, double> live_prices;
+        bool live_taken = false;
         {
             liveworld::WorldRead w = liveworld::read_world();
             log << "  live world read: " << w.provinces_seen << " provinces seen, " << w.owned
                 << " owned, " << w.with_good << " with a trade good, "
                 << w.sd.current_prices.size() << " prices\n";
             if (w.ok) {
+                live_prices = w.sd.current_prices;
                 try {
                     field::Field lf = field::build(tn, sm, w.sd, prices);
                     log << "    live field: " << lf.rows.size() << " counted provinces, world wealth "
@@ -219,14 +247,18 @@ static bool run_install(const std::string& logpath) {
                     std::string ends;
                     for (int i = 0; i < lf.N; i++) if (od[i] == 0) ends += tn.order[i] + " ";
                     log << "    live Phi_w ends { " << ends << "}\n";
-                    if (livetrade::feature_on("LIVEFIELD")) {
+                    if (livetrade::feature_on("LIVEFIELD") || !have_save) {
                         f = lf;                     // the live field becomes the model's field
-                        log << "    USING THE LIVE FIELD (orientation now tracks the campaign)\n";
+                        live_taken = true;
+                        log << "    USING THE LIVE FIELD (orientation now tracks the campaign"
+                            << (have_save ? "" : "; no baseline save, so this is the only field") << ")\n";
                     }
                 } catch (const std::exception& e) {
                     log << "    live field build failed: " << e.what() << "\n";
                 }
             }
+            if (!have_save && !live_taken)
+                throw std::runtime_error("no baseline save and the live world read gave no usable field: cannot install");
         }
 
         // NAME the live nodes authoritatively: the engine node-array order is a permutation of
@@ -291,7 +323,10 @@ static bool run_install(const std::string& logpath) {
             // and inject VALUE = live produced quantity x current price (spec 1.8).
             auto slotit = good_slot.find(f.goods[gi]);
             int slot = slotit != good_slot.end() ? slotit->second : (gi + 1);
-            double price = field::price_of(f.goods[gi], sd.current_prices, prices);
+            // current prices: the baseline save's table when present, else the LIVE table the
+            // world read just captured (empty only if both are missing, which aborts above)
+            const auto& px = have_save ? sd.current_prices : live_prices;
+            double price = field::price_of(f.goods[gi], px, prices);
             std::vector<double> inj(f.N, 0.0);
             if (slot < goods_count) for (int n = 0; n < f.N; n++) inj[n] = inject[slot][n] * price;
             econ::GoodFlow F = econ::route(f.N, r.directed, inj, live_st, collect_nodes, 0.05);
@@ -744,14 +779,14 @@ static void attach_main() {
     // launcher"). dlc_load.json is the engine's own record of the enabled mod list (the
     // launcher rewrites it on every Play; a direct eu4.exe launch reads it as-is), so the
     // checkbox that mounts mod/pgt is also the switch that arms this DLL. Unchecked means the
-    // engine mounts no pgt files and this DLL stays a pure version.dll proxy: no build gate,
+    // engine mounts no pgt files and this DLL stays a pure d3dx9_43 proxy: no build gate,
     // no patches, no worker -- a bit-vanilla game with the mod merely sitting in the folder.
     // pgt.FORCEDLL (empty marker beside the DLL) arms it anyway, for probe sessions that run
     // without the data mod.
     if (!pgt_mod_enabled() && !livetrade::marker_present("FORCEDLL")) {
         L("Mare Liberum is not enabled in the launcher (no mod/pgt.mod in dlc_load.json): DORMANT");
         L("the game runs plain vanilla; enable the mod in the launcher to activate it (developers: pgt.FORCEDLL overrides)");
-        L("=== attach complete (dormant: pure version.dll proxy, nothing installed) ===");
+        L("=== attach complete (dormant: pure d3dx9_43 proxy, nothing installed) ===");
         return;
     }
 
@@ -854,20 +889,20 @@ static void attach_main() {
 
 BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
-        // FIRST, BEFORE ANYTHING ELSE: point the fifteen version.dll exports we stand in for at the
+        // FIRST, BEFORE ANYTHING ELSE: point the eight d3dx9_43 exports we stand in for at the
         // real system DLL. eu4.exe cannot call them before its own code runs, which is after this,
         // but nothing below may run ahead of it either -- a half-served proxy is a load-time death.
         proxy::init();
         {   // Logged HERE, before the build-hash gate can refuse and return: the proxy is what keeps
             // the process alive at all, so its status must never depend on the mod choosing to run.
             std::ofstream pl(livetrade::self_dir() + "\\per-good-trade.log", std::ios::app);
-            pl << "version.dll proxy: " << proxy::g_resolved << "/17 exports resolved from "
+            pl << "d3dx9_43 proxy: " << proxy::g_resolved << "/8 exports resolved from "
                << (proxy::g_private_path.empty() ? std::string("(no private copy)") : proxy::g_private_path)
                << (proxy::g_loaded ? "" : "  [FAILED TO LOAD THE REAL DLL]")
                << (proxy::g_self_collision ? "  [SELF-COLLISION DETECTED AND REFUSED]" : "") << (char)10;
         }
         // Say what happened: a proxy that silently serves nothing is indistinguishable from a
-        // working one until the game calls a version API and dies.
+        // working one until the game calls a D3DX API and dies.
 
         // ONE INSTANCE PER PROCESS -- decided by the CODE, never by a kernel object (2026-08-27).
         // A second copy of this DLL in the SAME process (proxy + injector) must stay inert: its

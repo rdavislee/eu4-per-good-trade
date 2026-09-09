@@ -1,0 +1,28 @@
+; Stand in as the game's d3dx9_43.dll. EU4 imports D3DX9_43.DLL; Windows loads the game-directory
+; copy before the System32 one (d3dx9_43.dll is NOT a KnownDLL -- checked), so our DllMain runs
+; before the game's main and the mod is present in EVERY launch, Steam's included.
+;
+; Why d3dx9_43 and not version.dll/d3d9.dll: those two slots belong to the double-byte (CJK font)
+; patches (EU4DLL and its kin), which load their plugin from the game directory at those names.
+; d3dx9_43.dll is unclaimed on Steam as on Epic, and the exe imports exactly the eight names
+; below (verified in eu4.exe's import table), so this proxy serves every import the loader binds.
+;
+; NO FORWARDERS. These used to read `= pgt_<real>_orig.<name>`, which meant the user had to
+; hand-copy System32's real DLL into the game directory under a private name -- the most
+; error-prone step in installing the mod, and one whose failure kills the process at load with no
+; window and no log. The target could never simply be "d3dx9_43": the loader resolves a
+; forwarder's module by the normal search order, finds US, and a self-referential forwarder is a
+; load-time failure.
+;
+; Each name below is now a real exported stub (proxy.h) that jumps through a pointer filled during
+; DllMain from the system copy, loaded by absolute path. One file to install instead of two.
+LIBRARY per-good-trade
+EXPORTS
+    D3DXCompileShader
+    D3DXCreateCubeTexture
+    D3DXCreateLine
+    D3DXCreateTexture
+    D3DXLoadSurfaceFromMemory
+    D3DXLoadSurfaceFromSurface
+    D3DXSaveSurfaceToFileInMemory
+    D3DXSaveTextureToFileInMemory

@@ -1,6 +1,6 @@
 # Installing Mare Liberum
 
-**TL;DR:** Get the release, drop `version.dll` next to `eu4.exe`, drop the `pgt` mod into
+**TL;DR:** Get the release, drop `d3dx9_43.dll` next to `eu4.exe`, drop the `pgt` mod into
 your mod folder, enable Mare Liberum in the launcher. EU4 **1.37.5** on Windows/Steam exactly
 (the mod checks the binary and refuses anything else), single-player. Your antivirus may
 complain about the DLL; you can verify it instead of trusting it by building it yourself.
@@ -8,12 +8,12 @@ Uninstalling is deleting one file.
 
 Download the latest release from
 **[github.com/rdavislee/eu4-per-good-trade/releases](https://github.com/rdavislee/eu4-per-good-trade/releases)**:
-it contains `version.dll` (the mod itself) and the small `pgt` mod folder. Then it's two
+it contains `d3dx9_43.dll` (the mod itself) and the small `pgt` mod folder. Then it's two
 drops and a checkbox:
 
-1. Copy **`version.dll`** into your EU4 game folder, next to `eu4.exe`.
+1. Copy **`d3dx9_43.dll`** into your EU4 game folder, next to `eu4.exe`.
 2. Copy **`pgt.mod`** and the **`pgt`** folder into your EU4 mod folder. *(Working from a
-   clone of this repo instead of a release? They're under `dist/`, and `version.dll` is
+   clone of this repo instead of a release? They're under `dist/`, and `d3dx9_43.dll` is
    `impl/dll/per-good-trade.dll` renamed, or build it yourself, below.)*
 3. Enable **Mare Liberum** in the launcher and play.
 
@@ -23,7 +23,7 @@ completely dormant, and the game runs plain vanilla. So the mod can sit installe
 play other things, vanilla or other mods, with zero effect. Turning it on is enabling the mod,
 nothing else.
 
-*Your antivirus may flag `version.dll`. That's expected for this kind of mod, not a sign of
+*Your antivirus may flag `d3dx9_43.dll`. That's expected for this kind of mod, not a sign of
 tampering; see [Antivirus](#troubleshooting) below, including how to verify the file instead
 of trusting it.*
 
@@ -75,6 +75,27 @@ Two things to know:
 - A mod that sits in your mod folder as a `.zip` is skipped (the log names it). Workshop
   mods arrive unpacked; if one of yours is still zipped, unzip it in place.
 
+### Double-byte (CJK font) patches, e.g. EU4DLL — supported, no special steps
+
+The mod deliberately does **not** use the `version.dll` or `d3d9.dll` file names. Those two
+slots are how the double-byte font patches (EU4DLL and its kin) load themselves — they sit in
+the game folder at those names and pull their plugins from the `plugins\` folder. This mod
+instead stands in as **`d3dx9_43.dll`**, which `eu4.exe` also imports at startup (eight
+functions, same on Steam and Epic), which no font patch claims, and which Windows resolves
+from the game folder before the System32 copy. Result: both families of proxy DLLs load in
+the same process and never notice each other — the same arrangement the Epic-store build of
+this mod uses. Install them side by side and each works exactly as if it were alone:
+
+- keep whatever `version.dll` / `d3d9.dll` / `plugins\*` your font patch installed (never
+  overwrite them with this mod's file);
+- add `d3dx9_43.dll` (this mod) next to `eu4.exe`;
+- if you previously installed this mod the old way, as `plugins\per-good-trade.dll` under the
+  font patch's plugin loader, **delete that copy first**: the plugin-folder copy attaches
+  before `d3dx9_43.dll` in the import order, and a second copy of the mod in one process stays
+  inert by design — the logs get confusing and the mod ends up depending on the font patch's
+  loader. The proxy install (`d3dx9_43.dll` in the game folder) is self-sufficient; the font
+  patch's loader is not needed for it.
+
 ## Check that it worked
 
 In game, open the trade map mode: the arrows will differ from vanilla's. Click a province
@@ -85,7 +106,7 @@ If you want certainty, the mod writes `per-good-trade.log` in the game folder. Y
 to read it all. If the first line and the `build gate PASS` line are present, it's running:
 
 ```
-version.dll proxy: 17/17 exports resolved from C:\Users\<you>\AppData\Local\Temp\pgt_version_orig.dll
+d3dx9_43 proxy: 8/8 exports resolved from C:\Users\<you>\AppData\Local\Temp\pgt_d3dx9_orig.dll
 build gate PASS: verified build 835bfdf8... (release_1.37.5): offsets valid
 DIRECTION GATES OPEN (spec 1.10): 5/6 rebuild call sites hooked [MISSED 0x775EEC...]
 [tick] monthly update 1: wrote 80 nodes inside the engine's value pass (pre-division), ...
@@ -134,9 +155,9 @@ Worth knowing before your file monitor tells you:
 - **A small sidecar next to each save**: `<savename>.eu4.pgt`, plain text. It holds your
   merchant assignments, because the engine's save format can't express a merchant on a
   reverse link end. Deleting one costs you nothing but those placements.
-- **A private copy of Windows' real `version.dll`** at `%TEMP%\pgt_version_orig.dll`,
+- **A private copy of Windows' real `d3dx9_43.dll`** at `%TEMP%\pgt_d3dx9_orig.dll`,
   refreshed each launch, loaded by absolute path; that's how the proxy forwards the game's
-  version-API calls. Safe to delete any time.
+  D3DX calls. Safe to delete any time.
 - At startup the DLL also looks for a developer test save (`VANILLA_start.eu4`) for a
   self-test; if it isn't there, it logs that and moves on. (If you run `strings` on the DLL
   you will find that save's path from the development machine embedded; the lookup is
@@ -148,44 +169,61 @@ Worth knowing before your file monitor tells you:
 ## Uninstall
 
 Disabling the mod in the launcher is already a complete off switch: the DLL stays dormant and
-the game runs plain vanilla. To remove it, delete `version.dll` from the game folder and
+the game runs plain vanilla. To remove it, delete `d3dx9_43.dll` from the game folder and
 disable the mod in the launcher. Nothing is
 patched on disk and the executable is never modified. Saves made with the mod are expected to
 load fine without it; trade reverts to vanilla's rules (merchants you'd placed on reverse
 ends come back steering vanilla's first outgoing link).
 
 For a spotless removal, also delete the leftovers, all inert: `per-good-trade.log` and any
-`pgt.*` marker files in the game folder, `%TEMP%\pgt_version_orig.dll`, the `.eu4.pgt`
+`pgt.*` marker files in the game folder, `%TEMP%\pgt_d3dx9_orig.dll`, the `.eu4.pgt`
 sidecars beside your saves, the `pgt` folder + `pgt.mod` in your mod directory, and, if you
 ran the optional tile-art script, `.launcher-cache\local-mod-thumbnail-pgt` next to the mod
-directory.
+directory. Leave `version.dll`, `d3d9.dll` and the `plugins\` folder alone if your double-byte
+patch installed them — they are its files, not the mod's.
 
-## Why a file called `version.dll`
+## Why a file called `d3dx9_43.dll`
 
-EU4 imports Windows' `version.dll` at startup, and Windows looks in the game folder before
-the system folder. Naming the mod `version.dll` means the game loads it on its own. That is
-the entire trick, and it is why there is nothing to run or inject.
+EU4 imports Windows' `d3dx9_43.dll` at startup (eight functions: `D3DXCompileShader`,
+`D3DXCreateCubeTexture`, `D3DXCreateLine`, `D3DXCreateTexture`, `D3DXLoadSurfaceFromMemory`,
+`D3DXLoadSurfaceFromSurface`, `D3DXSaveSurfaceToFileInMemory`,
+`D3DXSaveTextureToFileInMemory`), and Windows looks in the game folder before the system
+folder. Naming the mod `d3dx9_43.dll` means the game loads it on its own. That is the entire
+trick, and it is why there is nothing to run or inject.
 
-The mod still has to *provide* the seventeen functions a real `version.dll` exports (the game
-itself imports three of them). It does that at runtime, forwarding every call to the private
-`%TEMP%` copy of the genuine system DLL described above.
+The mod still has to *provide* those eight functions, since the game binds them by name. It
+does that at runtime, forwarding every call to the private `%TEMP%` copy of the genuine
+system DLL described above.
+
+*Why not `version.dll`, as v1.0.x shipped?* Because that name is how the double-byte font
+patches (EU4DLL and its kin) load, and two files called `version.dll` cannot both win the
+slot. The Epic-store build of this mod already faced exactly this and moved to `d3dx9_43.dll`;
+the Steam build now uses the same slot, so the same game directory can hold the font patch
+and this mod without either knowing the other exists. If you are updating from a v1.0.x
+release (`version.dll`), delete the old file, install `d3dx9_43.dll`, and delete any
+`plugins\per-good-trade.dll` a dev deployment left behind.
 
 *(If you used an earlier build, it required you to hand-copy the system DLL into the game
-folder as `pgt_version_orig.dll`. The shipped mod no longer needs that; delete it. The
-developer install script `install-proxy.ps1` still sets up the legacy pair; that's fine on a
-dev machine.)*
+folder as `pgt_version_orig.dll`. The shipped mod no longer needs that; delete it.)*
 
 ## Troubleshooting
 
-**The game never opens: no window, no loading screen.** The `version.dll` you installed is
+**The game never opens: no window, no loading screen.** The `d3dx9_43.dll` you installed is
 not this mod, or it is a 32-bit or corrupted copy. Replace it; the log's first line reports
-`17/17 exports resolved` when the file is good.
+`8/8 exports resolved` when the file is good. (A game-directory `d3dx9_43.dll` from some
+other tool would break the game the same way regardless of this mod — the file name is a
+shared slot.)
 
 **Trade looks exactly like vanilla.** In likeliest order: the mod isn't enabled in the
 launcher (the log ends with `DORMANT` and says so: that is the off switch working, not a
-fault); `version.dll` isn't in the game folder or wasn't loaded (then there is no
+fault); `d3dx9_43.dll` isn't in the game folder or wasn't loaded (then there is no
 `per-good-trade.log` at all); or the build check refused a patched executable (the log says
 so).
+
+**The log's first line says `[SELF-COLLISION ...]` or a count below 8.** The proxy failed to
+reach the real System32 DLL; the log names the failure. If the game still opens, the D3DX
+imports are being served by the fallback stubs (returns zeros) — replace the file from the
+release and relaunch.
 
 **It stopped working after a Steam update.** The build check is refusing a patched
 executable. Roll back to 1.37.5 through Steam's beta branches (steps under Requirements).
@@ -223,14 +261,14 @@ DLL, so you can verify a release binary instead of trusting it. The release hash
 
 | file | SHA-256 |
 |---|---|
-| `version.dll` (this release, v1.0.1) | `bb8e83d0de2c8599fd80dc09eb7c23d49275a47db5d9bb109c0e9b3581315415` |
-| `version.dll` (v1.0) | `ce1e948ab357b7e8a69e2f37ca3160dbaa9286857a9f6ae86f316c0883ed7716` |
+| `d3dx9_43.dll` (proxy-slot release) | *(hash of the release build; see the release notes)* |
+| `version.dll` (v1.0.1, legacy version-slot release) | `bb8e83d0de2c8599fd80dc09eb7c23d49275a47db5d9bb109c0e9b3581315415` |
 | `eu4.exe` 1.37.5 (what the gate pins) | `9ad3efe1af169f40ee577f9dae5debbc87af6fb8b5450fb345ebf110dc4d771a` |
 
 Hash what you installed, then build your own and compare:
 
 ```powershell
-Get-FileHash "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV\version.dll" -Algorithm SHA256
+Get-FileHash "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV\d3dx9_43.dll" -Algorithm SHA256
 
 winget install MartinStorsjo.LLVM-MinGW.UCRT     # toolchain, once
 cd impl\dll
@@ -239,7 +277,7 @@ Get-FileHash "$env:TEMP\per-good-trade-build\per-good-trade.dll" -Algorithm SHA2
 ```
 
 Equal hashes mean the binary is exactly this source. To install your own build, rename
-`per-good-trade.dll` to `version.dll` and drop it in the game folder. (Hash the installed
+`per-good-trade.dll` to `d3dx9_43.dll` and drop it in the game folder. (Hash the installed
 file *before* building: the script also copies its output over `impl\dll\per-good-trade.dll`.)
 
 One caveat: byte-identity holds per toolchain. The release was built with

@@ -350,7 +350,7 @@ Record results against the probe numbers so the spec's §2.7/§2.9 open counts c
 ## J. Opening state, node-window controls, persistence (user rules of 2026-08-26; pgt_i27)
 
 Run with the DLL in the process BEFORE the campaign loads (`run.sh` injects at the main menu;
-`install-proxy.ps1` installs it as version.dll). Each test names the log line that measures it.
+`install-proxy.ps1` installs it as d3dx9_43.dll). Each test names the log line that measures it.
 
 - **J1 ★ Set up at 11 November 1444.** New game as Castile. Before unpausing: the outliner's merchant
   rows read "... to Sevilla" (none say Collects), the trade map shows reverse panels, and Genoa's

@@ -1,9 +1,10 @@
 // per-good-trade.dll -- the runtime-attached mod (spec 2.1, 2.5). Loaded into eu4.exe (build
 // 835bfdf8) via the d3dx9_43.dll proxy (proxy.h + d3dx9_43.def), following the EU4dll precedent.
 // The proxy slot is d3dx9_43.dll since v1.0.2 (v1.0 and v1.0.1 used version.dll), NOT
-// version.dll/d3d9.dll, which belong to the double-byte (CJK font) patches -- so both families
-// of proxy DLLs coexist in one game directory (INSTALL.md). stalecheck.h warns when an old
-// version.dll build is still present, because it would load first and own the process.
+// version.dll/d3d9.dll, which belong to the double-byte (CJK font) patches -- so the two proxies
+// take different names and should coexist in one game directory (reported by the contributor,
+// not reproduced here; INSTALL.md). stalecheck.h warns when an old version.dll build is still
+// present, because it would load first and own the process.
 //
 // On attach, in order:
 //   1. Build gate (spec 2.5): verify this is the frozen 1.37.5 build via BOTH the in-memory
@@ -210,8 +211,17 @@ static bool run_install(const std::string& logpath) {
         save::SaveData sd;                   // empty when no baseline file is present
         bool have_save = !save.empty() && GetFileAttributesA(save.c_str()) != INVALID_FILE_ATTRIBUTES;
         if (have_save) {
-            sd = save::load(save);
-            log << "  baseline save loaded: " << save << "\n";
+            try {
+                sd = save::load(save);
+                log << "  baseline save loaded: " << save << "\n";
+            } catch (const std::exception& e) {
+                // present but unreadable (a placeholder, a truncated copy, a binary save): not a
+                // reason to leave the player without a plan -- fall back to the live world read
+                log << "  baseline save present but unreadable (" << e.what()
+                    << "): installing from the LIVE world read instead\n";
+                sd = save::SaveData();
+                have_save = false;
+            }
         } else {
             log << "  no developer baseline save at " << save
                 << ": installing from the LIVE world read (naming via the engine's own "
@@ -279,8 +289,8 @@ static bool run_install(const std::string& logpath) {
                 << " DISAGREED with the key, " << nm.spurious << " spurious, " << nm.unnamed
                 << " unnamed (the sentinel), " << nm.duplicates << " DUPLICATE names" << (char)10;
         else   // no reference set to fingerprint against; every live node would count as "spurious"
-            log << "skipped (no baseline save; the definition key is authoritative), " << nm.unnamed
-                << " unnamed (the sentinel), " << nm.duplicates << " DUPLICATE names" << (char)10;
+            log << "skipped (no baseline save; the definition key is authoritative), "
+                << nm.duplicates << " DUPLICATE names" << (char)10;   // unnamed is counted only by the fingerprint match
 
         // gather live inject into FIELD index order, BY NAME (the index-mismatch fix)
         int goods_count = 0, matched = 0;
@@ -903,7 +913,7 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
         {   // Logged HERE, before the build-hash gate can refuse and return: the proxy is what keeps
             // the process alive at all, so its status must never depend on the mod choosing to run.
             std::ofstream pl(livetrade::self_dir() + "\\per-good-trade.log", std::ios::app);
-            pl << "d3dx9_43 proxy: " << proxy::g_resolved << "/8 exports resolved from "
+            pl << "d3dx9_43 proxy: " << proxy::g_resolved << "/" << proxy::EXPORT_COUNT << " exports resolved from "
                << (proxy::g_private_path.empty() ? std::string("(no private copy)") : proxy::g_private_path)
                << (proxy::g_loaded ? "" : "  [FAILED TO LOAD THE REAL DLL]")
                << (proxy::g_self_collision ? "  [SELF-COLLISION DETECTED AND REFUSED]" : "") << (char)10;
@@ -922,9 +932,10 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
                << (proxy::g_loaded ? "" : "; the real System32 d3dx9_43.dll did not load")
                << (proxy::g_self_collision ? "; LoadLibrary returned this DLL itself" : "")
                << "). A stubbed D3DX call would report success and do nothing, so the game is stopped "
-                  "here instead: Windows reports that eu4.exe was unable to start. Reinstall "
-                  "d3dx9_43.dll from the release; if System32\\d3dx9_43.dll itself is missing, "
-                  "reinstall the DirectX End-User Runtime." << (char)10;
+                  "here instead: Windows reports that eu4.exe was unable to start. Remedy: reinstall "
+                  "d3dx9_43.dll from the release; if System32\\d3dx9_43.dll itself is missing or "
+                  "damaged, reinstall the DirectX End-User Runtime. Deleting d3dx9_43.dll from the game "
+                  "folder returns the game to vanilla." << (char)10;
             return FALSE;
         }
 
@@ -940,7 +951,10 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
                 pl << "STALE INSTALL: " << old << " has export name per-good-trade.dll (an older build of "
                       "this mod). eu4.exe loads it before this d3dx9_43.dll, so the OLD build owns the "
                       "process and this copy stays inert. Delete version.dll from the game folder." << (char)10;
-                if (livetrade::feature_on("STALEBOX"))   // pgt.NOSTALEBOX: developers' unattended probes
+                // The box only when the mod is armed: with Mare Liberum unchecked in the launcher the
+                // off switch stays silent (the launcher gate, DEPARTURES.md); the log line above is
+                // unconditional. pgt.NOSTALEBOX suppresses the box for developers' unattended probes.
+                if (livetrade::feature_on("STALEBOX") && (pgt_mod_enabled() || livetrade::marker_present("FORCEDLL")))
                     stalecheck::warn_later("An older Mare Liberum build is still installed as\n" + old +
                         "\n\nEU4 loads it before d3dx9_43.dll, so the OLD build is the one running and "
                         "this d3dx9_43.dll stays inert.\n\nQuit, delete version.dll from the game folder "

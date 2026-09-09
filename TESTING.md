@@ -729,15 +729,16 @@ not less. Home still dominates, which is correct and not a defect: light ships p
 country COLLECTS, and vanilla behaves the same way. J10's claim is that ships follow the MODEL to
 nodes vanilla would never pick, and ~28-31% of power sits away from home to do it.
 
-## Install without the developer save, and the d3dx9_43 slot (2026-09-09, PR #1 review)
+## Install without the developer save, and the d3dx9_43 slot (2026-09-09, PR #1 review, v1.0.2 build)
 
-Two unattended runs of the campaign-load install, with no game window on screen: `continue_game.json`
+Three unattended runs of the campaign-load install, with no game window on screen: `continue_game.json`
 pointed at `save games/Castile1444_12_22.eu4`, `dlc_load.json` enabling only `mod/pgt.mod`, `eu4.exe
 -continuelastsave` launched detached, the window moved off the desktop, the "Achievements can no
 longer be earned" confirmation dismissed with a hardware Enter keystroke, and the mod's log read for
 the install lines. Both legs ran with `VANILLA_start.eu4` renamed away, which is the state of every
-machine but the developer's: leg one with the v1.0.1 DLL as `version.dll`, leg two with the v1.0.2
-build as `d3dx9_43.dll` and `version.dll` removed.
+machine but the developer's: leg one with the v1.0.1 DLL as `version.dll`; leg two with the PR-head
+build (063c890) as `d3dx9_43.dll` and `version.dll` removed; leg three the same with the release
+binary of v1.0.2 (SHA-256 `42c9e054...`, the file committed as `impl/dll/per-good-trade.dll`).
 
 **v1.0.1 FAIL.** The campaign-load install required the developer's own save at a hard-coded path.
 The log read `install failed: cannot open C:\...\save games\VANILLA_start.eu4` and then `the install
@@ -749,17 +750,20 @@ had touched only the attach-time self-test, whose line became `solver self-test 
 install was a second consumer of the same file.
 
 **v1.0.2 PASS**, installing from the live world read when the save is absent (the contributor's fix).
-Same conditions, the v1.0.2 build:
+Same conditions, the v1.0.2 release binary (leg three):
 
 - `no developer baseline save at C:\...\VANILLA_start.eu4: installing from the LIVE world read (naming via the engine's own definition keys; save-based cross-checks skipped)`
 - `live world read: 4941 provinces seen, 2472 owned, 2472 with a trade good, 33 prices`
 - `USING THE LIVE FIELD (orientation now tracks the campaign; no baseline save, so this is the only field)`
 - `matched 80/80 live nodes to solver nodes by name`
 - `INSTALLED pool+outgoing on 80 nodes, 159 link values (local left intact per B4)`
-- `[earlyload] orientation gen 1 solved in 124 ms; running the driver as tick 1`
-- `[tick] monthly update 1: wrote 80 nodes inside the engine's value pass (pre-division), 232.126 ms`
+- `[earlyload] orientation gen 1 solved in 184 ms; running the driver as tick 1`
+- `[tick] monthly update 1: wrote 80 nodes inside the engine's value pass (pre-division), 240.123 ms`
 
-The campaign opened at Castile, 22 December 1444, on the reoriented map: Castile's Tunis merchant
+Leg two, the PR-head build run first under the same conditions, produced the same lines with 124 ms
+and 232.126 ms; two intermediate maintainer builds of this branch did the same (181 ms and 198.201 ms
+on one of them). Only the two timings differ between runs. The campaign opened at Castile, 22 December
+1444, on the reoriented map: Castile's Tunis merchant
 steering to Valencia. Under the mod's node file Tunis's outgoing links are Valencia and Genoa;
 vanilla's file lists Sevilla first, and that is where the same merchant steers on vanilla's map.
 
@@ -774,10 +778,25 @@ version.dll slot or through `run.sh` injection); this session measured the insta
 first monthly tick. Running beside EU4DLL is reported by the contributor and has not been
 reproduced here.
 
+**Refusal path, live (2026-09-09), two red cases.** (1) The private copy made unusable: a 4 KB garbage
+file at `%TEMP%\pgt_d3dx9_orig.dll`, held open with share mode 0 so `CopyFileA` could not replace it and
+`LoadLibraryA` could not map it. The refusal did NOT fire: the fallback loaded the System32 file
+directly and the log read `d3dx9_43 proxy: 8/8 exports resolved from C:\windows\system32\d3dx9_43.dll
+(system copy; the private copy could not be loaded)`, then a normal dormant attach (the mod was not
+enabled for this run). So the base-name collision measured on the version.dll slot in August does not
+reproduce on this slot, and a bad private copy is not a failure. (2) The refusal itself: a scratch
+build of the same source declaring a ninth export, `D3DXNoSuchExportRedTest`, in both the .def and the
+export list, installed as `d3dx9_43.dll`, launched from a process whose `SetErrorMode` suppressed the
+loader's hard-error box. The process ended in 0.9 s with exit code 0xC0000142 (STATUS_DLL_INIT_FAILED),
+no dialog appeared, and the log read `d3dx9_43 proxy: 8/9 exports resolved from ...\pgt_d3dx9_orig.dll`
+then `REFUSING TO LOAD: this proxy cannot stand in for d3dx9_43.dll (8/9 exports resolved; missing:
+D3DXNoSuchExportRedTest). A stubbed D3DX call would report success and do nothing, so the game is
+stopped here instead: ...`. The shipped build was then reinstalled. PASS.
+
 **Stale version.dll guard, live (2026-09-09).** Attach-only run with the v1.0.1 `version.dll` left in
 place, the v1.0.2 build added as `d3dx9_43.dll`, and `pgt.NOSTALEBOX` set. The log, in order:
 `version.dll proxy: 17/17 exports resolved ...`, the old build's attach through `=== attach complete
-===`, then `d3dx9_43 proxy: 8/8 exports resolved from ...\pgt_d3dx9_orig.dll` and `STALE INSTALL:
+(livetrade worker spawned) ===`, then `d3dx9_43 proxy: 8/8 exports resolved from ...\pgt_d3dx9_orig.dll` and `STALE INSTALL:
 C:\...\version.dll has export name per-good-trade.dll (an older build of this mod). eu4.exe loads it
 before this d3dx9_43.dll, so the OLD build owns the process and this copy stays inert. Delete
 version.dll from the game folder.` One attach in the log, the old build's; the new copy stayed

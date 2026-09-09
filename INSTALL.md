@@ -210,8 +210,8 @@ the new file stays inert. The mod checks for exactly that at startup. If it find
 of this mod), it logs `STALE INSTALL: ...\version.dll has export name per-good-trade.dll (an
 older build of this mod). eu4.exe loads it before this d3dx9_43.dll, so the OLD build owns
 the process and this copy stays inert. Delete version.dll from the game folder.` and shows a
-message box saying the same. A font patch's `version.dll` has a different export name and
-does not trigger it. Also delete a leftover `pgt_version_orig.dll` if you find one: earlier
+message box saying the same. The check never looks at the file name: a font patch's
+`version.dll` would have to carry this mod's export name to trigger it. Also delete a leftover `pgt_version_orig.dll` if you find one: earlier
 builds asked you to hand-copy the system DLL into the game folder under that name, and
 `%TEMP%\pgt_version_orig.dll` is v1.0.x's private copy. Both are inert now.
 
@@ -232,8 +232,11 @@ d3dx9_43 proxy: N/8 exports resolved ...
 REFUSING TO LOAD: this proxy cannot stand in for d3dx9_43.dll (N/8 exports resolved; missing: ...). A stubbed D3DX call would report success and do nothing, so the game is stopped here instead ...
 ```
 
-Reinstall `d3dx9_43.dll` from the release; if `C:\Windows\System32\d3dx9_43.dll` is itself
-missing, reinstall the DirectX End-User Runtime.
+Remedy: reinstall `d3dx9_43.dll` from the release; if `C:\Windows\System32\d3dx9_43.dll` is itself
+missing or damaged, reinstall the DirectX End-User Runtime. A private copy in `%TEMP%` that cannot
+be loaded is not a cause: the DLL then loads the System32 file directly and its first log line says
+so (`... (system copy; the private copy could not be loaded)`). Deleting `d3dx9_43.dll` from the
+game folder returns the game to vanilla.
 
 **Trade looks exactly like vanilla.** In likeliest order: the mod isn't enabled in the
 launcher (the log ends with `DORMANT` and says so: that is the off switch working, not a
@@ -301,7 +304,7 @@ DLL, so you can verify a release binary instead of trusting it. The release hash
 
 | file | SHA-256 |
 |---|---|
-| `d3dx9_43.dll` (this release, v1.0.2) | (filled in at release) |
+| `d3dx9_43.dll` (this release, v1.0.2) | `42c9e05491ccca218e7b47f2b2637ae84f5d9341ae268e188aa98844e77d9952` |
 | `version.dll` (v1.0.1, legacy version-slot release) | `bb8e83d0de2c8599fd80dc09eb7c23d49275a47db5d9bb109c0e9b3581315415` |
 | `version.dll` (v1.0, legacy version-slot release) | `ce1e948ab357b7e8a69e2f37ca3160dbaa9286857a9f6ae86f316c0883ed7716` |
 | `eu4.exe` 1.37.5 (what the gate pins) | `9ad3efe1af169f40ee577f9dae5debbc87af6fb8b5450fb345ebf110dc4d771a` |

@@ -16,8 +16,8 @@
 // game-directory copy before the System32 one. The switch was contributed in PR #1
 // (2026-09-09) and ships as v1.0.2.
 //
-// Each export is a two-instruction stub that jumps through a pointer we fill in during DllMain,
-// from the real DLL loaded by ABSOLUTE path out of the system directory. No copy, no
+// Each export is a one-instruction stub (a 6-byte indirect jmp) through a pointer we fill in during
+// DllMain, from the real DLL loaded by ABSOLUTE path out of the system directory. No copy, no
 // second file, no name that can collide with our own. The stubs carry no signatures on purpose: a
 // tail jump preserves every register and the stack frame exactly, so it forwards any calling
 // convention.
@@ -45,16 +45,17 @@ namespace proxy {
     X(D3DXSaveSurfaceToFileInMemory)\
     X(D3DXSaveTextureToFileInMemory)
 
-extern "C" {
-#define PGT_DECL_PTR(n) void* pgt_fwd_##n = nullptr;
-PGT_D3DX_EXPORTS(PGT_DECL_PTR)
-#undef PGT_DECL_PTR
-}
-
-// A call that arrives before init() must not jump to null. Unreached in practice -- DllMain runs
+// A call that arrives before init() must not jump through a null pointer, so every forwarding
+// pointer STARTS at this stub (below) rather than at nullptr. Unreached in practice -- DllMain runs
 // before eu4.exe's own code -- and never the steady state: a name init() cannot resolve makes
 // DllMain refuse the load (complete() below), so no D3DX import is ever served by this stub.
 extern "C" unsigned long long pgt_fwd_unavailable(void) { return 0; }
+
+extern "C" {
+#define PGT_DECL_PTR(n) void* pgt_fwd_##n = (void*)&pgt_fwd_unavailable;
+PGT_D3DX_EXPORTS(PGT_DECL_PTR)
+#undef PGT_DECL_PTR
+}
 
 #define PGT_STUB(n) \
     asm(".text\n.globl " #n "\n" #n ":\n  jmp *pgt_fwd_" #n "(%rip)\n");
@@ -68,25 +69,25 @@ constexpr int EXPORT_COUNT = 0 PGT_D3DX_EXPORTS(PGT_COUNT_ONE);   // 8, derived 
 inline int g_resolved = 0;
 inline bool g_loaded = false;
 inline bool g_self_collision = false;
-inline std::string g_private_path;
+inline std::string g_private_path;    // the file the exports were actually resolved from, for the log
 inline std::string g_unresolved;      // the names GetProcAddress did not find, space-separated, for the log
 
-// Called first thing in DllMain. LoadLibrary under the loader lock is the standard proxy pattern
-// (EU4DLL's version.dll does the same). The real d3dx9_43.dll imports msvcrt, GDI32, KERNEL32 and
-// ADVAPI32 (llvm-objdump -p on the System32 copy); the loader maps whatever is not yet present.
+// Called first thing in DllMain. LoadLibrary under the loader lock is the standard proxy pattern.
+// The real d3dx9_43.dll imports msvcrt, GDI32, KERNEL32 and ADVAPI32 (llvm-objdump -p on the
+// System32 copy); the loader maps whatever is not yet present.
 inline void init() {
     char sysdir[MAX_PATH] = {0};
     UINT n = GetSystemDirectoryA(sysdir, MAX_PATH);
     if (!n || n >= MAX_PATH) return;
     std::string sys = std::string(sysdir) + "\\d3dx9_43.dll";
 
-    // WE ARE NAMED d3dx9_43.dll, AND THAT POISONS LoadLibrary. The loader matches an already-
-    // loaded module by BASE NAME before it considers the path, so LoadLibraryA("C:\Windows\
-    // System32\d3dx9_43.dll") hands back OUR OWN handle. GetProcAddress then returns our stubs,
-    // each stub jumps through a pointer to itself, and the first D3DX call the game makes
-    // recurses until the process dies (measured on the version.dll slot, 2026-08-28: a clean
-    // attach, then silent death before any campaign, no crash dump). Load the real DLL under a
-    // name that cannot collide instead.
+    // A PRIVATE COPY FIRST. On the version.dll slot (2026-08-28) LoadLibraryA of the full System32
+    // path handed back OUR OWN module: the stubs then pointed at themselves and the first version
+    // API call recursed until the process died silently. So the real DLL is loaded under a name
+    // that cannot collide. On the d3dx9_43 slot the collision did NOT reproduce: with the private
+    // copy locked and unreadable (measured 2026-09-09) the fallback below loaded the real System32
+    // file and resolved 8/8. Both paths stay: the copy is the first choice, the direct load is a
+    // real second chance, and a self-collision, should it happen, is still refused.
     char tmp[MAX_PATH] = {0};
     DWORD tn = GetTempPathA(MAX_PATH, tmp);
     HMODULE h = nullptr;
@@ -96,9 +97,12 @@ inline void init() {
         // existing file is equally good -- it is the same system DLL.
         CopyFileA(sys.c_str(), priv.c_str(), FALSE);
         h = LoadLibraryA(priv.c_str());
-        g_private_path = priv;
+        if (h) g_private_path = priv;
     }
-    if (!h) h = LoadLibraryA(sys.c_str());        // last resort; guarded below
+    if (!h) {                                     // last resort; guarded below. When THIS module is
+        h = LoadLibraryA(sys.c_str());            // named d3dx9_43.dll the loader hands back our own
+        if (h) g_private_path = sys + " (system copy; the private copy could not be loaded)";
+    }
 
     // Never accept our own module, whatever route produced it: that is the recursion above.
     HMODULE self = nullptr;

@@ -11,7 +11,7 @@ Injected into a running `eu4.exe` (build 835bfdf8), the DLL (measured on the v1.
    null sentinel at slot 0 (spec §1.8's `inject_g(n)`);
 3. **solves all 29 per-good graphs** and routes each good's value along its own graph
    (routed world value 1241.91);
-4. **writes the routed economy back into the engine's node fields** (81 nodes) — the change is
+4. **writes the routed economy back into the engine's node fields** (80 nodes; the 81st array slot is the null sentinel) — the change is
    visible in EU4's own trade-node window;
 5. **re-installs on every monthly trade tick** (spec §2.6's cadence), verified over repeated
    ticks with the game running normally.

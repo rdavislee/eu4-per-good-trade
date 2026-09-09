@@ -75,26 +75,20 @@ Two things to know:
 - A mod that sits in your mod folder as a `.zip` is skipped (the log names it). Workshop
   mods arrive unpacked; if one of yours is still zipped, unzip it in place.
 
-### Double-byte (CJK font) patches, e.g. EU4DLL — supported, no special steps
+### Double-byte (CJK font) patches, e.g. EU4DLL — designed to coexist
 
 The mod deliberately does **not** use the `version.dll` or `d3d9.dll` file names. Those two
-slots are how the double-byte font patches (EU4DLL and its kin) load themselves — they sit in
-the game folder at those names and pull their plugins from the `plugins\` folder. This mod
+slots are how the double-byte font patches (EU4DLL and its kin) load themselves. This mod
 instead stands in as **`d3dx9_43.dll`**, which `eu4.exe` also imports at startup (eight
-functions, same on Steam and Epic), which no font patch claims, and which Windows resolves
-from the game folder before the System32 copy. Result: both families of proxy DLLs load in
-the same process and never notice each other — the same arrangement the Epic-store build of
-this mod uses. Install them side by side and each works exactly as if it were alone:
+functions, on the Steam 1.37.5 build), which no font patch claims, and which Windows resolves
+from the game folder before the System32 copy. So the two proxies take different names and
+should load in the same process without contending for one. That is the design; the running
+pair is **reported by the contributor who moved the mod to this slot, and not yet reproduced
+by the maintainer**, so treat coexistence as reported rather than measured. To try it:
 
-- keep whatever `version.dll` / `d3d9.dll` / `plugins\*` your font patch installed (never
-  overwrite them with this mod's file);
-- add `d3dx9_43.dll` (this mod) next to `eu4.exe`;
-- if you previously installed this mod the old way, as `plugins\per-good-trade.dll` under the
-  font patch's plugin loader, **delete that copy first**: the plugin-folder copy attaches
-  before `d3dx9_43.dll` in the import order, and a second copy of the mod in one process stays
-  inert by design — the logs get confusing and the mod ends up depending on the font patch's
-  loader. The proxy install (`d3dx9_43.dll` in the game folder) is self-sufficient; the font
-  patch's loader is not needed for it.
+- keep whatever `version.dll` / `d3d9.dll` your font patch installed (never overwrite them
+  with this mod's file);
+- add `d3dx9_43.dll` (this mod) next to `eu4.exe`.
 
 ## Check that it worked
 
@@ -159,9 +153,15 @@ Worth knowing before your file monitor tells you:
   refreshed each launch, loaded by absolute path; that's how the proxy forwards the game's
   D3DX calls. Safe to delete any time.
 - At startup the DLL also looks for a developer test save (`VANILLA_start.eu4`) for a
-  self-test; if it isn't there, it logs that and moves on. (If you run `strings` on the DLL
-  you will find that save's path from the development machine embedded; the lookup is
-  read-only and skips silently on yours.)
+  self-test; if it isn't there, it logs that and moves on. Since **v1.0.2** the campaign-load
+  install treats it the same way: with no such save it reads the live game instead
+  (`installing from the LIVE world read`) and installs from that (the install fix, like the
+  slot change, was contributed in PR #1). In v1.0 and v1.0.1 the install itself required that
+  save and failed without it, so the per-good economy, the monthly re-solve and the
+  reverse-end merchants never ran on any machine but the developer's; only the re-declared
+  trade map applied (see *Troubleshooting*). (If you run `strings` on the DLL you will find
+  that save's path from the development machine embedded; the lookup is read-only and skips
+  silently on yours.)
 - **No network activity, ever.** The DLL opens no sockets and makes no HTTP calls. The
   source is in `impl/`; grep it for `WinHttp`, `InternetOpen` or `WSAStartup` and find
   nothing.
@@ -179,8 +179,8 @@ For a spotless removal, also delete the leftovers, all inert: `per-good-trade.lo
 `pgt.*` marker files in the game folder, `%TEMP%\pgt_d3dx9_orig.dll`, the `.eu4.pgt`
 sidecars beside your saves, the `pgt` folder + `pgt.mod` in your mod directory, and, if you
 ran the optional tile-art script, `.launcher-cache\local-mod-thumbnail-pgt` next to the mod
-directory. Leave `version.dll`, `d3d9.dll` and the `plugins\` folder alone if your double-byte
-patch installed them — they are its files, not the mod's.
+directory. Leave `version.dll` and `d3d9.dll` alone if your double-byte patch installed
+them — they are its files, not the mod's.
 
 ## Why a file called `d3dx9_43.dll`
 
@@ -195,24 +195,45 @@ The mod still has to *provide* those eight functions, since the game binds them 
 does that at runtime, forwarding every call to the private `%TEMP%` copy of the genuine
 system DLL described above.
 
-*Why not `version.dll`, as v1.0.x shipped?* Because that name is how the double-byte font
-patches (EU4DLL and its kin) load, and two files called `version.dll` cannot both win the
-slot. The Epic-store build of this mod already faced exactly this and moved to `d3dx9_43.dll`;
-the Steam build now uses the same slot, so the same game directory can hold the font patch
-and this mod without either knowing the other exists. If you are updating from a v1.0.x
-release (`version.dll`), delete the old file, install `d3dx9_43.dll`, and delete any
-`plugins\per-good-trade.dll` a dev deployment left behind.
+*Why not `version.dll`?* Because that is the name v1.0 and v1.0.1 shipped under, and it is
+also how the double-byte font patches (EU4DLL and its kin) load themselves, along with
+`d3d9.dll`. Two files called `version.dll` cannot both win the slot, so those releases could
+not sit in a game folder beside a font patch. v1.0.2 moved to `d3dx9_43.dll`, which no font
+patch claims; the move was contributed in PR #1.
 
-*(If you used an earlier build, it required you to hand-copy the system DLL into the game
-folder as `pgt_version_orig.dll`. The shipped mod no longer needs that; delete it.)*
+**Upgrading from v1.0 or v1.0.1.** Delete the mod's own `version.dll` from the game folder (a
+font patch's file of the same name is a different file: see below), then add `d3dx9_43.dll`.
+Deleting the old file is not optional: `eu4.exe` binds `VERSION.dll` before
+`d3dx9_43.dll`, so with both present the old build loads first and owns the process while
+the new file stays inert. The mod checks for exactly that at startup. If it finds a
+`version.dll` in the game folder whose export name is `per-good-trade.dll` (any older build
+of this mod), it logs `STALE INSTALL: ...\version.dll has export name per-good-trade.dll (an
+older build of this mod). eu4.exe loads it before this d3dx9_43.dll, so the OLD build owns
+the process and this copy stays inert. Delete version.dll from the game folder.` and shows a
+message box saying the same. A font patch's `version.dll` has a different export name and
+does not trigger it. Also delete a leftover `pgt_version_orig.dll` if you find one: earlier
+builds asked you to hand-copy the system DLL into the game folder under that name, and
+`%TEMP%\pgt_version_orig.dll` is v1.0.x's private copy. Both are inert now.
 
 ## Troubleshooting
 
-**The game never opens: no window, no loading screen.** The `d3dx9_43.dll` you installed is
-not this mod, or it is a 32-bit or corrupted copy. Replace it; the log's first line reports
-`8/8 exports resolved` when the file is good. (A game-directory `d3dx9_43.dll` from some
-other tool would break the game the same way regardless of this mod — the file name is a
-shared slot.)
+**The game never opens: no window, no loading screen.** Two causes. Either the
+`d3dx9_43.dll` you installed is not this mod, or it is a 32-bit or corrupted copy: replace
+it; the log's first line reports `8/8 exports resolved` when the file is good. (A
+game-directory `d3dx9_43.dll` from some other tool would break the game the same way
+regardless of this mod — the file name is a shared slot.) Or the mod refused to load. Since
+v1.0.2 it will not stand in for `d3dx9_43.dll` unless it resolved all eight functions from
+the real system DLL, because a stubbed D3DX call returns success to the engine and does
+nothing. Windows then puts up its own dialog, *"The application was unable to start correctly
+(0xc0000142)"*, and the log's first lines say why:
+
+```
+d3dx9_43 proxy: N/8 exports resolved ...
+REFUSING TO LOAD: this proxy cannot stand in for d3dx9_43.dll (N/8 exports resolved; missing: ...). A stubbed D3DX call would report success and do nothing, so the game is stopped here instead ...
+```
+
+Reinstall `d3dx9_43.dll` from the release; if `C:\Windows\System32\d3dx9_43.dll` is itself
+missing, reinstall the DirectX End-User Runtime.
 
 **Trade looks exactly like vanilla.** In likeliest order: the mod isn't enabled in the
 launcher (the log ends with `DORMANT` and says so: that is the off switch working, not a
@@ -220,23 +241,42 @@ fault); `d3dx9_43.dll` isn't in the game folder or wasn't loaded (then there is 
 `per-good-trade.log` at all); or the build check refused a patched executable (the log says
 so).
 
+**A message box says an old `version.dll` is still installed.** Exactly what it says: a
+`version.dll` from v1.0 or v1.0.1 is still in the game folder. `eu4.exe` loads it before
+`d3dx9_43.dll`, so the old build owns the process and this one stays inert. Without the box
+the symptom is subtle: the arrows still differ from vanilla, because the trade-node data
+applies either way, but the per-good view and the monthly re-solve are missing. Quit, delete
+`version.dll` from the game folder, start again. The log carries the same finding on a line
+starting `STALE INSTALL:`.
+
 **The log's first line says `[SELF-COLLISION ...]` or a count below 8.** The proxy failed to
-reach the real System32 DLL; the log names the failure. If the game still opens, the D3DX
-imports are being served by the fallback stubs (returns zeros) — replace the file from the
-release and relaunch.
+reach the real System32 DLL; the log names the failure. Since v1.0.2 the game does not open
+at all in that case: see *The game never opens* above for the dialog and the remedy.
 
 **It stopped working after a Steam update.** The build check is refusing a patched
 executable. Roll back to 1.37.5 through Steam's beta branches (steps under Requirements).
 
-**The log mentions the developer save `VANILLA_start.eu4`.** At startup the DLL looks for an
-optional developer baseline save to self-test against; on every machine but the developer's
-it isn't there, the test is skipped, and the attach continues with every hook installing
-(verified: the next lines run through `=== attach complete ===` normally). Since v1.0.1 the
-line says so plainly: `solver self-test skipped: no developer baseline save on this machine
-(normal; nothing is wrong)`. The original v1.0 build logged the same harmless situation as
-`solver self-test FAILED: cannot open ...` with a OneDrive path from the development machine;
-despite the wording it was never the reason an install fails. Either way, keep reading the
-log for the actual cause.
+**The log mentions the developer save `VANILLA_start.eu4`.** The DLL looks for a developer
+baseline save twice: at startup, to self-test the solver against, and at campaign load, for
+the trade field, the node names and the price table. On every machine but the developer's it isn't
+there. In **v1.0.2 that is harmless both times**. The self-test is skipped (`solver self-test
+skipped: no developer baseline save on this machine (normal; nothing is wrong)`) and the
+attach continues with every hook installing, through `=== attach complete ===`; the install
+then reads the running game instead, logging
+
+```
+no developer baseline save at C:\...\VANILLA_start.eu4: installing from the LIVE world read ...
+```
+
+and going on to `INSTALLED pool+outgoing on 80 nodes, ...`. In **v1.0 and v1.0.1 it was not
+harmless**: the install itself needed that save, so their logs read `install failed: cannot
+open C:\...\save games\VANILLA_start.eu4` and then `the install did not produce a ready plan:
+claim released; nothing acts until the next campaign load`, and the per-good economy, the
+monthly re-solve and the reverse-end merchants never ran on any machine but the developer's.
+Only the re-declared trade map still applied, which is why it looked like the mod was
+working. (The self-test wording differed too: v1.0 logged the skip as `solver self-test
+FAILED: cannot open ...`, and v1.0.1 fixed that wording only, not the install.) Upgrading to
+v1.0.2 is the fix.
 
 **The game crashes.** The mod writes `pgt_crash.log` in the game folder saying where. The
 fastest diagnosis is bisection: the `pgt.NO*` switches under *For developers* turn the mod's
@@ -261,8 +301,9 @@ DLL, so you can verify a release binary instead of trusting it. The release hash
 
 | file | SHA-256 |
 |---|---|
-| `d3dx9_43.dll` (proxy-slot release) | *(hash of the release build; see the release notes)* |
+| `d3dx9_43.dll` (this release, v1.0.2) | (filled in at release) |
 | `version.dll` (v1.0.1, legacy version-slot release) | `bb8e83d0de2c8599fd80dc09eb7c23d49275a47db5d9bb109c0e9b3581315415` |
+| `version.dll` (v1.0, legacy version-slot release) | `ce1e948ab357b7e8a69e2f37ca3160dbaa9286857a9f6ae86f316c0883ed7716` |
 | `eu4.exe` 1.37.5 (what the gate pins) | `9ad3efe1af169f40ee577f9dae5debbc87af6fb8b5450fb345ebf110dc4d771a` |
 
 Hash what you installed, then build your own and compare:
@@ -308,7 +349,8 @@ Feature switches: `pgt.NOAI`, `pgt.NOARROWS`, `pgt.NOTICKHOOK`, `pgt.NOINSTALL`,
 Finer-grained markers: `pgt.NOGATES`, `pgt.NOSHIPS` (vanilla light-ship placement),
 `pgt.NOWRITE` (solve but write nothing: the control-run switch), `pgt.NOCOLOR`,
 `pgt.NOOUTTIP`, `pgt.NOBUTTONS`, `pgt.NOTRANSFERTEXT`, `pgt.NOGATEFILL`, `pgt.NOFIRSTTICK`,
-`pgt.NOREACHC`, `pgt.NOSHARE`. Two are opt-*in*: `pgt.TREASURE` (the unfinished §1.11 fleet
+`pgt.NOREACHC`, `pgt.NOSHARE`, `pgt.NOSTALEBOX` (no message box for a stale `version.dll`;
+the log line still appears). Two are opt-*in*: `pgt.TREASURE` (the unfinished §1.11 fleet
 router: it has crashed on a late-game save; leave it off) and `pgt.FORCEDLL` (arm the DLL even
 when Mare Liberum is not in the enabled mod list, for probe sessions that run without the data
 mod). Bisecting by disabling one hook

@@ -728,3 +728,60 @@ bucket. Now keyed by (country, node), and "steers here" means here.
 not less. Home still dominates, which is correct and not a defect: light ships protect trade where a
 country COLLECTS, and vanilla behaves the same way. J10's claim is that ships follow the MODEL to
 nodes vanilla would never pick, and ~28-31% of power sits away from home to do it.
+
+## Install without the developer save, and the d3dx9_43 slot (2026-09-09, PR #1 review)
+
+Two unattended runs of the campaign-load install, with no game window on screen: `continue_game.json`
+pointed at `save games/Castile1444_12_22.eu4`, `dlc_load.json` enabling only `mod/pgt.mod`, `eu4.exe
+-continuelastsave` launched detached, the window moved off the desktop, the "Achievements can no
+longer be earned" confirmation dismissed with a hardware Enter keystroke, and the mod's log read for
+the install lines. Both legs ran with `VANILLA_start.eu4` renamed away, which is the state of every
+machine but the developer's: leg one with the v1.0.1 DLL as `version.dll`, leg two with the v1.0.2
+build as `d3dx9_43.dll` and `version.dll` removed.
+
+**v1.0.1 FAIL.** The campaign-load install required the developer's own save at a hard-coded path.
+The log read `install failed: cannot open C:\...\save games\VANILLA_start.eu4` and then `the install
+did not produce a ready plan: claim released; nothing acts until the next campaign load`. The plan
+never became ready and the mod was inert: the per-good economy, the monthly re-solve and the
+reverse-end merchants never ran. The data half of the mod, the re-declared `00_tradenodes.txt`, still
+applied, so the trade map did differ from vanilla, which is why this went unnoticed. v1.0.1's own fix
+had touched only the attach-time self-test, whose line became `solver self-test skipped: ...`; the
+install was a second consumer of the same file.
+
+**v1.0.2 PASS**, installing from the live world read when the save is absent (the contributor's fix).
+Same conditions, the v1.0.2 build:
+
+- `no developer baseline save at C:\...\VANILLA_start.eu4: installing from the LIVE world read (naming via the engine's own definition keys; save-based cross-checks skipped)`
+- `live world read: 4941 provinces seen, 2472 owned, 2472 with a trade good, 33 prices`
+- `USING THE LIVE FIELD (orientation now tracks the campaign; no baseline save, so this is the only field)`
+- `matched 80/80 live nodes to solver nodes by name`
+- `INSTALLED pool+outgoing on 80 nodes, 159 link values (local left intact per B4)`
+- `[earlyload] orientation gen 1 solved in 124 ms; running the driver as tick 1`
+- `[tick] monthly update 1: wrote 80 nodes inside the engine's value pass (pre-division), 232.126 ms`
+
+The campaign opened at Castile, 22 December 1444, on the reoriented map: Castile's Tunis merchant
+steering to Valencia. Under the mod's node file Tunis's outgoing links are Valencia and Genoa;
+vanilla's file lists Sevilla first, and that is where the same merchant steers on vanilla's map.
+
+Naming without a save: the goods-signature cross-check does not run, and the log says so,
+`goods-signature cross-check: skipped (no baseline save; the definition key is authoritative)`. With
+the save present, on a developer machine, behaviour is unchanged by design (the save-based field and
+the goods-signature cross-check still run); that leg was not exercised here, both runs had the save
+renamed away.
+
+**Open.** The full ★ suite above has not been re-run on the d3dx9_43 slot (those sessions ran on the
+version.dll slot or through `run.sh` injection); this session measured the install path and the
+first monthly tick. Running beside EU4DLL is reported by the contributor and has not been
+reproduced here.
+
+**Stale version.dll guard, live (2026-09-09).** Attach-only run with the v1.0.1 `version.dll` left in
+place, the v1.0.2 build added as `d3dx9_43.dll`, and `pgt.NOSTALEBOX` set. The log, in order:
+`version.dll proxy: 17/17 exports resolved ...`, the old build's attach through `=== attach complete
+===`, then `d3dx9_43 proxy: 8/8 exports resolved from ...\pgt_d3dx9_orig.dll` and `STALE INSTALL:
+C:\...\version.dll has export name per-good-trade.dll (an older build of this mod). eu4.exe loads it
+before this d3dx9_43.dll, so the OLD build owns the process and this copy stays inert. Delete
+version.dll from the game folder.` One attach in the log, the old build's; the new copy stayed
+inert, as designed. The message box itself was suppressed by the marker and has not been seen
+live. Detection was also checked offline against six files: the v1.0.1 release and the v1.0.2 build
+(both `per-good-trade.dll`), System32's `version.dll` (`VERSION.dll`) and `d3dx9_43.dll`
+(`d3dx9_43.dll`), a text file and a missing path (both empty). Only the mod's own builds match.

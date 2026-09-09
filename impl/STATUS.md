@@ -2,11 +2,13 @@
 
 ## THE MOD RUNS IN THE LIVE GAME
 
-Injected into a running `eu4.exe` (build 835bfdf8), the DLL:
+Injected into a running `eu4.exe` (build 835bfdf8), the DLL (measured on the v1.0.x builds; the
+★ suite has not yet been re-run on v1.0.2's `d3dx9_43.dll` slot):
 1. verifies the build and **runs the full DRAIN solver in-process** (2472 provinces, Φ_w ends
    `{genua, hangzhou}`, all per-tick checks green);
 2. **reads the engine's own per-node/per-good produced quantities** — the 33-slot
-   `trade_goods_size` vector on each of the 81 live `CTradeNode`s (spec §1.8's `inject_g(n)`);
+   `trade_goods_size` vector on each of the 81 live `CTradeNode`s, 80 nodes plus the engine's
+   null sentinel at slot 0 (spec §1.8's `inject_g(n)`);
 3. **solves all 29 per-good graphs** and routes each good's value along its own graph
    (routed world value 1241.91);
 4. **writes the routed economy back into the engine's node fields** (81 nodes) — the change is
@@ -78,10 +80,11 @@ zero-steer candidate never enumerated.
 
 ## DLL scaffold — builds, attaches, gates, runs the solver in-process (`dll/`)
 
-`per-good-trade.dll` (1.7 MB) compiles with the whole solver embedded and exports the
-`version.dll` forwarders so it can inject as that proxy (the EU4dll vector). On attach:
-1. **Build gate** — in-memory `release_1.37.5` pattern scan of the loaded image (EU4dll's own
-   method, `pattern.h`) **and** `eu4_rev.txt` + `eu4.exe` SHA-256. Verified: **refuses** a
+`per-good-trade.dll` (2.6 MB) compiles with the whole solver embedded and exports the eight
+`d3dx9_43.dll` stubs (the slot since v1.0.2; `version.dll` in v1.0.x) so it loads as that proxy.
+On attach, as first recorded (the seams in item 3 were resolved in the sections below):
+1. **Build gate** — in-memory `release_1.37.5` pattern scan of the loaded image (the EU4dll
+   font patch's own method, `pattern.h`) **and** `eu4_rev.txt` + `eu4.exe` SHA-256. Verified: **refuses** a
    non-target host (fails closed), **passes** on the real install.
 2. **Embedded solver self-test** — runs the full DRAIN solve *inside the process*: 2472
    provinces, ends `{hangzhou, genua}`, all per-tick checks green. Same code as the harness, now
@@ -223,7 +226,7 @@ genua -> valencia. H3: tick 123 ms after dropping VirtualProtect from the record
 
 - Setup inside the loading screen (`earlyload.h`): the engine's setup-path trade calls are wrapped;
   install + solve + tick 1 happen before the load returns. `run.sh` injects at the main menu;
-  `install-proxy.ps1` installs the DLL as version.dll for normal launches.
+  `install-proxy.ps1` installs the DLL as `d3dx9_43.dll` for normal launches.
 - Vanilla's opening placement (one collector per capital) is stubbed; capital-parked merchants are
   recalled to the pool; the opening re-placement runs once with the caps lifted.
 - Node window: no collect item, transfer item at END nodes, nothing at home; transfer placements

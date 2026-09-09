@@ -1,42 +1,98 @@
-# Install the mod DLL as the game's version.dll proxy, so it loads WITH eu4.exe and sets the mod up
-# inside the loading screen (earlyload.h) -- no injector, no runner. Also copies the marker files
-# (pgt.*) the DLL reads from its own directory, and removes everything with -Uninstall.
+# Install the mod DLL as the game's d3dx9_43.dll proxy, so it loads WITH eu4.exe and sets the mod
+# up inside the loading screen (earlyload.h) -- no injector, no runner. Also copies the marker
+# files (pgt.*) the DLL reads from its own directory, and removes everything with -Uninstall.
 #
-#   .\install-proxy.ps1 -Dll <path\to\pgt_iNN.dll> [-Markers <dir with pgt.* files>]
+#   .\install-proxy.ps1 -Dll <path\to\per-good-trade.dll> [-Markers <dir with pgt.* files>]
 #   .\install-proxy.ps1 -Uninstall
 #
-# The DLL exports the version.dll forwarders (version.def), so the game's own imports resolve
-# through it to the real system version.dll. Steam's launch options are untouched.
+# THE SLOT IS d3dx9_43.dll (v1.0.2; v1.0 and v1.0.1 used version.dll). version.dll and d3d9.dll
+# belong to the double-byte (CJK font) patches such as EU4DLL, whose loaders sit in the game
+# directory at those names. eu4.exe imports d3dx9_43.dll by name (eight functions), no font patch
+# claims that slot, and Windows loads the game-directory copy before the System32 one, so this mod
+# and a font patch should coexist. Steam's launch options are untouched.
+#
+# Files are recognised as OURS by their PE export-directory name, never by file name: every build
+# of this mod carries "per-good-trade.dll" there (LIBRARY per-good-trade in the .def; lld appends
+# .dll), the same test stalecheck.h applies in the DLL. A d3dx9_43.dll or version.dll with any other
+# export name is somebody else's and is never touched.
+#
+# The real System32 d3dx9_43.dll is NOT copied here: the DLL itself copies it to
+# %TEMP%\pgt_d3dx9_orig.dll at attach and loads that (proxy.h), so install is one file.
 param(
   [string]$Dll = "",
   [string]$Markers = "",
   [switch]$Uninstall
 )
 $game = "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis IV"
-$target = Join-Path $game "version.dll"
-$orig = Join-Path $game "pgt_version_orig.dll"
+$target  = Join-Path $game "d3dx9_43.dll"
+$oldslot = Join-Path $game "version.dll"            # where v1.0 and v1.0.1 installed
+$oldorig = Join-Path $game "pgt_version_orig.dll"   # the pre-v1.0 hand-copied forwarder target
+
+# The export-directory name of a PE file ("" if missing, not a PE image, no export table, malformed).
+# Bounds-checked; a port of stalecheck::export_name.
+function ExportName($path) {
+  if (-not (Test-Path -LiteralPath $path)) { return "" }
+  try { $b = [IO.File]::ReadAllBytes($path) } catch { return "" }
+  $n = $b.Length
+  function U16($o) { if ($o + 2 -le $n) { [int64]$b[$o] -bor ([int64]$b[$o + 1] -shl 8) } else { 0 } }
+  function U32($o) { if ($o + 4 -le $n) { [int64]$b[$o] -bor ([int64]$b[$o + 1] -shl 8) -bor ([int64]$b[$o + 2] -shl 16) -bor ([int64]$b[$o + 3] -shl 24) } else { 0 } }
+  if ($n -lt 0x40 -or $b[0] -ne 0x4D -or $b[1] -ne 0x5A) { return "" }
+  $pe = U32 0x3C
+  if ($pe -eq 0 -or $pe + 24 -gt $n -or (U32 $pe) -ne 0x00004550) { return "" }
+  $nsec = U16 ($pe + 6); $optsz = U16 ($pe + 20); $opt = $pe + 24; $magic = U16 $opt
+  if ($magic -eq 0x20B) { $dd = $opt + 112 } elseif ($magic -eq 0x10B) { $dd = $opt + 96 } else { return "" }
+  if ($opt + $optsz -gt $n) { return "" }
+  $exp = U32 $dd; $expsz = U32 ($dd + 4)
+  if ($exp -eq 0 -or $expsz -lt 40) { return "" }
+  $sec = $opt + $optsz
+  function Rva2Off($rva) {
+    for ($i = 0; $i -lt $nsec -and $i -lt 96; $i++) {
+      $h = $sec + $i * 40
+      if ($h + 40 -gt $n) { return 0 }
+      $vsz = U32 ($h + 8); $va = U32 ($h + 12); $rsz = U32 ($h + 16); $raw = U32 ($h + 20)
+      $span = if ($vsz -gt $rsz) { $vsz } else { $rsz }
+      if ($rva -ge $va -and $rva -lt $va + $span) { $off = $raw + ($rva - $va); if ($off -lt $n) { return $off } else { return 0 } }
+    }
+    return 0
+  }
+  $ed = Rva2Off $exp
+  if ($ed -eq 0 -or $ed + 40 -gt $n) { return "" }
+  $nm = Rva2Off (U32 ($ed + 12))
+  if ($nm -eq 0) { return "" }
+  $s = ""
+  for ($i = $nm; $i -lt $n -and $b[$i] -ne 0 -and $s.Length -lt 256; $i++) { $s += [char]$b[$i] }
+  return $s
+}
+function IsOurs($path) { $e = (ExportName $path).ToLowerInvariant(); return ($e -eq "per-good-trade" -or $e -eq "per-good-trade.dll") }
+
 if ($Uninstall) {
-  if (Test-Path $target) { Remove-Item -LiteralPath $target -Force; Write-Host "removed $target" }
-  if (Test-Path $orig) { Remove-Item -LiteralPath $orig -Force; Write-Host "removed $orig" }
+  foreach ($f in @($target, $oldslot)) {
+    if (Test-Path -LiteralPath $f) {
+      if (IsOurs $f) { Remove-Item -LiteralPath $f -Force; Write-Host "removed $f" }
+      else { Write-Host "left $f alone: not this mod (export name '$(ExportName $f)', not per-good-trade.dll; a font patch's or another tool's file)" }
+    }
+  }
+  if (Test-Path -LiteralPath $oldorig) { Remove-Item -LiteralPath $oldorig -Force; Write-Host "removed $oldorig" }
   Get-ChildItem -LiteralPath $game -Filter "pgt.*" -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force; Write-Host "removed $($_.Name)" }
   exit 0
 }
-if (-not $Dll -or -not (Test-Path -LiteralPath $Dll)) { Write-Host "usage: install-proxy.ps1 -Dll <pgt_iNN.dll> [-Markers <dir>]"; exit 1 }
-if (Get-Process eu4 -ErrorAction SilentlyContinue) { Write-Host "EU4 is running: close it first (version.dll is locked while it runs)"; exit 2 }
-# THE REAL version.dll, under a private name. Our exports forward to pgt_version_orig, never to
-# "version" -- that name would resolve back to us (the game directory is searched first) and the
-# self-referential forwarder kills the process at load, before any window or log.
-$sys = Join-Path $env:SystemRoot (Join-Path 'System32' 'version.dll')
-if (-not (Test-Path -LiteralPath $sys)) { Write-Host "FATAL: $sys not found"; exit 3 }
-Copy-Item -LiteralPath $sys -Destination $orig -Force
-Write-Host "installed $sys as $orig (the forwarder target)"
+if (-not $Dll -or -not (Test-Path -LiteralPath $Dll)) { Write-Host "usage: install-proxy.ps1 -Dll <per-good-trade.dll> [-Markers <dir>]"; exit 1 }
+if (Get-Process eu4 -ErrorAction SilentlyContinue) { Write-Host "EU4 is running: close it first (d3dx9_43.dll is locked while it runs)"; exit 2 }
+if (-not (IsOurs $Dll)) { Write-Host "FATAL: $Dll has export name '$(ExportName $Dll)', not per-good-trade.dll; refusing to install a foreign DLL as the proxy"; exit 3 }
+# A foreign d3dx9_43.dll (another tool's proxy, a stray runtime copy) is never overwritten.
+if ((Test-Path -LiteralPath $target) -and -not (IsOurs $target)) { Write-Host "FATAL: $target exists and is not this mod (export name '$(ExportName $target)'); refusing to overwrite it"; exit 4 }
+# An old build at version.dll loads BEFORE d3dx9_43.dll (eu4.exe's import order) and would own the
+# process, leaving the new file inert (dllmain.cpp's one-instance test). Remove it; leave a font
+# patch's version.dll alone.
+if (Test-Path -LiteralPath $oldslot) {
+  if (IsOurs $oldslot) { Remove-Item -LiteralPath $oldslot -Force; Write-Host "removed stale $oldslot (an older build of this mod)" }
+  else { Write-Host "note: $oldslot is not this mod (export name '$(ExportName $oldslot)'); left alone" }
+}
+if (Test-Path -LiteralPath $oldorig) { Remove-Item -LiteralPath $oldorig -Force; Write-Host "removed $oldorig (pre-v1.0 leftover)" }
 Copy-Item -LiteralPath $Dll -Destination $target -Force
-Write-Host "installed $Dll as $target"
-# a proxy that cannot resolve its forwarders is worse than no proxy: verify both files landed
-if (-not (Test-Path -LiteralPath $orig) -or -not (Test-Path -LiteralPath $target)) { Write-Host "FATAL: proxy pair incomplete"; exit 4 }
+Write-Host "installed $Dll as $target (the DLL resolves the real System32 d3dx9_43.dll itself at attach)"
 if ($Markers -and (Test-Path -LiteralPath $Markers)) {
   Get-ChildItem -LiteralPath $Markers -Filter "pgt.*" | Where-Object { $_.Name -ne "pgt.CMD" } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $game $_.Name) -Force; Write-Host "  marker $($_.Name)"
   }
 }
-Write-Host "the DLL logs to $game\per-good-trade.log; launch the game normally (a campaign sets up during its loading screen)"

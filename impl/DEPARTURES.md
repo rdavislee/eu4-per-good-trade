@@ -57,10 +57,11 @@ run, then does the whole install on the loading thread, solves the orientation s
 (~120 ms) and runs the driver once more with income suppressed: our tick hook inside it is tick 1,
 so the map appears already re-oriented and re-placed (measured: the worker defers, 'orientation
 gen 1 solved in 120 ms', tick 1 done before the loading finished). The DLL must be in the process
-before the campaign loads (the version.dll proxy, or the runner injecting at the main menu); injected
-later, the frame poll runs the first tick at attach instead, holding the run's console commands
-until it is done. Merchants left standing at their own capital after the plan is served are
-returned to the pool through the engine's own recall (0x25BA70), not left collecting.
+before the campaign loads (the d3dx9_43.dll proxy, version.dll in v1.0.x, or the runner injecting
+at the main menu); injected later, the frame poll runs the first tick at attach instead, holding
+the run's console commands until it is done. Merchants left standing at their own capital after
+the plan is served are returned to the pool through the engine's own recall (0x25BA70), not left
+collecting.
 Vanilla's own opening placement -- 0x773B20's last loop parks one idle merchant per country at its
 capital (0x774E05 -> PlaceMerchantAtNode, type 0), AFTER the loading-time tick -- is skipped (the
 call is repointed to a stub), so a campaign opens with the plan's merchants posted and the rest idle.
@@ -313,12 +314,14 @@ Spec §2.5 has the DLL verify the build and attach unconditionally. The shipped 
 precondition ahead of the build gate: at attach it reads `dlc_load.json` (the engine's own
 record of the enabled mod list, via the same modfs reader the solver uses) and arms only when
 the data half is enabled -- the entry `mod/pgt.mod`, or any enabled descriptor named
-"Mare Liberum". Otherwise it logs `DORMANT` and remains a pure version.dll proxy: no build
-gate, no patches, no worker thread, a bit-vanilla game. Rationale: the launcher checkbox
-becomes a true off switch, so the mod can stay installed while other playsets run. The empty
-marker `pgt.FORCEDLL` beside the DLL arms it regardless, for probe sessions that run without
-the data mod. Verified live both ways (dormant under an Anbennar-only playset; armed with
-`mod/pgt.mod` enabled).
+"Mare Liberum". Otherwise it logs `DORMANT` and remains a pure proxy (d3dx9_43.dll since
+v1.0.2): no build gate, no patches, no worker thread, a bit-vanilla game (the stale-`version.dll`
+guard still writes its log line in this state; its message box is gated on the mod being armed).
+Rationale: the
+launcher checkbox becomes a true off switch, so the mod can stay installed while other
+playsets run. The empty marker `pgt.FORCEDLL` beside the DLL arms it regardless, for probe
+sessions that run without the data mod. Verified live both ways (dormant under an
+Anbennar-only playset; armed with `mod/pgt.mod` enabled).
 
 ## Node-file sync (2026-08-28, user-found defect: Anbennar + Mare Liberum broke the trade map)
 
@@ -333,3 +336,114 @@ content into the mod's own `00_tradenodes.txt`; with no such mod it restores `ph
 (shipped beside the file; `dist/build-mod.ps1` emits both from `impl/out/00_tradenodes.txt`).
 Whichever copy the engine picks, the bytes agree. Verified: menu probes show the file flipping
 to Anbennar's bytes and back to baseline, byte-exact, per enabled list.
+
+## Proxy slot: d3dx9_43.dll, not version.dll (2026-09-09, PR #1, contributed)
+
+**Spec.** §2.5 names no proxy file, so the slot itself is an implementation choice, recorded here
+for the upgrade path. The one deviation is the refusal to load described below: §2.5 has the DLL
+verify the build and attach unconditionally, and v1.0.2 refuses before the build gate when the
+proxy is incomplete.
+
+v1.0 and v1.0.1 shipped the DLL as `version.dll`. The double-byte (CJK font) patches, EU4DLL among
+them, install themselves as `version.dll` and `d3d9.dll` in the game folder, and two files named
+`version.dll` cannot coexist, so v1.0.x could not run beside EU4DLL. v1.0.2 moves to
+`d3dx9_43.dll`, a slot no font patch claims. Measured 2026-09-09 (TESTING.md): EU4DLL release 93
+plus v1.0.2, with the Workshop mod *Chinese Language Mod for 1.37* enabled, reached the start screen
+with Chinese text and the mod's reverse panels rendered together, both DLLs attached; the same
+build then passed alone with EU4DLL removed. The contributor had reported the same pair.
+
+The slot choice is verified, not assumed. `eu4.exe` (1.37.5, build 835bfdf8, Steam, Windows x64) imports
+`d3dx9_43.dll` with exactly eight functions, read from the import table with llvm-objdump:
+`D3DXCompileShader`, `D3DXCreateCubeTexture`, `D3DXCreateLine`, `D3DXCreateTexture`,
+`D3DXLoadSurfaceFromMemory`, `D3DXLoadSurfaceFromSurface`, `D3DXSaveSurfaceToFileInMemory`,
+`D3DXSaveTextureToFileInMemory`. In that import table `VERSION.dll` is bound before
+`d3dx9_43.dll`. Neither name is a Windows KnownDLL (registry checked), so the game folder copy
+wins over System32. At attach the proxy copies the real System32 `d3dx9_43.dll` to
+`%TEMP%\pgt_d3dx9_orig.dll`, loads it by absolute path and forwards the eight calls to it, exactly
+as v1.0.x did with `%TEMP%\pgt_version_orig.dll`; the log's first line when all is well is
+`d3dx9_43 proxy: 8/8 exports resolved from C:\Users\<you>\AppData\Local\Temp\pgt_d3dx9_orig.dll`.
+
+Two maintainer additions follow. The first is forced by the import order: a player who adds
+`d3dx9_43.dll` without deleting the old `version.dll` runs the OLD build, because `version.dll`
+is bound first and claims the process, the new file finds the process already claimed by the
+one-instance-per-process test and stays inert, and nothing crashes, so it would go unnoticed.
+So v1.0.2 scans the game folder for a `version.dll` whose export-directory name is
+`per-good-trade.dll`, the name `LIBRARY per-good-trade` in the .def produces (measured on the
+v1.0.1 release and on this build; the .def line predates v1.0, so v1.0 is inferred). The match
+is on that export name, never on the file name. On a hit it logs `STALE INSTALL:` naming the
+file and telling the player to delete it, and raises a message box titled "Mare Liberum: an old
+version.dll is still installed". A font patch's `version.dll` would have to carry this mod's
+export name to trigger it (System32's reads `VERSION.dll`); EU4DLL's own file has not been
+examined here. The box is raised only when the mod is armed (the launcher gate above), so the
+off switch stays silent; the log line is unconditional. The empty marker `pgt.NOSTALEBOX`
+beside the DLL suppresses the box for unattended probes. Live, 2026-09-09, old and new side by side with the box suppressed: one attach (the
+old build's), `8/8` on the new copy, the `STALE INSTALL:` line, no second attach.
+
+The second addition follows from the HRESULT semantics. All eight D3DX functions return an
+HRESULT, where 0 means success, so v1.0.x's fallback stub, which returned 0 for any export it
+could not resolve, would have reported success to the engine and done nothing. In v1.0.2 `DllMain`
+returns FALSE unless the real DLL loaded and all eight exports resolved. Windows then refuses to
+start `eu4.exe` with its own "The application was unable to start correctly (0xc0000142)" dialog,
+and the log says why: `d3dx9_43 proxy: N/8 exports resolved ...`, then `REFUSING TO LOAD: this
+proxy cannot stand in for d3dx9_43.dll (N/8 exports resolved; missing: ...). A stubbed D3DX call
+would report success and do nothing, so the game is stopped here instead ...`. The remedy is to
+reinstall `d3dx9_43.dll` from the release, or the DirectX End-User Runtime if
+`C:\Windows\System32\d3dx9_43.dll` is itself missing or damaged. An unusable private copy is not
+a cause: the proxy then loads the System32 file directly and logs `(system copy; the private copy
+could not be loaded)`.
+
+**Verification status.** Attach and campaign load are verified on this slot, 2026-09-09, and so is
+the refusal: a scratch build declaring a ninth, nonexistent export was refused with exit code
+0xC0000142 and the `REFUSING TO LOAD` line (TESTING.md). With the private copy locked and
+unreadable, the direct load of the System32 file succeeded and the game ran, so the base-name
+collision seen on the version.dll slot does not reproduce here; the copy stays as first choice.
+Coexistence with EU4DLL (release 93, with the Chinese language mod) is measured, seated, by the
+maintainer, and so is the mod alone on this slot. The full ★ suite of TESTING.md has NOT been re-run
+on it.
+
+## The install reads the live world when the developer save is absent (2026-09-09, PR #1, contributed)
+
+**Spec.** §2.2: the DLL reads live memory, never a save.
+
+**Departure (v1.0 and v1.0.1, unrecorded).** The campaign-load install loaded the developer's own
+save, `VANILLA_start.eu4`, at a hard-coded path, and took the field, the node names and the price
+table from it. On every machine but the developer's the log read
+
+    install failed: cannot open C:\...\save games\VANILLA_start.eu4
+    the install did not produce a ready plan: claim released; nothing acts until the next campaign load
+
+and the per-good economy, the monthly re-solve and the reverse-end merchants never ran, for any
+player. The data half of the mod, the re-declared `00_tradenodes.txt`, still applied, so the trade
+map did differ from vanilla, which is why this went unnoticed. The v1.0.1 release touched only the
+attach-time self-test, whose line became `solver self-test skipped: ...`; the install was a second
+consumer of the same file and was left as it was.
+
+**v1.0.2 conforms when the save is absent.** The install reads the live world instead:
+
+    no developer baseline save at C:\...\VANILLA_start.eu4: installing from the LIVE world read (naming via the engine's own definition keys; save-based cross-checks skipped)
+    live world read: 4941 provinces seen, 2472 owned, 2472 with a trade good, 33 prices
+    USING THE LIVE FIELD (orientation now tracks the campaign; no baseline save, so this is the only field)
+    matched 80/80 live nodes to solver nodes by name
+    INSTALLED pool+outgoing on 80 nodes, 159 link values (local left intact per B4)
+
+Naming then comes from the engine's own definition keys, and the goods-signature cross-check logs
+`goods-signature cross-check: skipped (no baseline save; the definition key is authoritative)`.
+With the save present the §2.2 departure remains in force, by the maintainer's decision: the same
+binary loads the developer save for the field, the names and the price table and keeps the
+goods-signature cross-check, so on the developer's machine the install is still save-based. A save
+that is present but unreadable logs `baseline save present but unreadable (...): installing from
+the LIVE world read instead` and continues live-only. The install aborts only if the live world
+read itself yields no usable field (`no baseline save and the live world read gave no usable
+field: cannot install`). The live-world install is the contributor's; the no-save wording of the
+naming line and the unreadable-save fallback are maintainer additions on top of it.
+
+**Measured.** Probe-verified 2026-09-09 both ways, with `VANILLA_start.eu4` renamed away and a
+vanilla Castile 1444 save loaded: the v1.0.1 DLL logged `install failed: cannot open ...` and never
+reached a ready plan; the v1.0.2 build under the same conditions logged the INSTALLED lines above,
+then `[earlyload] orientation gen 1 solved in 184 ms; running the driver as tick 1` and
+`[tick] monthly update 1: wrote 80 nodes inside the engine's value pass (pre-division), 240.123 ms`
+(the release binary, SHA-256 `42c9e054...`; the PR-head build, run first, gave 124 ms and 232.126 ms
+with the same INSTALLED lines).
+The campaign opened at Castile, 22 December 1444, on the reoriented map: Castile's Tunis merchant
+steering to Valencia (Tunis's outgoing links under the mod's node file are Valencia and Genoa;
+vanilla's file lists Sevilla first, where the same merchant steers on vanilla's map).

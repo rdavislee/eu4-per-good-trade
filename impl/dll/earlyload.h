@@ -10,7 +10,7 @@
 // the driver once more with income suppressed -- our tick hook inside it is tick 1: the graph is
 // re-oriented, the opening re-placement happens, every write lands. Only then does the call return
 // and the loading finish, so the map appears already set up. The DLL must be in the process before
-// the campaign loads (the version.dll proxy, or the runner injecting at the main menu); injected
+// the campaign loads (the d3dx9_43 proxy, or the runner injecting at the main menu); injected
 // after the load, the sites have passed and the frame-poll first tick (ticklive.h) is the fallback.
 //
 // The attach worker and this wrapper share one claim: whichever sees the world first installs; the

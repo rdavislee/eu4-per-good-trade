@@ -1,8 +1,9 @@
 // per-good-trade.dll -- the runtime-attached mod (spec 2.1, 2.5). Loaded into eu4.exe (build
 // 835bfdf8) via the d3dx9_43.dll proxy (proxy.h + d3dx9_43.def), following the EU4dll precedent.
-// The proxy slot is d3dx9_43.dll -- NOT version.dll/d3d9.dll, which belong to the double-byte
-// (CJK font) patches -- so both families of proxy DLLs coexist in one game directory (the same
-// arrangement the Epic-store build uses; see INSTALL.md).
+// The proxy slot is d3dx9_43.dll since v1.0.2 (v1.0 and v1.0.1 used version.dll), NOT
+// version.dll/d3d9.dll, which belong to the double-byte (CJK font) patches -- so both families
+// of proxy DLLs coexist in one game directory (INSTALL.md). stalecheck.h warns when an old
+// version.dll build is still present, because it would load first and own the process.
 //
 // On attach, in order:
 //   1. Build gate (spec 2.5): verify this is the frozen 1.37.5 build via BOTH the in-memory
@@ -24,6 +25,7 @@
 #include "pattern.h"
 #include "hooks.h"
 #include "proxy.h"
+#include "stalecheck.h"
 #include "livetrade.h"
 #include "install.h"
 #include "nodemap.h"
@@ -271,9 +273,14 @@ static bool run_install(const std::string& logpath) {
         }
         install::g_id_to_name = nm.id_to_name;
         log << "  named live nodes: " << nm.by_key << " from the engine's own definition key"
-            << " (node+0xA8 -> def+0x10); goods-signature cross-check: " << nm.matched
-            << " matched (" << nm.exact << " exact), " << nm.disagree
-            << " DISAGREED with the key, " << nm.spurious << " spurious, " << nm.unnamed << " unnamed (the sentinel), " << nm.duplicates << " DUPLICATE names" << (char)10;
+            << " (node+0xA8 -> def+0x10); goods-signature cross-check: ";
+        if (have_save)
+            log << nm.matched << " matched (" << nm.exact << " exact), " << nm.disagree
+                << " DISAGREED with the key, " << nm.spurious << " spurious, " << nm.unnamed
+                << " unnamed (the sentinel), " << nm.duplicates << " DUPLICATE names" << (char)10;
+        else   // no reference set to fingerprint against; every live node would count as "spurious"
+            log << "skipped (no baseline save; the definition key is authoritative), " << nm.unnamed
+                << " unnamed (the sentinel), " << nm.duplicates << " DUPLICATE names" << (char)10;
 
         // gather live inject into FIELD index order, BY NAME (the index-mismatch fix)
         int goods_count = 0, matched = 0;
@@ -902,7 +909,44 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
                << (proxy::g_self_collision ? "  [SELF-COLLISION DETECTED AND REFUSED]" : "") << (char)10;
         }
         // Say what happened: a proxy that silently serves nothing is indistinguishable from a
-        // working one until the game calls a D3DX API and dies.
+        // working one until the game calls a D3DX API and dies -- or worse, does not die: every
+        // one of the eight returns an HRESULT, and the fallback stub's 0 reads as S_OK. So an
+        // incomplete proxy REFUSES THE LOAD (v1.0.2): returning FALSE makes the loader fail
+        // eu4.exe with Windows' own "unable to start correctly" dialog, and the lines above and
+        // below say why. Nothing else in this file runs.
+        if (!proxy::complete()) {
+            std::ofstream pl(livetrade::self_dir() + "\\per-good-trade.log", std::ios::app);
+            pl << "REFUSING TO LOAD: this proxy cannot stand in for d3dx9_43.dll ("
+               << proxy::g_resolved << "/" << proxy::EXPORT_COUNT << " exports resolved"
+               << (proxy::g_unresolved.empty() ? std::string() : "; missing:" + proxy::g_unresolved)
+               << (proxy::g_loaded ? "" : "; the real System32 d3dx9_43.dll did not load")
+               << (proxy::g_self_collision ? "; LoadLibrary returned this DLL itself" : "")
+               << "). A stubbed D3DX call would report success and do nothing, so the game is stopped "
+                  "here instead: Windows reports that eu4.exe was unable to start. Reinstall "
+                  "d3dx9_43.dll from the release; if System32\\d3dx9_43.dll itself is missing, "
+                  "reinstall the DirectX End-User Runtime." << (char)10;
+            return FALSE;
+        }
+
+        // UPGRADE GUARD (v1.0.2): v1.0 and v1.0.1 shipped as version.dll. If that file is still in
+        // the game folder it loads FIRST (eu4.exe binds VERSION.dll before d3dx9_43.dll), its DllMain
+        // claims the process, and this copy goes inert in the one-instance test below: the player
+        // silently runs the old build. Recognised by the PE export-directory name, never the file
+        // name (EU4DLL's own version.dll sits at the same path and must not trip this).
+        {
+            std::string old = livetrade::self_dir() + "\\version.dll";
+            if (stalecheck::is_per_good_trade(old)) {
+                std::ofstream pl(livetrade::self_dir() + "\\per-good-trade.log", std::ios::app);
+                pl << "STALE INSTALL: " << old << " has export name per-good-trade.dll (an older build of "
+                      "this mod). eu4.exe loads it before this d3dx9_43.dll, so the OLD build owns the "
+                      "process and this copy stays inert. Delete version.dll from the game folder." << (char)10;
+                if (livetrade::feature_on("STALEBOX"))   // pgt.NOSTALEBOX: developers' unattended probes
+                    stalecheck::warn_later("An older Mare Liberum build is still installed as\n" + old +
+                        "\n\nEU4 loads it before d3dx9_43.dll, so the OLD build is the one running and "
+                        "this d3dx9_43.dll stays inert.\n\nQuit, delete version.dll from the game folder "
+                        "and start again. d3dx9_43.dll is the whole mod now.");
+            }
+        }
 
         // ONE INSTANCE PER PROCESS -- decided by the CODE, never by a kernel object (2026-08-27).
         // A second copy of this DLL in the SAME process (proxy + injector) must stay inert: its
